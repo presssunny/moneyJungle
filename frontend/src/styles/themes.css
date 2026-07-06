@@ -1,0 +1,57 @@
+/*
+ * Theme system — every color in the app comes from these variables.
+ * Never hard-code colors in components. Switch theme by setting
+ * data-theme on <html>.
+ */
+
+/* 1. סגול ניאון — ברירת מחדל (סייברפאנק) */
+:root,
+[data-theme="neon-purple"] {
+  --bg: #0b0714;
+  --bg-sidebar: #0f0a1e;
+  --bg-card: #150e28;
+  --border: #3b2a66;
+  --primary: #e879f9;
+  --primary-contrast: #1a0b1f;
+  --secondary: #a78bfa;
+  --success: #34f5c5;
+  --warning: #f0b451;
+  --danger: #fb7185;
+  --text: #ede9fe;
+  --text-muted: #6d5e93;
+  --glow: 0 0 12px rgba(232, 121, 249, 0.35);
+}
+
+/* 2. כהה יוקרתי — טורקיז רגוע לערב */
+[data-theme="dark-luxury"] {
+  --bg: #161b22;
+  --bg-sidebar: #0d1117;
+  --bg-card: #1c2633;
+  --border: #2a3644;
+  --primary: #2dd4bf;
+  --primary-contrast: #06211d;
+  --secondary: #58a6ff;
+  --success: #2dd4bf;
+  --warning: #f0b451;
+  --danger: #f85149;
+  --text: #e6edf3;
+  --text-muted: #7d8b9c;
+  --glow: 0 0 12px rgba(45, 212, 191, 0.25);
+}
+
+/* 3. אדום / ציאן — חדר בקרה פלילי */
+[data-theme="red-cyan"] {
+  --bg: #0a0508;
+  --bg-sidebar: #120409;
+  --bg-card: #140a0e;
+  --border: #3a0f18;
+  --primary: #ff2e4d;
+  --primary-contrast: #ffffff;
+  --secondary: #22d3ee;
+  --success: #22d3ee;
+  --warning: #ffb020;
+  --danger: #ff2e4d;
+  --text: #f2e9eb;
+  --text-muted: #8a5560;
+  --glow: 0 0 12px rgba(255, 46, 77, 0.35);
+}
