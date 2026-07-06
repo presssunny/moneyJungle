@@ -1,0 +1,182 @@
+import { decimalToNumber, percent, round2 } from "../../utils/money.utils";
+import { monthRange, toMonthKey } from "../../utils/date.utils";
+import { computeLoan } from "../loans/loanCalculator.service";
+import { loansRepository } from "../loans/loans.repository";
+import { dashboardRepository } from "./dashboard.repository";
+
+const SAVINGS_CATEGORY = "חיסכון";
+
+async function monthTotals(userId: number, year: number, month: number) {
+  const { start, end } = monthRange(year, month);
+  const [incomes, expenses, credit] = await Promise.all([
+    dashboardRepository.sumIncomes(userId, start, end),
+    dashboardRepository.sumExpenses(userId, start, end),
+    dashboardRepository.sumConfirmedCredit(userId, start, end),
+  ]);
+  const incomeTotal = decimalToNumber(incomes._sum.amount);
+  const expenseManual = decimalToNumber(expenses._sum.amount);
+  const creditTotal = decimalToNumber(credit._sum.amount);
+  return {
+    incomeTotal: round2(incomeTotal),
+    expenseTotal: round2(expenseManual + creditTotal),
+    creditTotal: round2(creditTotal),
+  };
+}
+
+/** Merged spent-per-category (manual expenses + confirmed credit) for a month. */
+export async function spentByCategory(
+  userId: number,
+  year: number,
+  month: number
+): Promise<Map<number | null, number>> {
+  const { start, end } = monthRange(year, month);
+  const [expenseGroups, creditGroups] = await Promise.all([
+    dashboardRepository.expensesByCategory(userId, start, end),
+    dashboardRepository.creditByCategory(userId, start, end),
+  ]);
+  const spent = new Map<number | null, number>();
+  for (const group of [...expenseGroups, ...creditGroups]) {
+    const key = group.categoryId ?? null;
+    spent.set(key, (spent.get(key) ?? 0) + decimalToNumber(group._sum.amount));
+  }
+  return spent;
+}
+
+export const dashboardService = {
+  async summary(userId: number, year: number, month: number) {
+    const totals = await monthTotals(userId, year, month);
+
+    // Budget status
+    const [budgets, spent, categories] = await Promise.all([
+      dashboardRepository.budgets(userId, year, month),
+      spentByCategory(userId, year, month),
+      dashboardRepository.categories(userId),
+    ]);
+    let budgetTotal = 0;
+    let budgetUsed = 0;
+    let overrunCount = 0;
+    for (const budget of budgets) {
+      const amount = decimalToNumber(budget.amount);
+      const used = spent.get(budget.categoryId) ?? 0;
+      budgetTotal += amount;
+      budgetUsed += used;
+      if (used > amount) overrunCount += 1;
+    }
+
+    // Monthly savings = spending in the savings category
+    const savingsCategory = categories.find((c) => c.name === SAVINGS_CATEGORY);
+    const savingsMonthly = savingsCategory ? (spent.get(savingsCategory.id) ?? 0) : 0;
+
+    // Loans
+    const loans = await loansRepository.findActive(userId);
+    let loanMonthlyPayment = 0;
+    let loanMonthlyInterest = 0;
+    let loanAnnualInterest = 0;
+    let loanTotalBalance = 0;
+    for (const loan of loans) {
+      const computed = computeLoan({
+        currentBalance: decimalToNumber(loan.currentBalance),
+        annualInterestRate: decimalToNumber(loan.annualInterestRate),
+        monthlyPayment: decimalToNumber(loan.monthlyPayment),
+      });
+      loanMonthlyPayment += decimalToNumber(loan.monthlyPayment);
+      loanMonthlyInterest += computed.monthlyInterestPayment;
+      loanAnnualInterest += computed.estimatedAnnualInterest;
+      loanTotalBalance += decimalToNumber(loan.currentBalance);
+    }
+
+    return {
+      incomeTotal: totals.incomeTotal,
+      expenseTotal: totals.expenseTotal,
+      balance: round2(totals.incomeTotal - totals.expenseTotal),
+      creditTotal: totals.creditTotal,
+      savingsMonthly: round2(savingsMonthly),
+      budget: {
+        total: round2(budgetTotal),
+        used: round2(budgetUsed),
+        usedPercent: percent(budgetUsed, budgetTotal),
+        overrunCount,
+      },
+      loans: {
+        monthlyPayment: round2(loanMonthlyPayment),
+        monthlyInterest: round2(loanMonthlyInterest),
+        annualInterest: round2(loanAnnualInterest),
+        totalBalance: round2(loanTotalBalance),
+        count: loans.length,
+      },
+    };
+  },
+
+  async charts(userId: number, year: number, month: number) {
+    // Trend — last 6 months ending at the selected month
+    const trend: Array<{ monthKey: string; income: number; expense: number }> = [];
+    for (let offset = 5; offset >= 0; offset -= 1) {
+      const d = new Date(year, month - 1 - offset, 1);
+      const y = d.getFullYear();
+      const m = d.getMonth() + 1;
+      const totals = await monthTotals(userId, y, m);
+      trend.push({ monthKey: toMonthKey(y, m), income: totals.incomeTotal, expense: totals.expenseTotal });
+    }
+
+    // By category (manual + credit merged)
+    const [spent, categories] = await Promise.all([
+      spentByCategory(userId, year, month),
+      dashboardRepository.categories(userId),
+    ]);
+    const categoryById = new Map(categories.map((c) => [c.id, c]));
+    const byCategory = [...spent.entries()]
+      .map(([categoryId, value]) => {
+        const category = categoryId !== null ? categoryById.get(categoryId) : undefined;
+        return {
+          name: category?.name ?? "לא מסווג",
+          color: category?.color ?? "#6D6875",
+          icon: category?.icon ?? "❓",
+          value: round2(value),
+        };
+      })
+      .filter((c) => c.value > 0)
+      .sort((a, b) => b.value - a.value);
+
+    // Credit only, by category
+    const { start, end } = monthRange(year, month);
+    const creditGroups = await dashboardRepository.creditByCategory(userId, start, end);
+    const creditByCategory = creditGroups
+      .map((group) => {
+        const category = group.categoryId !== null ? categoryById.get(group.categoryId) : undefined;
+        return {
+          name: category?.name ?? "לא מסווג",
+          color: category?.color ?? "#6D6875",
+          value: round2(decimalToNumber(group._sum.amount)),
+        };
+      })
+      .filter((c) => c.value > 0)
+      .sort((a, b) => b.value - a.value);
+
+    // Loans: interest vs principal per loan
+    const loans = await loansRepository.findActive(userId);
+    const loanSplit = loans.map((loan) => {
+      const computed = computeLoan({
+        currentBalance: decimalToNumber(loan.currentBalance),
+        annualInterestRate: decimalToNumber(loan.annualInterestRate),
+        monthlyPayment: decimalToNumber(loan.monthlyPayment),
+      });
+      return {
+        name: loan.loanName,
+        interest: computed.monthlyInterestPayment,
+        principal: computed.monthlyPrincipalPayment,
+      };
+    });
+
+    return { trend, byCategory, creditByCategory, loanSplit };
+  },
+
+  async recent(userId: number) {
+    const [expenses, incomes, credit, alerts] = await Promise.all([
+      dashboardRepository.recentExpenses(userId),
+      dashboardRepository.recentIncomes(userId),
+      dashboardRepository.recentCredit(userId),
+      dashboardRepository.recentAlerts(userId),
+    ]);
+    return { expenses, incomes, credit, alerts };
+  },
+};
