@@ -189,6 +189,20 @@
   font-size: 12px;
 }
 
+.pie-legend-amount {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pie-legend-percent {
+  color: var(--text-muted);
+  font-size: 11px;
+  min-width: 34px;
+  text-align: left;
+}
+
 /* ---------- Recent lists ---------- */
 
 .recent-grid {

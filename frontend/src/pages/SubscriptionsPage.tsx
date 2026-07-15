@@ -12,11 +12,12 @@ import { apiErrorMessage } from "../services/api";
 import {
   createSubscription,
   deleteSubscription,
+  getSubscriptionCandidates,
   listSubscriptions,
   updateSubscription,
   type SubscriptionInput,
 } from "../services/planning.service";
-import type { Subscription } from "../types/models";
+import type { Subscription, SubscriptionCandidate } from "../types/models";
 import { formatCurrency, formatDate } from "../utils/format";
 
 const emptyForm: SubscriptionInput = {
@@ -29,6 +30,8 @@ const emptyForm: SubscriptionInput = {
 export default function SubscriptionsPage() {
   const [items, setItems] = useState<Subscription[] | null>(null);
   const [monthlyTotal, setMonthlyTotal] = useState(0);
+  const [candidates, setCandidates] = useState<SubscriptionCandidate[]>([]);
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Subscription | null>(null);
   const [form, setForm] = useState<SubscriptionInput>(emptyForm);
@@ -41,9 +44,22 @@ export default function SubscriptionsPage() {
         setMonthlyTotal(data.monthlyTotal);
       })
       .catch(() => setItems([]));
+    getSubscriptionCandidates()
+      .then(setCandidates)
+      .catch(() => setCandidates([]));
   }, []);
 
   useEffect(load, [load]);
+
+  async function addCandidate(c: SubscriptionCandidate) {
+    await createSubscription({
+      name: c.name,
+      amount: c.avgAmount,
+      billingDate: c.nextBillingDate.slice(0, 10),
+      frequency: "monthly",
+    });
+    load();
+  }
 
   function openCreate() {
     setEditing(null);
@@ -131,6 +147,8 @@ export default function SubscriptionsPage() {
     },
   ];
 
+  const visibleCandidates = candidates.filter((c) => !dismissed.has(c.name));
+
   return (
     <>
       <div className="page-toolbar">
@@ -139,6 +157,34 @@ export default function SubscriptionsPage() {
           עלות חודשית: <strong className="mono text-danger">{formatCurrency(monthlyTotal)}</strong>
         </div>
       </div>
+
+      {visibleCandidates.length > 0 && (
+        <Card title={`🔎 זוהו ${visibleCandidates.length} מנויים אפשריים מדוחות האשראי`}>
+          <p className="settings-hint">
+            חיובים שחוזרים כל חודש (הוראות קבע וחיובים קבועים). הוסיפי בלחיצה כדי לעקוב אחריהם.
+          </p>
+          <div className="candidate-list">
+            {visibleCandidates.map((c) => (
+              <div key={c.name} className="candidate-card">
+                <div className="candidate-info">
+                  <span className="candidate-name">
+                    {c.name}
+                    {c.confidence === "high" && <span className="candidate-badge">הוראת קבע</span>}
+                  </span>
+                  <span className="candidate-reason text-muted">{c.reason}</span>
+                </div>
+                <span className="candidate-amount mono">{formatCurrency(c.avgAmount)}<span className="text-muted"> /חודש</span></span>
+                <span className="row-actions">
+                  <Button size="sm" onClick={() => addCandidate(c)}>+ הוסף</Button>
+                  <Button size="sm" variant="ghost" onClick={() => setDismissed((s) => new Set(s).add(c.name))} title="התעלם">
+                    ✕
+                  </Button>
+                </span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       <Card>
         <Table

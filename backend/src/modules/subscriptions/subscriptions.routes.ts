@@ -22,6 +22,13 @@ subscriptionsRoutes.get(
   })
 );
 
+subscriptionsRoutes.get(
+  "/candidates",
+  asyncHandler(async (req: Request, res: Response) => {
+    res.json(await subscriptionsService.detectCandidates(req.userId!));
+  })
+);
+
 subscriptionsRoutes.post(
   "/",
   validate({ body: createSubscriptionSchema }),

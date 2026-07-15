@@ -1,5 +1,5 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
-import { currentMonthKey, shiftMonthKey } from "../utils/format";
+import { currentMonthKey } from "../utils/format";
 
 interface MonthContextValue {
   /** Selected month as "YYYY-MM" */
@@ -7,8 +7,6 @@ interface MonthContextValue {
   year: number;
   month: number;
   setMonthKey: (key: string) => void;
-  goPrev: () => void;
-  goNext: () => void;
   goToday: () => void;
 }
 
@@ -24,8 +22,6 @@ export function MonthProvider({ children }: { children: ReactNode }) {
       year,
       month,
       setMonthKey,
-      goPrev: () => setMonthKey((k) => shiftMonthKey(k, -1)),
-      goNext: () => setMonthKey((k) => shiftMonthKey(k, 1)),
       goToday: () => setMonthKey(currentMonthKey()),
     };
   }, [monthKey]);

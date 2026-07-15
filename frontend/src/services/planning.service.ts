@@ -12,6 +12,7 @@ import type {
   SavingsGoal,
   Settings,
   Subscription,
+  SubscriptionCandidate,
 } from "../types/models";
 import { api } from "./api";
 
@@ -178,6 +179,11 @@ export async function updateSubscription(id: number, input: Partial<Subscription
 
 export async function deleteSubscription(id: number): Promise<void> {
   await api.delete(`/subscriptions/${id}`);
+}
+
+export async function getSubscriptionCandidates(): Promise<SubscriptionCandidate[]> {
+  const { data } = await api.get("/subscriptions/candidates");
+  return data;
 }
 
 // ---------- Savings goals ----------
