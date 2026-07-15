@@ -119,38 +119,60 @@
 .month-selector {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 6px;
-  padding: 2px;
+  padding: 4px 6px;
 }
 
-.month-arrow {
-  background: none;
-  border: none;
-  color: var(--primary);
-  font-size: 18px;
-  padding: 2px 10px;
-  border-radius: 4px;
-}
-
-.month-arrow:hover {
-  background: color-mix(in srgb, var(--primary) 12%, transparent);
-}
-
-.month-label {
+.month-select {
   background: none;
   border: none;
   color: var(--text);
   font-size: 14px;
   font-weight: 600;
-  min-width: 110px;
+  font-family: inherit;
   padding: 4px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  /* Chevron rendered as a background image so it sits nicely in RTL */
+  background-image: linear-gradient(45deg, transparent 50%, var(--text-muted) 50%),
+    linear-gradient(135deg, var(--text-muted) 50%, transparent 50%);
+  background-position: calc(0% + 8px) center, calc(0% + 13px) center;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  padding-inline-start: 24px;
 }
 
-.month-label-other {
+.month-select:hover {
+  background-color: color-mix(in srgb, var(--primary) 12%, transparent);
+}
+
+.month-select:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+.month-select option {
+  background: var(--bg-card);
+  color: var(--text);
+}
+
+.month-today {
+  background: none;
+  border: 1px solid color-mix(in srgb, var(--warning) 45%, transparent);
   color: var(--warning);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 4px;
+}
+
+.month-today:hover {
+  background: color-mix(in srgb, var(--warning) 14%, transparent);
 }
 
 /* ---------- Buttons ---------- */
@@ -1012,4 +1034,68 @@
 .tx-badge-muted {
   background: color-mix(in srgb, var(--text-muted) 18%, transparent);
   color: var(--text-muted);
+}
+
+/* ---------- Credit multi-month cards ---------- */
+
+.credit-month-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.credit-month-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: border-color 0.15s ease;
+}
+
+.credit-month-card-active {
+  border-color: var(--primary);
+  box-shadow: var(--glow);
+}
+
+.credit-month-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+  padding: 14px 16px 10px;
+  background: none;
+  border: none;
+  color: var(--text);
+  text-align: start;
+  width: 100%;
+}
+
+.credit-month-name {
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.credit-month-total {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.credit-month-link {
+  background: none;
+  border: none;
+  border-top: 1px solid var(--border);
+  color: var(--secondary);
+  padding: 8px 16px;
+  font-size: 13px;
+  text-align: start;
+  width: 100%;
+  transition: background 0.15s ease;
+}
+
+.credit-month-link:hover {
+  background: color-mix(in srgb, var(--secondary) 12%, transparent);
 }

@@ -171,7 +171,8 @@ textarea:focus-visible,
 /* Comfortable minimum tap targets on touch devices */
 @media (pointer: coarse) {
   .btn,
-  .month-arrow,
+  .month-select,
+  .month-today,
   .header-logout,
   .sidebar-item {
     min-height: 44px;
