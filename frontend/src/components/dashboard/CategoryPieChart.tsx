@@ -42,9 +42,8 @@ export function CategoryPieChart({ data }: { data: CategorySlice[] }) {
           <li key={slice.name}>
             <span className="pie-legend-dot" style={{ background: slice.color }} />
             <span className="pie-legend-name">{slice.name}</span>
-            <span className="pie-legend-value mono">
-              {total > 0 ? Math.round((slice.value / total) * 100) : 0}%
-            </span>
+            <span className="pie-legend-amount mono">{formatCurrency(slice.value)}</span>
+            <span className="pie-legend-percent">{total > 0 ? Math.round((slice.value / total) * 100) : 0}%</span>
           </li>
         ))}
       </ul>

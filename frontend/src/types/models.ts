@@ -209,6 +209,16 @@ export interface Subscription {
   status: "active" | "inactive";
 }
 
+export interface SubscriptionCandidate {
+  name: string;
+  avgAmount: number;
+  months: number;
+  lastDate: string;
+  nextBillingDate: string;
+  confidence: "high" | "medium";
+  reason: string;
+}
+
 export interface SavingsGoal {
   id: number;
   goalName: string;

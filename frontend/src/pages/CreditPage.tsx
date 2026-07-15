@@ -3,7 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
 import { EmptyState } from "../components/common/EmptyState";
+import { Input } from "../components/common/Input";
 import { Loading } from "../components/common/Loading";
+import { Modal } from "../components/common/Modal";
 import { Select } from "../components/common/Select";
 import { Table, type Column } from "../components/common/Table";
 import { useMonth } from "../context/MonthContext";
@@ -18,6 +20,7 @@ import {
   updateCreditTransaction,
   uploadCreditImport,
 } from "../services/finance.service";
+import { createRule } from "../services/planning.service";
 import type { CreditImport, CreditImportDetail, CreditTransaction } from "../types/models";
 import { formatCurrency, formatDate, formatMonthKey } from "../utils/format";
 
@@ -28,6 +31,10 @@ export default function CreditPage() {
   const [imports, setImports] = useState<CreditImport[] | null>(null);
   const [selected, setSelected] = useState<CreditImportDetail | null>(null);
   const [monthFilter, setMonthFilter] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [catFilter, setCatFilter] = useState<string>("");
+  const [typeFilter, setTypeFilter] = useState<string>("");
+  const [learn, setLearn] = useState<{ keyword: string; categoryId: number; categoryName: string } | null>(null);
   const [message, setMessage] = useState("");
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -101,6 +108,29 @@ export default function CreditPage() {
   async function setTransactionCategory(tx: CreditTransaction, categoryId: number | null) {
     await updateCreditTransaction(tx.id, categoryId);
     if (selected) setSelected(await getCreditImport(selected.id));
+    // Offer to learn: create a rule so similar businesses classify automatically
+    if (categoryId !== null) {
+      const category = expenseCategories.find((c) => c.id === categoryId);
+      const keyword = tx.businessName.trim().split(/[\s,\-/()]+/).filter(Boolean)[0] ?? tx.businessName.trim();
+      if (category && keyword) {
+        setLearn({ keyword, categoryId, categoryName: `${category.icon ?? ""} ${category.name}` });
+      }
+    }
+  }
+
+  async function confirmLearn() {
+    if (!learn || !learn.keyword.trim()) return;
+    try {
+      await createRule({ keyword: learn.keyword.trim(), categoryId: learn.categoryId });
+      const result = await recategorizeCredit();
+      setMessage(`נוצר חוק · סווגו אוטומטית עוד ${result.categorized} עסקאות`);
+      if (selected) setSelected(await getCreditImport(selected.id));
+      load();
+    } catch (err) {
+      setMessage(apiErrorMessage(err));
+    } finally {
+      setLearn(null);
+    }
   }
 
   async function reapplyRules() {
@@ -194,6 +224,16 @@ export default function CreditPage() {
     },
   ];
 
+  const searchLower = search.trim().toLowerCase();
+  const filteredTransactions = (selected?.transactions ?? []).filter((t) => {
+    if (monthFilter && t.billingDate.slice(0, 7) !== monthFilter) return false;
+    if (searchLower && !t.businessName.toLowerCase().includes(searchLower)) return false;
+    if (catFilter === "none" && t.categoryId !== null) return false;
+    if (catFilter && catFilter !== "none" && String(t.categoryId) !== catFilter) return false;
+    if (typeFilter && t.transactionType !== typeFilter) return false;
+    return true;
+  });
+
   return (
     <>
       <div className="page-toolbar">
@@ -284,17 +324,81 @@ export default function CreditPage() {
             </span>
           }
         >
+          <div className="filter-bar">
+            <Input
+              placeholder="חיפוש בית עסק…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              aria-label="חיפוש לפי בית עסק"
+            />
+            <Select
+              options={[
+                { value: "", label: "כל הקטגוריות" },
+                { value: "none", label: "לא מסווג" },
+                ...expenseCategories.map((c) => ({ value: String(c.id), label: `${c.icon ?? ""} ${c.name}` })),
+              ]}
+              value={catFilter}
+              onChange={(e) => setCatFilter(e.target.value)}
+              aria-label="סינון לפי קטגוריה"
+            />
+            <Select
+              options={[
+                { value: "", label: "כל הסוגים" },
+                { value: "regular", label: "רגילות" },
+                { value: "standing_order", label: "הוראות קבע" },
+                { value: "credit", label: "תשלומים" },
+                { value: "refund", label: "זיכויים" },
+                { value: "financing", label: "אשראי מתגלגל" },
+              ]}
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+              aria-label="סינון לפי סוג"
+            />
+            {(search || catFilter || typeFilter) && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setSearch("");
+                  setCatFilter("");
+                  setTypeFilter("");
+                }}
+              >
+                ניקוי סינון ✕
+              </Button>
+            )}
+          </div>
           <Table
             columns={txColumns}
-            rows={
-              monthFilter
-                ? selected.transactions.filter((t) => t.billingDate.slice(0, 7) === monthFilter)
-                : selected.transactions
-            }
+            rows={filteredTransactions}
             rowKey={(row) => row.id}
+            emptyState={<EmptyState icon="🔍" title="אין עסקאות שמתאימות לסינון" hint="נסי לנקות חלק מהמסננים" />}
           />
         </Card>
       )}
+
+      <Modal
+        title="לסווג אוטומטית עסקאות דומות?"
+        open={learn !== null}
+        onClose={() => setLearn(null)}
+      >
+        {learn && (
+          <>
+            <p className="settings-hint">
+              כל עסקה עתידית שתכיל את מילת המפתח תסווג אוטומטית ל־<strong>{learn.categoryName}</strong>. אפשר לערוך את מילת המפתח:
+            </p>
+            <Input
+              label="מילת מפתח"
+              value={learn.keyword}
+              onChange={(e) => setLearn({ ...learn, keyword: e.target.value })}
+            />
+            <div className="modal-actions">
+              <Button onClick={confirmLearn}>צור חוק וסווג</Button>
+              <Button variant="ghost" onClick={() => setLearn(null)}>לא עכשיו</Button>
+            </div>
+          </>
+        )}
+      </Modal>
     </>
   );
 }

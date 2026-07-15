@@ -105,4 +105,7 @@ export const defaultCategoryRules: DefaultCategoryRule[] = [
   { keyword: "מנטה", categoryName: "דלק" },
   { keyword: "סדש", categoryName: "דלק" },
   { keyword: "דור אלון", categoryName: "דלק" },
+  // הוצאות עסק (סני)
+  { keyword: "anthropic", categoryName: "הוצאות עסק (סני)" },
+  { keyword: "claude", categoryName: "הוצאות עסק (סני)" },
 ];

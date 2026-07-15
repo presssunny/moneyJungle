@@ -1099,3 +1099,111 @@
 .credit-month-link:hover {
   background: color-mix(in srgb, var(--secondary) 12%, transparent);
 }
+
+/* ---------- Table pagination ---------- */
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 14px 8px 4px;
+  flex-wrap: wrap;
+}
+
+.pagination-btn {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 16px;
+  border-radius: 8px;
+  min-height: 36px;
+  transition: border-color 0.12s, opacity 0.12s;
+}
+
+.pagination-btn:hover:not(:disabled) {
+  border-color: var(--primary);
+}
+
+.pagination-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pagination-info {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* ---------- Filter bar (credit transactions, etc.) ---------- */
+
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.filter-bar .field {
+  margin: 0;
+}
+
+.filter-bar .field-input {
+  min-width: 150px;
+}
+
+/* ---------- Detected subscription / suggestion candidates ---------- */
+
+.candidate-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.candidate-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-inline-start: 3px solid var(--primary);
+  border-radius: 10px;
+}
+
+.candidate-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.candidate-name {
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.candidate-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--primary) 18%, transparent);
+  color: var(--primary);
+}
+
+.candidate-reason {
+  font-size: 12px;
+}
+
+.candidate-amount {
+  font-size: 17px;
+  font-weight: 700;
+  white-space: nowrap;
+}
