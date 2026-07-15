@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const createExpenseSchema = z.object({
-  amount: z.coerce.number().positive("יש להזין סכום חיובי"),
+  amount: z.coerce.number().positive("יש להזין סכום חיובי").max(9999999999, "הסכום גדול מדי"),
   categoryId: z.coerce.number().int().positive().nullish(),
   paymentMethodId: z.coerce.number().int().positive().nullish(),
   businessName: z.string().max(255).nullish(),

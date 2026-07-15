@@ -1,5 +1,195 @@
+import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { Button } from "../components/common/Button";
+import { Card } from "../components/common/Card";
+import { EmptyState } from "../components/common/EmptyState";
+import { ErrorMessage } from "../components/common/ErrorMessage";
+import { Input } from "../components/common/Input";
 import { Loading } from "../components/common/Loading";
+import { Modal } from "../components/common/Modal";
+import { Select } from "../components/common/Select";
+import { Table, type Column } from "../components/common/Table";
+import { apiErrorMessage } from "../services/api";
+import {
+  createCategory,
+  createRule,
+  deleteCategory,
+  deleteRule,
+  listCategories,
+  listRules,
+} from "../services/planning.service";
+import type { Category, CategoryRule } from "../types/models";
 
 export default function CategoriesRulesPage() {
-  return <Loading label="העמוד בבנייה..." />;
+  const [categories, setCategories] = useState<Category[] | null>(null);
+  const [rules, setRules] = useState<CategoryRule[] | null>(null);
+  const [catOpen, setCatOpen] = useState(false);
+  const [ruleOpen, setRuleOpen] = useState(false);
+  const [catForm, setCatForm] = useState({ name: "", type: "expense", icon: "🏷️", color: "#5B8DEF" });
+  const [ruleForm, setRuleForm] = useState({ keyword: "", categoryId: "" as number | "" });
+  const [error, setError] = useState("");
+
+  const load = useCallback(() => {
+    listCategories().then(setCategories).catch(() => setCategories([]));
+    listRules().then(setRules).catch(() => setRules([]));
+  }, []);
+
+  useEffect(load, [load]);
+
+  async function submitCategory(e: FormEvent) {
+    e.preventDefault();
+    setError("");
+    try {
+      await createCategory(catForm);
+      setCatOpen(false);
+      setCatForm({ name: "", type: "expense", icon: "🏷️", color: "#5B8DEF" });
+      load();
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    }
+  }
+
+  async function submitRule(e: FormEvent) {
+    e.preventDefault();
+    if (!ruleForm.categoryId) return;
+    setError("");
+    try {
+      await createRule({ keyword: ruleForm.keyword, categoryId: Number(ruleForm.categoryId) });
+      setRuleOpen(false);
+      setRuleForm({ keyword: "", categoryId: "" });
+      load();
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    }
+  }
+
+  async function removeCategory(category: Category) {
+    if (!window.confirm(`למחוק את הקטגוריה "${category.name}"?`)) return;
+    try {
+      await deleteCategory(category.id);
+      load();
+    } catch (err) {
+      window.alert(apiErrorMessage(err));
+    }
+  }
+
+  async function removeRule(rule: CategoryRule) {
+    if (!window.confirm(`למחוק את החוק "${rule.keyword}"?`)) return;
+    try {
+      await deleteRule(rule.id);
+      load();
+    } catch (err) {
+      window.alert(apiErrorMessage(err));
+    }
+  }
+
+  if (!categories || !rules) return <Loading />;
+
+  const categoryById = new Map(categories.map((c) => [c.id, c]));
+
+  const ruleColumns: Column<CategoryRule>[] = [
+    { key: "keyword", header: "מילת מפתח", render: (row) => <strong>{row.keyword}</strong> },
+    {
+      key: "category",
+      header: "קטגוריה",
+      render: (row) => {
+        const category = row.category ?? categoryById.get(row.categoryId);
+        return category ? `${category.icon ?? ""} ${category.name}` : "—";
+      },
+    },
+    { key: "scope", header: "מקור", render: (row) => (row.userId === null ? <span className="text-muted">ברירת מחדל</span> : "שלי") },
+    {
+      key: "actions",
+      header: "",
+      align: "left",
+      render: (row) =>
+        row.userId !== null ? <Button size="sm" variant="ghost" onClick={() => removeRule(row)}>🗑️</Button> : null,
+    },
+  ];
+
+  return (
+    <>
+      <div className="page-toolbar">
+        <Button onClick={() => setCatOpen(true)}>+ קטגוריה</Button>
+        <Button variant="outline" onClick={() => setRuleOpen(true)}>+ חוק סיווג</Button>
+        <span className="text-muted">חוקי סיווג מסווגים אוטומטית עסקאות אשראי והוצאות מיובאות לפי מילת מפתח</span>
+      </div>
+
+      <Card title="קטגוריות">
+        <div className="category-grid">
+          {categories.map((category) => (
+            <div key={category.id} className="category-chip" style={{ borderColor: category.color ?? undefined }}>
+              <span className="category-chip-icon">{category.icon}</span>
+              <span className="category-chip-name">{category.name}</span>
+              {category.type === "income" && <span className="text-success">הכנסה</span>}
+              {category.userId !== null && (
+                <button className="category-chip-delete" onClick={() => removeCategory(category)} title="מחיקה">✕</button>
+              )}
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <Card title="חוקי סיווג אוטומטי">
+        <Table
+          columns={ruleColumns}
+          rows={rules}
+          rowKey={(row) => row.id}
+          emptyState={<EmptyState icon="🪄" title="אין חוקים" hint="הוסיפי חוק — למשל: כל עסקה עם 'שופרסל' תסווג לאוכל בסופר" />}
+        />
+      </Card>
+
+      <Modal title="קטגוריה חדשה" open={catOpen} onClose={() => setCatOpen(false)}>
+        <form onSubmit={submitCategory}>
+          {error && <ErrorMessage message={error} />}
+          <Input label="שם" required value={catForm.name} onChange={(e) => setCatForm({ ...catForm, name: e.target.value })} />
+          <div className="form-row">
+            <Select
+              label="סוג"
+              options={[{ value: "expense", label: "הוצאה" }, { value: "income", label: "הכנסה" }]}
+              value={catForm.type}
+              onChange={(e) => setCatForm({ ...catForm, type: e.target.value })}
+            />
+            <Input label="אייקון (אימוג'י)" value={catForm.icon} onChange={(e) => setCatForm({ ...catForm, icon: e.target.value })} />
+            <div className="field">
+              <label className="field-label">צבע</label>
+              <input
+                type="color"
+                className="field-input color-input"
+                value={catForm.color}
+                onChange={(e) => setCatForm({ ...catForm, color: e.target.value })}
+              />
+            </div>
+          </div>
+          <div className="modal-actions">
+            <Button type="submit">הוספה</Button>
+            <Button type="button" variant="ghost" onClick={() => setCatOpen(false)}>ביטול</Button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal title="חוק סיווג חדש" open={ruleOpen} onClose={() => setRuleOpen(false)}>
+        <form onSubmit={submitRule}>
+          {error && <ErrorMessage message={error} />}
+          <Input
+            label="מילת מפתח (בשם בית העסק)"
+            required
+            value={ruleForm.keyword}
+            onChange={(e) => setRuleForm({ ...ruleForm, keyword: e.target.value })}
+          />
+          <Select
+            label="קטגוריה"
+            options={categories.filter((c) => c.type === "expense").map((c) => ({ value: c.id, label: `${c.icon ?? ""} ${c.name}` }))}
+            placeholder="בחרי קטגוריה"
+            required
+            value={ruleForm.categoryId}
+            onChange={(e) => setRuleForm({ ...ruleForm, categoryId: e.target.value ? Number(e.target.value) : "" })}
+          />
+          <div className="modal-actions">
+            <Button type="submit">הוספה</Button>
+            <Button type="button" variant="ghost" onClick={() => setRuleOpen(false)}>ביטול</Button>
+          </div>
+        </form>
+      </Modal>
+    </>
+  );
 }

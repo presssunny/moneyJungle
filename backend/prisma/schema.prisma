@@ -13,12 +13,6 @@ datasource db {
 
 // ---------- Enums ----------
 
-enum Theme {
-  neon_purple @map("neon-purple")
-  dark_luxury @map("dark-luxury")
-  red_cyan    @map("red-cyan")
-}
-
 enum ReminderType {
   birthday
   expected_expense
@@ -97,7 +91,7 @@ model GateSession {
 model Settings {
   id                Int      @id @default(autoincrement())
   userId            Int      @unique @map("user_id")
-  theme             Theme    @default(neon_purple)
+  theme             String   @default("neon-purple") @db.VarChar(30)
   currency          String   @default("ILS") @db.VarChar(8)
   activeMonth       String?  @map("active_month") @db.VarChar(7) // "YYYY-MM"
   language          String   @default("he") @db.VarChar(8)
@@ -241,10 +235,16 @@ model CreditTransaction {
   creditImportId  Int      @map("credit_import_id")
   userId          Int      @map("user_id")
   transactionDate DateTime @map("transaction_date") @db.Date
+  // מועד חיוב — the real charge date from the statement (null for in-process/foreign rows)
+  chargeDate      DateTime? @map("charge_date") @db.Date
+  // Effective cash-flow date used for month attribution: chargeDate ?? transactionDate
+  billingDate     DateTime @map("billing_date") @db.Date
   businessName    String   @map("business_name") @db.VarChar(255)
   amount          Decimal  @db.Decimal(12, 2)
   categoryId      Int?     @map("category_id")
   paymentCount    Int      @default(1) @map("payment_count")
+  // "regular" | "standing_order" | "credit" | "refund" — from סוג עסקה
+  transactionType String   @default("regular") @map("transaction_type") @db.VarChar(30)
   rawData         Json?    @map("raw_data")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
@@ -254,6 +254,7 @@ model CreditTransaction {
   category     Category?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
   @@index([userId, transactionDate])
+  @@index([userId, billingDate])
   @@index([creditImportId])
   @@index([categoryId])
   @@map("credit_transactions")

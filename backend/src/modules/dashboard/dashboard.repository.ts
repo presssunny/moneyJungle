@@ -16,10 +16,12 @@ export const dashboardRepository = {
   },
 
   sumConfirmedCredit(userId: number, start: Date, end: Date) {
+    // Attribute by billingDate — the month the money actually leaves the account
     return prisma.creditTransaction.aggregate({
       where: {
         userId,
-        transactionDate: { gte: start, lt: end },
+        billingDate: { gte: start, lt: end },
+        transactionType: { not: "financing" },
         creditImport: { status: "confirmed" },
       },
       _sum: { amount: true },
@@ -39,7 +41,8 @@ export const dashboardRepository = {
       by: ["categoryId"],
       where: {
         userId,
-        transactionDate: { gte: start, lt: end },
+        billingDate: { gte: start, lt: end },
+        transactionType: { not: "financing" },
         creditImport: { status: "confirmed" },
       },
       _sum: { amount: true },
@@ -78,8 +81,8 @@ export const dashboardRepository = {
 
   recentCredit(userId: number, take = 5) {
     return prisma.creditTransaction.findMany({
-      where: { userId, creditImport: { status: "confirmed" } },
-      orderBy: [{ transactionDate: "desc" }, { id: "desc" }],
+      where: { userId, transactionType: { not: "financing" }, creditImport: { status: "confirmed" } },
+      orderBy: [{ billingDate: "desc" }, { id: "desc" }],
       include: { category: true },
       take,
     });

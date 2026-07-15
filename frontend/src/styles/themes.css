@@ -55,3 +55,88 @@
   --text-muted: #8a5560;
   --glow: 0 0 12px rgba(255, 46, 77, 0.35);
 }
+
+/* 4. עומק האוקיינוס — כחול עמוק ורגוע */
+[data-theme="ocean"] {
+  --bg: #0a1420;
+  --bg-sidebar: #071019;
+  --bg-card: #0f1e2e;
+  --border: #1e3a52;
+  --primary: #38bdf8;
+  --primary-contrast: #04141f;
+  --secondary: #22d3ee;
+  --success: #34d399;
+  --warning: #fbbf24;
+  --danger: #fb7185;
+  --text: #e2f1fb;
+  --text-muted: #6d8aa3;
+  --glow: 0 0 12px rgba(56, 189, 248, 0.3);
+}
+
+/* 5. יער לילה — ירוק עמוק */
+[data-theme="forest"] {
+  --bg: #0b1410;
+  --bg-sidebar: #081109;
+  --bg-card: #10201a;
+  --border: #1f3a2e;
+  --primary: #4ade80;
+  --primary-contrast: #04170d;
+  --secondary: #a3e635;
+  --success: #4ade80;
+  --warning: #facc15;
+  --danger: #f87171;
+  --text: #dcfce7;
+  --text-muted: #6b8f7a;
+  --glow: 0 0 12px rgba(74, 222, 128, 0.28);
+}
+
+/* 6. שקיעה — כתום חם וורוד */
+[data-theme="sunset"] {
+  --bg: #1a0f1a;
+  --bg-sidebar: #140a14;
+  --bg-card: #241526;
+  --border: #4a2540;
+  --primary: #fb923c;
+  --primary-contrast: #1a0a05;
+  --secondary: #f472b6;
+  --success: #34d399;
+  --warning: #fbbf24;
+  --danger: #f43f5e;
+  --text: #fce7f3;
+  --text-muted: #a06a8a;
+  --glow: 0 0 12px rgba(251, 146, 60, 0.3);
+}
+
+/* 7. ורד-זהב — אלגנטי ורך */
+[data-theme="rose-gold"] {
+  --bg: #17131a;
+  --bg-sidebar: #120f15;
+  --bg-card: #211a24;
+  --border: #43303f;
+  --primary: #fb7185;
+  --primary-contrast: #1a0a10;
+  --secondary: #e9a86b;
+  --success: #34d399;
+  --warning: #eab308;
+  --danger: #f43f5e;
+  --text: #f6e7ef;
+  --text-muted: #9c7d8e;
+  --glow: 0 0 12px rgba(251, 113, 133, 0.28);
+}
+
+/* 8. יום בהיר — ערכת נושא בהירה לשעות היום (נגישות) */
+[data-theme="light"] {
+  --bg: #f4f6fb;
+  --bg-sidebar: #ffffff;
+  --bg-card: #ffffff;
+  --border: #dbe1ea;
+  --primary: #7c3aed;
+  --primary-contrast: #ffffff;
+  --secondary: #2563eb;
+  --success: #059669;
+  --warning: #b45309;
+  --danger: #dc2626;
+  --text: #1e2430;
+  --text-muted: #5c6672;
+  --glow: 0 2px 10px rgba(124, 58, 237, 0.18);
+}

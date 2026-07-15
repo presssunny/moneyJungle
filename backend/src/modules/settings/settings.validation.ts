@@ -1,7 +1,16 @@
 import { z } from "zod";
 
-/** API uses dashed theme names ("neon-purple"); Prisma enum uses underscores. */
-export const themeNames = ["neon-purple", "dark-luxury", "red-cyan"] as const;
+/** Available theme ids — kept in sync with the frontend THEMES list. */
+export const themeNames = [
+  "neon-purple",
+  "dark-luxury",
+  "red-cyan",
+  "ocean",
+  "forest",
+  "sunset",
+  "rose-gold",
+  "light",
+] as const;
 
 export const updateSettingsSchema = z.object({
   theme: z.enum(themeNames).optional(),

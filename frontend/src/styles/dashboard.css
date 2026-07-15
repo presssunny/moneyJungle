@@ -237,3 +237,184 @@
   flex-shrink: 0;
   font-weight: 600;
 }
+
+/* ---------- Restructured dashboard: hero row + stats strip ---------- */
+
+.hero-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.summary-card-hero {
+  padding: 22px 24px;
+}
+
+.summary-card-hero .summary-card-label {
+  font-size: 14px;
+}
+
+.summary-card-hero .summary-card-value {
+  font-size: 32px;
+  margin-top: 6px;
+}
+
+.stats-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.stats-strip:empty {
+  display: none;
+  margin: 0;
+}
+
+@media (max-width: 720px) {
+  .hero-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---------- Insights panel (health gauge + safe-to-spend + insights) ---------- */
+
+.insights-panel {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 24px;
+  align-items: center;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 8%, var(--bg-card)), var(--bg-card));
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 22px 24px;
+  margin-bottom: 20px;
+}
+
+.insights-gauge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  min-width: 150px;
+}
+
+.gauge-ring {
+  position: relative;
+  width: 130px;
+  height: 130px;
+}
+
+.gauge-track {
+  stroke: color-mix(in srgb, var(--text-muted) 22%, transparent);
+}
+
+.gauge-value {
+  transition: stroke-dasharray 0.6s ease;
+}
+
+.gauge-value.score-good { stroke: var(--success); }
+.gauge-value.score-ok { stroke: var(--secondary); }
+.gauge-value.score-warn { stroke: var(--warning); }
+.gauge-value.score-bad { stroke: var(--danger); }
+
+.gauge-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.gauge-score {
+  font-size: 34px;
+  font-weight: 800;
+  font-family: "JetBrains Mono", monospace;
+  color: var(--text);
+  line-height: 1;
+}
+
+.gauge-outof {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.gauge-empty {
+  font-size: 54px;
+  height: 130px;
+  display: flex;
+  align-items: center;
+}
+
+.gauge-label {
+  margin-top: 10px;
+  font-weight: 600;
+}
+
+.gauge-sublabel {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.insights-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.safe-to-spend {
+  display: flex;
+  flex-direction: column;
+}
+
+.safe-amount {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--primary);
+}
+
+.safe-caption {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.projection-line {
+  font-size: 14px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.insights-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.insight {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 14px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--bg);
+  border-inline-start: 3px solid var(--border);
+}
+
+.insight-icon {
+  font-size: 16px;
+}
+
+.insight-good { border-inline-start-color: var(--success); }
+.insight-info { border-inline-start-color: var(--secondary); }
+.insight-warning { border-inline-start-color: var(--warning); }
+.insight-bad { border-inline-start-color: var(--danger); }
+
+@media (max-width: 720px) {
+  .insights-panel {
+    grid-template-columns: 1fr;
+  }
+}

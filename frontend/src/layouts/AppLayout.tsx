@@ -6,11 +6,14 @@ import { MonthProvider } from "../context/MonthContext";
 export function AppLayout() {
   return (
     <MonthProvider>
+      <a href="#main-content" className="skip-link">
+        דילוג לתוכן הראשי
+      </a>
       <div className="layout">
         <Sidebar />
         <div className="layout-main">
           <Header />
-          <main className="layout-content">
+          <main className="layout-content" id="main-content" tabIndex={-1}>
             <Outlet />
           </main>
         </div>

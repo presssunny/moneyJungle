@@ -112,7 +112,8 @@ export const updatesService = {
     const credit = await prisma.creditTransaction.aggregate({
       where: {
         userId,
-        transactionDate: { gte: start, lt: end },
+        billingDate: { gte: start, lt: end },
+        transactionType: { not: "financing" },
         creditImport: { status: "confirmed" },
       },
       _sum: { amount: true },

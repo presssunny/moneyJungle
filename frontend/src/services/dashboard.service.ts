@@ -1,4 +1,5 @@
 import type { DashboardCharts, DashboardSummary, RecentLists } from "../types/dashboard.types";
+import type { DashboardInsights } from "../types/models";
 import { api } from "./api";
 
 function monthParams(monthKey: string) {
@@ -18,5 +19,10 @@ export async function getCharts(monthKey: string): Promise<DashboardCharts> {
 
 export async function getRecent(): Promise<RecentLists> {
   const { data } = await api.get("/dashboard/recent-transactions");
+  return data;
+}
+
+export async function getInsights(monthKey: string): Promise<DashboardInsights> {
+  const { data } = await api.get("/dashboard/insights", { params: monthParams(monthKey) });
   return data;
 }
