@@ -1,24 +1,31 @@
 import { useCallback, useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
 import { EmptyState } from "../components/common/EmptyState";
 import { Loading } from "../components/common/Loading";
 import { CategoryPieChart } from "../components/dashboard/CategoryPieChart";
+import { InsightsPanel } from "../components/dashboard/InsightsPanel";
 import { LoanSplitChart } from "../components/dashboard/LoanSplitChart";
 import { MonthlyTrendChart } from "../components/dashboard/MonthlyTrendChart";
 import { SummaryCard } from "../components/dashboard/SummaryCard";
 import { UpdatesTicker } from "../components/dashboard/UpdatesTicker";
 import { ReminderForm } from "../components/reminders/ReminderForm";
 import { useMonth } from "../context/MonthContext";
-import { getCharts, getRecent, getSummary } from "../services/dashboard.service";
+import { getCharts, getInsights, getRecent, getSummary } from "../services/dashboard.service";
+import { listAlerts } from "../services/planning.service";
 import type { DashboardCharts, DashboardSummary, RecentLists } from "../types/dashboard.types";
+import type { Alert, DashboardInsights } from "../types/models";
 import { formatCurrency, formatDate } from "../utils/format";
 
 export default function DashboardPage() {
   const { monthKey } = useMonth();
+  const navigate = useNavigate();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [charts, setCharts] = useState<DashboardCharts | null>(null);
   const [recent, setRecent] = useState<RecentLists | null>(null);
+  const [insights, setInsights] = useState<DashboardInsights | null>(null);
+  const [alerts, setAlerts] = useState<Alert[]>([]);
   const [reminderOpen, setReminderOpen] = useState(false);
   const [tickerKey, setTickerKey] = useState(0);
 
@@ -26,6 +33,10 @@ export default function DashboardPage() {
     getSummary(monthKey).then(setSummary).catch(() => {});
     getCharts(monthKey).then(setCharts).catch(() => {});
     getRecent().then(setRecent).catch(() => {});
+    getInsights(monthKey).then(setInsights).catch(() => {});
+    listAlerts()
+      .then((all) => setAlerts(all.filter((a) => !a.isRead && a.severity !== "info").slice(0, 4)))
+      .catch(() => {});
   }, [monthKey]);
 
   useEffect(load, [load]);
@@ -38,26 +49,57 @@ export default function DashboardPage() {
     <>
       <UpdatesTicker key={tickerKey} />
 
-      <div className="summary-grid">
-        <SummaryCard label="הכנסות החודש" value={formatCurrency(summary.incomeTotal)} tone="success" />
-        <SummaryCard label="הוצאות החודש" value={formatCurrency(summary.expenseTotal)} tone="danger" />
+      <div className="dashboard-actions">
+        <Button onClick={() => navigate("/expenses", { state: { openForm: true } })}>+ הוספת הוצאה</Button>
+        <Button variant="outline" onClick={() => navigate("/imports")}>ייבוא אקסל 📂</Button>
+        {alerts.map((alert) => (
+          <Link key={alert.id} to="/alerts" className={`alert-chip alert-chip-${alert.severity}`}>
+            {alert.title}
+          </Link>
+        ))}
+      </div>
+
+      <div className="hero-grid">
         <SummaryCard
           label="נשאר החודש"
           value={formatCurrency(summary.balance)}
           tone={summary.balance >= 0 ? "primary" : "danger"}
+          size="hero"
         />
-        <SummaryCard
-          label="ניצול תקציב"
-          value={hasBudget ? `${Math.round(summary.budget.usedPercent)}%` : "—"}
-          tone={!hasBudget ? "default" : summary.budget.usedPercent > 100 ? "danger" : summary.budget.usedPercent >= 85 ? "warning" : "success"}
-          sub={summary.budget.overrunCount > 0 ? `${summary.budget.overrunCount} קטגוריות בחריגה` : undefined}
-        />
-        <SummaryCard label="הוצאות אשראי" value={formatCurrency(summary.creditTotal)} />
-        <SummaryCard label="חיסכון חודשי" value={formatCurrency(summary.savingsMonthly)} tone="success" />
-        <SummaryCard label="החזרי הלוואות" value={formatCurrency(summary.loans.monthlyPayment)} />
-        <SummaryCard label="ריבית חודשית" value={formatCurrency(summary.loans.monthlyInterest)} tone={summary.loans.monthlyInterest > 0 ? "warning" : "default"} />
-        <SummaryCard label="ריבית שנתית משוערת" value={formatCurrency(summary.loans.annualInterest)} tone={summary.loans.annualInterest > 0 ? "warning" : "default"} />
-        <SummaryCard label="יתרת הלוואות" value={formatCurrency(summary.loans.totalBalance)} sub={summary.loans.count > 0 ? `${summary.loans.count} הלוואות פעילות` : undefined} />
+        <SummaryCard label="הכנסות" value={formatCurrency(summary.incomeTotal)} tone="success" size="hero" />
+        <SummaryCard label="הוצאות" value={formatCurrency(summary.expenseTotal)} tone="danger" size="hero" />
+      </div>
+
+      {insights && <InsightsPanel data={insights} />}
+
+      <div className="stats-strip">
+        {hasBudget && (
+          <SummaryCard
+            label="ניצול תקציב"
+            value={`${Math.round(summary.budget.usedPercent)}%`}
+            tone={summary.budget.usedPercent > 100 ? "danger" : summary.budget.usedPercent >= 85 ? "warning" : "success"}
+            sub={summary.budget.overrunCount > 0 ? `${summary.budget.overrunCount} בחריגה` : undefined}
+          />
+        )}
+        {summary.creditTotal > 0 && <SummaryCard label="הוצאות אשראי" value={formatCurrency(summary.creditTotal)} />}
+        {summary.savingsMonthly > 0 && (
+          <SummaryCard label="חיסכון חודשי" value={formatCurrency(summary.savingsMonthly)} tone="success" />
+        )}
+        {summary.loans.count > 0 && (
+          <>
+            <SummaryCard label="החזרי הלוואות" value={formatCurrency(summary.loans.monthlyPayment)} />
+            <SummaryCard
+              label="ריבית חודשית"
+              value={formatCurrency(summary.loans.monthlyInterest)}
+              tone={summary.loans.monthlyInterest > 0 ? "warning" : "default"}
+            />
+            <SummaryCard
+              label="יתרת הלוואות"
+              value={formatCurrency(summary.loans.totalBalance)}
+              sub={`${summary.loans.count} פעילות`}
+            />
+          </>
+        )}
       </div>
 
       <div className="charts-grid">

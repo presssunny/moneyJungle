@@ -2,6 +2,7 @@ import { prisma } from "../../config/database";
 import { defaultCategories } from "./defaultCategories.seed";
 import { defaultCategoryRules } from "./defaultCategoryRules.seed";
 import { defaultPaymentMethods } from "./defaultPaymentMethods.seed";
+import { fixedPlanRows } from "./fixedPlan.seed";
 
 async function main() {
   // 1. Primary user + settings
@@ -68,6 +69,32 @@ async function main() {
     }
   }
   console.log(`Category rules seeded (${defaultCategoryRules.length})`);
+
+  // 5. The family's fixed monthly plan (from their Excel) as recurring payments
+  const existingRecurring = await prisma.recurringPayment.count({ where: { userId: user.id } });
+  if (existingRecurring === 0) {
+    const methods = await prisma.paymentMethod.findMany({ where: { userId: null } });
+    const methodByName = new Map(methods.map((m) => [m.name, m.id]));
+    const now = new Date();
+    const nextMonth = { year: now.getFullYear(), month: now.getMonth() + 1 };
+
+    for (const row of fixedPlanRows) {
+      await prisma.recurringPayment.create({
+        data: {
+          userId: user.id,
+          name: row.name,
+          amount: row.amount,
+          categoryId: categoryByName.get(row.categoryName) ?? null,
+          paymentMethodId: methodByName.get(row.paymentMethodName) ?? null,
+          frequency: "monthly",
+          nextPaymentDate: new Date(Date.UTC(nextMonth.year, nextMonth.month - 1, row.day)),
+        },
+      });
+    }
+    console.log(`Fixed monthly plan seeded (${fixedPlanRows.length} recurring payments)`);
+  } else {
+    console.log("Fixed monthly plan already present — skipped");
+  }
 
   console.log("Seed completed ✔");
 }

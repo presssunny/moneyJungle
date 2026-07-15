@@ -74,6 +74,13 @@ creditRoutes.delete(
   })
 );
 
+creditRoutes.post(
+  "/recategorize",
+  asyncHandler(async (req: Request, res: Response) => {
+    res.json(await creditService.recategorize(req.userId!));
+  })
+);
+
 creditRoutes.patch(
   "/transactions/:id",
   validate({ params: idParamSchema, body: updateCreditTransactionSchema }),

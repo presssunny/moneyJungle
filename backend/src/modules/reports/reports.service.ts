@@ -54,10 +54,11 @@ export const reportsService = {
         prisma.creditTransaction.findMany({
           where: {
             userId,
-            transactionDate: { gte: start, lt: end },
+            billingDate: { gte: start, lt: end },
+            transactionType: { not: "financing" },
             creditImport: { status: "confirmed" },
           },
-          select: { transactionDate: true, amount: true },
+          select: { billingDate: true, amount: true },
         }),
       ]);
 
@@ -90,7 +91,7 @@ export const reportsService = {
       perDay[expense.expenseDate.getUTCDate() - 1] += decimalToNumber(expense.amount);
     }
     for (const tx of creditTransactions) {
-      perDay[tx.transactionDate.getUTCDate() - 1] += decimalToNumber(tx.amount);
+      perDay[tx.billingDate.getUTCDate() - 1] += decimalToNumber(tx.amount);
     }
     let running = 0;
     const dailySpending = perDay.map((value, index) => {

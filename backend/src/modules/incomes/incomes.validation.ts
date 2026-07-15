@@ -12,7 +12,7 @@ export const incomeTypes = [
 ] as const;
 
 export const createIncomeSchema = z.object({
-  amount: z.coerce.number().positive("יש להזין סכום חיובי"),
+  amount: z.coerce.number().positive("יש להזין סכום חיובי").max(9999999999, "הסכום גדול מדי"),
   type: z.enum(incomeTypes).default("salary"),
   description: z.string().max(255).nullish(),
   incomeDate: z.coerce.date(),

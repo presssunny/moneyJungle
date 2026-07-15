@@ -1,8 +1,10 @@
 import { ApiError } from "../../utils/ApiError";
 import { alertsRepository } from "./alerts.repository";
+import { scanForAlerts } from "./alertsScanner.service";
 
 export const alertsService = {
-  list(userId: number, onlyUnread = false) {
+  async list(userId: number, onlyUnread = false) {
+    await scanForAlerts(userId);
     return alertsRepository.findAll(userId, onlyUnread);
   },
 
