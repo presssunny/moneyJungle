@@ -34,5 +34,6 @@ export const defaultCategories: DefaultCategory[] = [
   { name: "לימודים", type: "expense", icon: "📚", color: "#3A86FF" },
   { name: "בריאות", type: "expense", icon: "🩺", color: "#43AA8B" },
   { name: "חופשות", type: "expense", icon: "✈️", color: "#0E93AF" },
+  { name: "הוצאות עסק (סני)", type: "expense", icon: "💼", color: "#F59E0B" },
   { name: "שונות / לא מסווג", type: "expense", icon: "❓", color: "#6D6875" },
 ];

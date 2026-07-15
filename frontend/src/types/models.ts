@@ -146,6 +146,7 @@ export interface CreditMonthBreakdown {
 export interface CreditImportDetail extends CreditImport {
   transactions: CreditTransaction[];
   monthlyBreakdown: CreditMonthBreakdown[];
+  possibleDuplicate?: boolean;
 }
 
 export interface Alert {

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
 import { EmptyState } from "../components/common/EmptyState";
@@ -21,16 +22,34 @@ import type { CreditImport, CreditImportDetail, CreditTransaction } from "../typ
 import { formatCurrency, formatDate, formatMonthKey } from "../utils/format";
 
 export default function CreditPage() {
-  const { monthKey } = useMonth();
+  const { monthKey, setMonthKey } = useMonth();
+  const navigate = useNavigate();
   const { expenseCategories } = useLookups();
   const [imports, setImports] = useState<CreditImport[] | null>(null);
   const [selected, setSelected] = useState<CreditImportDetail | null>(null);
+  const [monthFilter, setMonthFilter] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  function viewMonthOnDashboard(monthKey: string) {
+    setMonthKey(monthKey);
+    navigate("/");
+  }
+
   const load = useCallback(() => {
-    listCreditImports().then(setImports).catch(() => setImports([]));
+    listCreditImports()
+      .then((list) => {
+        setImports(list);
+        // Auto-open the most recent import so its month-by-month split is
+        // visible right away instead of hidden behind a click.
+        setSelected((current) => {
+          if (current || list.length === 0) return current;
+          getCreditImport(list[0].id).then(setSelected).catch(() => {});
+          return current;
+        });
+      })
+      .catch(() => setImports([]));
   }, []);
 
   useEffect(load, [load]);
@@ -40,12 +59,17 @@ export default function CreditPage() {
     setMessage("");
     try {
       const detail = await uploadCreditImport(file, monthKey);
+      setMonthFilter(null);
       setSelected(detail);
       const months = detail.monthlyBreakdown?.length ?? 1;
-      setMessage(
+      const base =
         months > 1
           ? `נקלטו ${detail.totalTransactions} עסקאות ופוצלו ל־${months} חודשי חיוב — בדקי סיווג ואשרי`
-          : `נקלטו ${detail.totalTransactions} עסקאות — בדקי סיווג ואשרי`
+          : `נקלטו ${detail.totalTransactions} עסקאות — בדקי סיווג ואשרי`;
+      setMessage(
+        detail.possibleDuplicate
+          ? `⚠️ נראה שהקובץ הזה כבר יובא בעבר — ייתכן כפילות. ${base}`
+          : base
       );
       load();
     } catch (err) {
@@ -56,6 +80,7 @@ export default function CreditPage() {
   }
 
   async function openImport(imp: CreditImport) {
+    setMonthFilter(null);
     setSelected(await getCreditImport(imp.id));
   }
 
@@ -203,30 +228,71 @@ export default function CreditPage() {
         />
       </Card>
 
+      {selected && selected.monthlyBreakdown && selected.monthlyBreakdown.length > 1 && (
+        <Card title={`הקובץ מכסה ${selected.monthlyBreakdown.length} חודשי חיוב`}>
+          <p className="settings-hint">
+            לחיצה על חודש מסננת את העסקאות למטה · הכפתור פותח את החודש בדשבורד המלא
+          </p>
+          <div className="credit-month-cards">
+            {selected.monthlyBreakdown.map((m) => (
+              <div
+                key={m.monthKey}
+                className={`credit-month-card ${monthFilter === m.monthKey ? "credit-month-card-active" : ""}`}
+              >
+                <button
+                  type="button"
+                  className="credit-month-main"
+                  onClick={() => setMonthFilter(monthFilter === m.monthKey ? null : m.monthKey)}
+                >
+                  <span className="credit-month-name">{formatMonthKey(m.monthKey)}</span>
+                  <span className="credit-month-total mono">{formatCurrency(m.total)}</span>
+                  <span className="text-muted">{m.count} עסקאות</span>
+                </button>
+                <button
+                  type="button"
+                  className="credit-month-link"
+                  onClick={() => viewMonthOnDashboard(m.monthKey)}
+                  title="פתיחת החודש בדשבורד"
+                >
+                  לדשבורד ←
+                </button>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
       {selected && (
         <Card
-          title={`עסקאות — ${selected.fileName}`}
+          title={
+            monthFilter
+              ? `עסקאות — ${formatMonthKey(monthFilter)}`
+              : `כל העסקאות — ${selected.fileName}`
+          }
           action={
-            selected.status !== "confirmed" ? (
-              <Button size="sm" onClick={() => confirm(selected.id)}>אישור הייבוא ✓</Button>
-            ) : (
-              <span className="text-success">מאושר ✓</span>
-            )
+            <span className="row-actions">
+              {monthFilter && (
+                <Button size="sm" variant="ghost" onClick={() => setMonthFilter(null)}>
+                  הצגת כל החודשים ✕
+                </Button>
+              )}
+              {selected.status !== "confirmed" ? (
+                <Button size="sm" onClick={() => confirm(selected.id)}>אישור הייבוא ✓</Button>
+              ) : (
+                <span className="text-success">מאושר ✓</span>
+              )}
+            </span>
           }
         >
-          {selected.monthlyBreakdown && selected.monthlyBreakdown.length > 1 && (
-            <div className="credit-breakdown">
-              <span className="credit-breakdown-label">פיצול לפי חודש חיוב:</span>
-              {selected.monthlyBreakdown.map((m) => (
-                <span key={m.monthKey} className="credit-breakdown-chip">
-                  <strong>{formatMonthKey(m.monthKey)}</strong>
-                  <span className="mono">{formatCurrency(m.total)}</span>
-                  <span className="text-muted">{m.count} עס'</span>
-                </span>
-              ))}
-            </div>
-          )}
-          <Table columns={txColumns} rows={selected.transactions} rowKey={(row) => row.id} />
+          <Table
+            columns={txColumns}
+            rows={
+              monthFilter
+                ? selected.transactions.filter((t) => t.billingDate.slice(0, 7) === monthFilter)
+                : selected.transactions
+            }
+            rowKey={(row) => row.id}
+          />
         </Card>
       )}
     </>

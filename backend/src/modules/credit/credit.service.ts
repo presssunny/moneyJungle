@@ -127,6 +127,12 @@ export const creditService = {
       rows.filter((row) => row.transactionType !== "financing").reduce((sum, row) => sum + row.amount, 0)
     );
 
+    // Warn (don't block) if the same file looks already imported — avoids
+    // silently double-counting when a statement is uploaded twice.
+    const duplicate = await prisma.creditImport.findFirst({
+      where: { userId, fileName, totalTransactions: rows.length },
+    });
+
     const created = await prisma.$transaction(async (tx) => {
       const creditImport = await tx.creditImport.create({
         data: {
@@ -156,7 +162,8 @@ export const creditService = {
       });
       return creditImport;
     });
-    return this.getImport(userId, created.id);
+    const detail = await this.getImport(userId, created.id);
+    return { ...detail, possibleDuplicate: Boolean(duplicate) };
   },
 
   async confirmImport(userId: number, id: number) {
