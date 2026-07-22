@@ -1,7 +1,12 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useLocation } from "react-router-dom";
 import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
+import { CategoryBarChart } from "../components/dashboard/CategoryBarChart";
+import { MonthProgressPanel } from "../components/dashboard/MonthProgressPanel";
+import { SummaryCard } from "../components/dashboard/SummaryCard";
+import { updateSettings } from "../services/planning.service";
+import type { CategorySlice } from "../types/dashboard.types";
 import { EmptyState } from "../components/common/EmptyState";
 import { ErrorMessage } from "../components/common/ErrorMessage";
 import { Input } from "../components/common/Input";
@@ -19,6 +24,7 @@ import {
   listExpenses,
   updateExpense,
   type ExpenseInput,
+  type MonthProgress,
 } from "../services/finance.service";
 import type { Expense } from "../types/models";
 import { formatCurrency, formatDate } from "../utils/format";
@@ -38,6 +44,7 @@ export default function ExpensesPage() {
   const { expenseCategories, paymentMethods } = useLookups();
   const [expenses, setExpenses] = useState<Expense[] | null>(null);
   const [total, setTotal] = useState(0);
+  const [progress, setProgress] = useState<MonthProgress | null>(null);
   const [filterCategory, setFilterCategory] = useState<number | undefined>();
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Expense | null>(null);
@@ -52,9 +59,15 @@ export default function ExpensesPage() {
       .then((data) => {
         setExpenses(data.expenses);
         setTotal(data.total);
+        setProgress(data.progress);
       })
       .catch(() => setExpenses([]));
   }, [monthKey, filterCategory]);
+
+  async function saveTarget(value: number | null) {
+    await updateSettings({ monthlyTarget: value });
+    load();
+  }
 
   useEffect(load, [load]);
 
@@ -67,6 +80,41 @@ export default function ExpensesPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const UNCATEGORIZED_COLOR = "#6D6875";
+
+  // Mini-dashboard, computed from the already-loaded rows (credit + manual) —
+  // no extra request, always consistent with the table and the category filter.
+  const stats = useMemo(() => {
+    const rows = expenses ?? [];
+    const count = rows.length;
+    let largest = 0;
+    let creditTotal = 0;
+    const byCat = new Map<string, CategorySlice>();
+    for (const r of rows) {
+      const value = Number(r.amount);
+      if (value > largest) largest = value;
+      if (r.source === "credit") creditTotal += value;
+      const key = r.category?.name ?? "לא מסווג";
+      const existing = byCat.get(key);
+      if (existing) existing.value += value;
+      else
+        byCat.set(key, {
+          name: key,
+          color: r.category?.color ?? UNCATEGORIZED_COLOR,
+          icon: r.category?.icon ?? undefined,
+          value,
+        });
+    }
+    return {
+      count,
+      largest,
+      creditTotal,
+      manualTotal: total - creditTotal,
+      average: count > 0 ? total / count : 0,
+      slices: [...byCat.values()],
+    };
+  }, [expenses, total]);
 
   function openCreate() {
     setEditing(null);
@@ -135,6 +183,11 @@ export default function ExpensesPage() {
         <span>
           {row.isRecurring && <span title="תשלום קבוע">🔁 </span>}
           {row.businessName || row.description || "—"}
+          {row.source === "credit" && (
+            <span className="badge badge-credit" title="עסקה מדוח כרטיס אשראי — נערכת בטאב אשראי">
+              💳 אשראי
+            </span>
+          )}
         </span>
       ),
     },
@@ -150,7 +203,11 @@ export default function ExpensesPage() {
           <span className="text-muted">לא מסווג</span>
         ),
     },
-    { key: "method", header: "אמצעי תשלום", render: (row) => row.paymentMethod?.name ?? "—" },
+    {
+      key: "method",
+      header: "אמצעי תשלום",
+      render: (row) => row.paymentMethod?.name ?? (row.source === "credit" ? "כרטיס אשראי" : "—"),
+    },
     {
       key: "amount",
       header: "סכום",
@@ -161,12 +218,15 @@ export default function ExpensesPage() {
       key: "actions",
       header: "",
       align: "left",
-      render: (row) => (
-        <span className="row-actions">
-          <Button size="sm" variant="ghost" onClick={() => openEdit(row)}>✏️</Button>
-          <Button size="sm" variant="ghost" onClick={() => remove(row)}>🗑️</Button>
-        </span>
-      ),
+      render: (row) =>
+        row.source === "credit" ? (
+          <span className="text-muted" title="עסקת אשראי — לעריכה עברי לטאב אשראי">🔒</span>
+        ) : (
+          <span className="row-actions">
+            <Button size="sm" variant="ghost" onClick={() => openEdit(row)}>✏️</Button>
+            <Button size="sm" variant="ghost" onClick={() => remove(row)}>🗑️</Button>
+          </span>
+        ),
     },
   ];
 
@@ -194,19 +254,44 @@ export default function ExpensesPage() {
           value={filterCategory ?? ""}
           onChange={(e) => setFilterCategory(e.target.value ? Number(e.target.value) : undefined)}
         />
-        <div className="toolbar-total">
-          סה״כ החודש: <strong className="mono text-danger">{formatCurrency(total)}</strong>
-        </div>
       </div>
 
       {importMessage && <div className="info-banner">{importMessage}</div>}
+
+      {progress && (progress.target != null || progress.isCurrentMonth) && (
+        <MonthProgressPanel progress={progress} onSaveTarget={saveTarget} />
+      )}
+
+      {expenses.length > 0 && (
+        <div className="expenses-overview">
+          <div className="stats-strip">
+            <SummaryCard label="סה״כ החודש" value={formatCurrency(total)} tone="danger" />
+            <SummaryCard label="מספר עסקאות" value={String(stats.count)} />
+            <SummaryCard label="הוצאה ממוצעת" value={formatCurrency(stats.average)} />
+            {stats.creditTotal > 0 ? (
+              <SummaryCard
+                label="מתוכן אשראי"
+                value={formatCurrency(stats.creditTotal)}
+                sub={`מזומן / אחר: ${formatCurrency(stats.manualTotal)}`}
+              />
+            ) : (
+              <SummaryCard label="ההוצאה הגדולה" value={formatCurrency(stats.largest)} />
+            )}
+          </div>
+          {stats.slices.length > 0 && (
+            <Card title="הוצאות לפי קטגוריה">
+              <CategoryBarChart data={stats.slices} />
+            </Card>
+          )}
+        </div>
+      )}
 
       <Card>
         <Table
           columns={columns}
           rows={expenses}
-          rowKey={(row) => row.id}
-          emptyState={<EmptyState icon="🧾" title="אין הוצאות החודש" hint="הוסיפי הוצאה או ייבאי קובץ אקסל" />}
+          rowKey={(row) => `${row.source ?? "manual"}-${row.id}`}
+          emptyState={<EmptyState icon="🧾" title="אין הוצאות החודש" hint="הוסיפי הוצאה, ייבאי אקסל, או ייבאי דוח אשראי בטאב אשראי" />}
         />
       </Card>
 

@@ -21,6 +21,7 @@ export const updateSettingsSchema = z.object({
     .nullish(),
   language: z.string().min(1).max(8).optional(),
   dateFormat: z.string().min(1).max(20).optional(),
+  monthlyTarget: z.coerce.number().nonnegative("היעד לא יכול להיות שלילי").max(9999999999, "היעד גדול מדי").nullish(),
   notificationsJson: z.record(z.string(), z.unknown()).nullish(),
 });
 

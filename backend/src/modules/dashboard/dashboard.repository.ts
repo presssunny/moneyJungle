@@ -16,7 +16,7 @@ export const dashboardRepository = {
   },
 
   sumConfirmedCredit(userId: number, start: Date, end: Date) {
-    // Attribute by billingDate — the month the money actually leaves the account
+    // Attribute by billingDate — the month the purchase was made (see schema)
     return prisma.creditTransaction.aggregate({
       where: {
         userId,

@@ -1,6 +1,8 @@
 import { Request, Response, Router } from "express";
+import multer from "multer";
 import { gateAuth } from "../../middlewares/gateAuth.middleware";
 import { validate } from "../../middlewares/validation.middleware";
+import { ApiError } from "../../utils/ApiError";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { IdParam, idParamSchema } from "../../utils/validation.utils";
 import { bankService } from "./bank.service";
@@ -12,6 +14,11 @@ import {
   createBankTransactionSchema,
   updateBankAccountSchema,
 } from "./bank.validation";
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
 
 export const bankRoutes = Router();
 
@@ -69,6 +76,17 @@ bankRoutes.post(
     const { id } = req.validated?.params as IdParam;
     const body = req.validated?.body as CreateBankTransactionBody;
     res.status(201).json(await bankService.createTransaction(req.userId!, id, body));
+  })
+);
+
+bankRoutes.post(
+  "/accounts/:id/import",
+  upload.single("file"),
+  validate({ params: idParamSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    if (!req.file) throw ApiError.badRequest("יש לצרף קובץ אקסל של דף החשבון");
+    const { id } = req.validated?.params as IdParam;
+    res.status(201).json(await bankService.importStatement(req.userId!, id, req.file.buffer));
   })
 );
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
+import { DropZone } from "../components/common/DropZone";
 import { EmptyState } from "../components/common/EmptyState";
 import { ErrorMessage } from "../components/common/ErrorMessage";
 import { Input } from "../components/common/Input";
@@ -15,6 +16,7 @@ import {
   createBankTransaction,
   deleteBankAccount,
   deleteBankTransaction,
+  importBankStatement,
   listBankAccounts,
   listBankTransactions,
 } from "../services/planning.service";
@@ -45,6 +47,9 @@ export default function BankPage() {
     categoryId: null as number | null,
   });
   const [error, setError] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [importMsg, setImportMsg] = useState("");
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
 
   const load = useCallback(() => {
     listBankAccounts()
@@ -74,6 +79,12 @@ export default function BankPage() {
       setAccountOpen(false);
       setAccountForm({ bankName: "", accountName: "", initialBalance: 0 });
       setSelectedId(account.id);
+      // If the account was created off a dropped statement, import it now.
+      if (pendingFile) {
+        const file = pendingFile;
+        setPendingFile(null);
+        await importInto(account.id, file);
+      }
       load();
     } catch (err) {
       setError(apiErrorMessage(err));
@@ -92,6 +103,41 @@ export default function BankPage() {
     } catch (err) {
       setError(apiErrorMessage(err));
     }
+  }
+
+  async function importInto(accountId: number, file: File) {
+    setError("");
+    setImportMsg("");
+    setUploading(true);
+    try {
+      const result = await importBankStatement(accountId, file);
+      const parts = [`נוספו ${result.imported} תנועות`];
+      if (result.deposits > 0 || result.withdrawals > 0) {
+        parts.push(`(${result.deposits} הכנסות · ${result.withdrawals} הוצאות)`);
+      }
+      if (result.skippedDuplicates > 0) parts.push(`· ${result.skippedDuplicates} כפילויות דולגו`);
+      setImportMsg(parts.join(" "));
+      listBankTransactions(accountId).then(setTransactions).catch(() => {});
+      load(); // balance changed
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  /** A dropped statement imports into the selected account, or — if there are no
+   *  accounts yet — opens "new account" pre-filled and imports once it's created. */
+  function handleDroppedFile(file: File) {
+    if (selectedId !== null) {
+      importInto(selectedId, file);
+      return;
+    }
+    setPendingFile(file);
+    setAccountForm({ bankName: "", accountName: "עו״ש", initialBalance: 0 });
+    setError("");
+    setImportMsg("");
+    setAccountOpen(true);
   }
 
   async function removeAccount(account: BankAccount) {
@@ -139,6 +185,22 @@ export default function BankPage() {
         <Button onClick={() => setAccountOpen(true)}>+ חשבון בנק</Button>
         {selected && <Button variant="outline" onClick={() => setTxOpen(true)}>+ תנועה</Button>}
       </div>
+
+      <Card title={selected ? `ייבוא דף חשבון — ${selected.accountName}` : "ייבוא דף חשבון (עו״ש)"}>
+        {error && <ErrorMessage message={error} />}
+        <DropZone
+          onFile={handleDroppedFile}
+          busy={uploading}
+          icon="🏦"
+          title="גררי לכאן דף חשבון (עו״ש) או לחצי לבחירה"
+          hint={
+            selected
+              ? `הכנסות (זכות) והוצאות (חובה) ייקלטו לחשבון "${selected.accountName}" — ההוצאות יסווגו לפי חוקים, וכפילויות ידולגו`
+              : "הכנסות (זכות) והוצאות (חובה) ייקלטו אוטומטית. אין עדיין חשבון? גררי קובץ ותנחי ליצור אחד — הייבוא יתחיל מיד אחריו"
+          }
+        />
+        {importMsg && <div className="info-banner" style={{ marginTop: 12 }}>{importMsg}</div>}
+      </Card>
 
       {accounts.length === 0 ? (
         <Card>

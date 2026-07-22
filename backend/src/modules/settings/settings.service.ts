@@ -18,6 +18,7 @@ export const settingsService = {
       ...(body.activeMonth !== undefined && { activeMonth: body.activeMonth }),
       ...(body.language !== undefined && { language: body.language }),
       ...(body.dateFormat !== undefined && { dateFormat: body.dateFormat }),
+      ...(body.monthlyTarget !== undefined && { monthlyTarget: body.monthlyTarget }),
       ...(body.notificationsJson !== undefined && {
         notificationsJson: (body.notificationsJson ?? Prisma.JsonNull) as Prisma.InputJsonValue,
       }),

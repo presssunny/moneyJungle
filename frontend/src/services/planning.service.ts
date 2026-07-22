@@ -116,6 +116,21 @@ export async function deleteBankTransaction(id: number): Promise<void> {
   await api.delete(`/bank/transactions/${id}`);
 }
 
+export interface BankImportResult {
+  parsed: number;
+  imported: number;
+  skippedDuplicates: number;
+  deposits: number;
+  withdrawals: number;
+}
+
+export async function importBankStatement(accountId: number, file: File): Promise<BankImportResult> {
+  const form = new FormData();
+  form.append("file", file);
+  const { data } = await api.post(`/bank/accounts/${accountId}/import`, form);
+  return data;
+}
+
 // ---------- Recurring payments ----------
 
 export interface RecurringInput {

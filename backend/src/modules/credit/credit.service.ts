@@ -4,9 +4,14 @@ import { ApiError } from "../../utils/ApiError";
 import { decimalToNumber, round2 } from "../../utils/money.utils";
 import { ParsedCreditRow, parseCreditFile } from "./creditParser.service";
 
-/** Effective cash-flow date: the charge date when the statement gives one, else the transaction date. */
-function billingDateOf(row: ParsedCreditRow): Date {
-  return row.chargeDate ?? row.transactionDate;
+/**
+ * The date an expense is attributed to = when the purchase was actually made
+ * (transaction date). A buy on 20/06 is a June expense even if the card only
+ * charges it on 15/07. The charge date is still stored separately (chargeDate)
+ * so "when it hits the account" isn't lost.
+ */
+function attributionDateOf(row: ParsedCreditRow): Date {
+  return row.transactionDate;
 }
 
 /** Label the import by the billing month that holds the most real-spend transactions. */
@@ -14,7 +19,7 @@ function inferImportMonth(rows: ParsedCreditRow[]): { month: number; year: numbe
   const counts = new Map<string, number>();
   const spendRows = rows.filter((r) => r.transactionType !== "financing");
   for (const row of spendRows.length > 0 ? spendRows : rows) {
-    const d = billingDateOf(row);
+    const d = attributionDateOf(row);
     const key = `${d.getUTCFullYear()}-${d.getUTCMonth() + 1}`;
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }
@@ -151,7 +156,7 @@ export const creditService = {
           userId,
           transactionDate: row.transactionDate,
           chargeDate: row.chargeDate,
-          billingDate: billingDateOf(row),
+          billingDate: attributionDateOf(row),
           businessName: row.businessName,
           amount: row.amount,
           categoryId: categorize(row.businessName),
