@@ -14,6 +14,23 @@ export const expensesRepository = {
     });
   },
 
+  // Confirmed, non-financing credit-card transactions attributed to this month
+  // (by billingDate — same rule the dashboard uses). Read-only in the expenses
+  // view; the source of truth stays in the credit (אשראי) module.
+  findCreditByMonth(userId: number, start: Date, end: Date, categoryId?: number) {
+    return prisma.creditTransaction.findMany({
+      where: {
+        userId,
+        billingDate: { gte: start, lt: end },
+        transactionType: { not: "financing" },
+        creditImport: { status: "confirmed" },
+        ...(categoryId ? { categoryId } : {}),
+      },
+      include: { category: true },
+      orderBy: [{ billingDate: "desc" }, { id: "desc" }],
+    });
+  },
+
   findById(userId: number, id: number) {
     return prisma.expense.findFirst({ where: { id, userId } });
   },

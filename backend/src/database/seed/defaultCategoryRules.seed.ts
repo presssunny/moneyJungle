@@ -108,4 +108,8 @@ export const defaultCategoryRules: DefaultCategoryRule[] = [
   // הוצאות עסק (סני)
   { keyword: "anthropic", categoryName: "הוצאות עסק (סני)" },
   { keyword: "claude", categoryName: "הוצאות עסק (סני)" },
+  // תחבורה ציבורית
+  { keyword: "רב-פס", categoryName: "תחבורה ציבורית" },
+  { keyword: "רב פס", categoryName: "תחבורה ציבורית" },
+  { keyword: "lime", categoryName: "תחבורה ציבורית" },
 ];

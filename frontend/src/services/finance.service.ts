@@ -32,7 +32,25 @@ export interface ExpenseInput {
   isRecurring?: boolean;
 }
 
-export async function listExpenses(monthKey: string, categoryId?: number): Promise<{ expenses: Expense[]; total: number }> {
+export interface MonthProgress {
+  spent: number;
+  target: number | null;
+  targetSource: "goal" | "last_month" | "none";
+  goal: number | null;
+  lastMonthSpend: number;
+  isCurrentMonth: boolean;
+  isFuture: boolean;
+  daysInMonth: number;
+  dayOfMonth: number;
+  daysLeft: number;
+  dailyBurn: number;
+  projected: number | null;
+}
+
+export async function listExpenses(
+  monthKey: string,
+  categoryId?: number
+): Promise<{ expenses: Expense[]; total: number; progress: MonthProgress }> {
   const { data } = await api.get("/expenses", { params: { ...monthParams(monthKey), categoryId } });
   return data;
 }

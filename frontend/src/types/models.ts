@@ -39,6 +39,10 @@ export interface Expense {
   isRecurring: boolean;
   category?: Category | null;
   paymentMethod?: PaymentMethod | null;
+  // "manual" | "credit_import" | "bank_import" | "recurring" | "credit".
+  // "credit" = a credit-card transaction shown read-only in the unified view;
+  // it is edited in the אשראי tab, not here.
+  source?: string;
 }
 
 export interface Income {
@@ -166,6 +170,7 @@ export interface Settings {
   activeMonth: string | null;
   language: string;
   dateFormat: string;
+  monthlyTarget?: Money | null;
 }
 
 export interface BankAccount {

@@ -12,6 +12,7 @@ export const defaultCategories: DefaultCategory[] = [
   { name: "אוכל בחוץ / מסעדות / משלוחים", type: "expense", icon: "🍔", color: "#E8663B" },
   { name: "דלק", type: "expense", icon: "⛽", color: "#B98A20" },
   { name: "רכב וטיפולים", type: "expense", icon: "🚗", color: "#8D99AE" },
+  { name: "תחבורה ציבורית", type: "expense", icon: "🚌", color: "#0D9488" },
   { name: "סיגריות", type: "expense", icon: "🚬", color: "#B76D68" },
   { name: "שכירות / משכנתא", type: "expense", icon: "🏠", color: "#7768AE" },
   { name: "חשמל", type: "expense", icon: "💡", color: "#B99F1F" },

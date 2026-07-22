@@ -4,7 +4,7 @@ import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
 import { EmptyState } from "../components/common/EmptyState";
 import { Loading } from "../components/common/Loading";
-import { CategoryPieChart } from "../components/dashboard/CategoryPieChart";
+import { CategoryBarChart } from "../components/dashboard/CategoryBarChart";
 import { InsightsPanel } from "../components/dashboard/InsightsPanel";
 import { LoanSplitChart } from "../components/dashboard/LoanSplitChart";
 import { MonthlyTrendChart } from "../components/dashboard/MonthlyTrendChart";
@@ -112,7 +112,7 @@ export default function DashboardPage() {
         </Card>
         <Card title="הוצאות לפי קטגוריה">
           {charts && charts.byCategory.length > 0 ? (
-            <CategoryPieChart data={charts.byCategory} />
+            <CategoryBarChart data={charts.byCategory} />
           ) : (
             <EmptyState icon="🥧" title="אין הוצאות החודש" />
           )}
@@ -124,7 +124,7 @@ export default function DashboardPage() {
         )}
         {charts && charts.creditByCategory.length > 0 && (
           <Card title="אשראי לפי קטגוריה">
-            <CategoryPieChart data={charts.creditByCategory} />
+            <CategoryBarChart data={charts.creditByCategory} />
           </Card>
         )}
       </div>

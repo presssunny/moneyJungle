@@ -96,6 +96,9 @@ model Settings {
   activeMonth       String?  @map("active_month") @db.VarChar(7) // "YYYY-MM"
   language          String   @default("he") @db.VarChar(8)
   dateFormat        String   @default("DD/MM/YYYY") @map("date_format") @db.VarChar(20)
+  // Optional monthly spending goal (₪). When unset, the expenses view falls back
+  // to last month's spend as the benchmark.
+  monthlyTarget     Decimal? @map("monthly_target") @db.Decimal(12, 2)
   notificationsJson Json?    @map("notifications_json")
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
@@ -237,7 +240,8 @@ model CreditTransaction {
   transactionDate DateTime @map("transaction_date") @db.Date
   // מועד חיוב — the real charge date from the statement (null for in-process/foreign rows)
   chargeDate      DateTime? @map("charge_date") @db.Date
-  // Effective cash-flow date used for month attribution: chargeDate ?? transactionDate
+  // Date the expense is attributed to (which month it counts in) = transactionDate,
+  // i.e. when the purchase was made — not when the card charges it (see chargeDate).
   billingDate     DateTime @map("billing_date") @db.Date
   businessName    String   @map("business_name") @db.VarChar(255)
   amount          Decimal  @db.Decimal(12, 2)
