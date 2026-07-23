@@ -625,3 +625,47 @@
   color: var(--text-muted);
 }
 .progress-forecast { color: var(--text); }
+
+/* ---- Proactive month-pace banner ---- */
+.pace-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  border-radius: 16px;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+  border: 1px solid var(--tone, var(--border));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--tone, var(--primary)) 14%, var(--bg-card)), var(--bg-card));
+  animation: pace-banner-in 0.35s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pace-banner { animation: none; }
+}
+@keyframes pace-banner-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.pace-banner-bad { --tone: var(--danger); }
+.pace-banner-warning { --tone: var(--warning); }
+.pace-banner-good { --tone: var(--success); }
+
+.pace-banner-icon {
+  font-size: 24px;
+  line-height: 1.2;
+  flex-shrink: 0;
+}
+.pace-banner-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pace-banner-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--tone);
+}
+.pace-banner-detail {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}

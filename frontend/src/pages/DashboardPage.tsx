@@ -8,6 +8,7 @@ import { CategoryBarChart } from "../components/dashboard/CategoryBarChart";
 import { InsightsPanel } from "../components/dashboard/InsightsPanel";
 import { LoanSplitChart } from "../components/dashboard/LoanSplitChart";
 import { MonthlyTrendChart } from "../components/dashboard/MonthlyTrendChart";
+import { PaceAlertBanner } from "../components/dashboard/PaceAlertBanner";
 import { SummaryCard } from "../components/dashboard/SummaryCard";
 import { UpdatesTicker } from "../components/dashboard/UpdatesTicker";
 import { ReminderForm } from "../components/reminders/ReminderForm";
@@ -69,6 +70,8 @@ export default function DashboardPage() {
         <SummaryCard label="הכנסות" value={formatCurrency(summary.incomeTotal)} tone="success" size="hero" />
         <SummaryCard label="הוצאות" value={formatCurrency(summary.expenseTotal)} tone="danger" size="hero" />
       </div>
+
+      {insights?.paceAlert && <PaceAlertBanner data={insights.paceAlert} />}
 
       {insights && <InsightsPanel data={insights} />}
 
