@@ -12,6 +12,16 @@ export interface Insight {
   tone: "good" | "info" | "warning" | "bad";
 }
 
+export interface PaceAlert {
+  tone: "good" | "warning" | "bad";
+  title: string;
+  detail: string;
+  /** Signed gap: projected end-of-month spend minus target (₪). */
+  overBy: number;
+  /** Max daily spend for the rest of the month to still land on target, or null if unrecoverable/not needed. */
+  dailyToStayOnTrack: number | null;
+}
+
 export interface InsightsResponse {
   healthScore: number | null;
   scoreLabel: string;
@@ -22,6 +32,7 @@ export interface InsightsResponse {
     projectedExpenses: number;
     projectedBalance: number;
   } | null;
+  paceAlert: PaceAlert | null;
   insights: Insight[];
 }
 
@@ -72,6 +83,7 @@ export async function buildInsights(userId: number, year: number, month: number)
       safePerDay: null,
       daysLeft,
       projection: null,
+      paceAlert: null,
       insights: [
         { icon: "✨", text: "הוסיפי הכנסה והוצאות (או ייבאי אקסל) כדי לקבל ציון בריאות פיננסית ותובנות", tone: "info" },
       ],
@@ -89,6 +101,50 @@ export async function buildInsights(userId: number, year: number, month: number)
     : null;
   const safePerDay =
     isCurrentMonth && daysLeft > 0 && balance > 0 ? Math.floor(balance / daysLeft) : isCurrentMonth ? 0 : null;
+
+  // ---- Proactive pace alert: forecast vs monthly target BEFORE the month ends ----
+  // Target mirrors the expenses month-progress rule: explicit goal, else last month's spend.
+  const settings = await prisma.settings.findUnique({ where: { userId } });
+  const goalTarget = settings?.monthlyTarget != null ? round2(decimalToNumber(settings.monthlyTarget)) : 0;
+  const target = goalTarget > 0 ? goalTarget : previous.expenseTotal > 0 ? previous.expenseTotal : null;
+  const targetSource: "goal" | "last_month" = goalTarget > 0 ? "goal" : "last_month";
+
+  let paceAlert: PaceAlert | null = null;
+  if (isCurrentMonth && projection && target && target > 0 && dayOfMonth >= 3) {
+    const projected = projection.projectedExpenses;
+    const overBy = round2(projected - target);
+    const targetLabel = targetSource === "goal" ? "היעד" : "ממוצע החודש הקודם";
+    // Daily budget for the remaining days that still lands on target.
+    const remainingBudget = target - current.expenseTotal;
+    const dailyToStayOnTrack = daysLeft > 0 ? Math.floor(remainingBudget / daysLeft) : null;
+
+    if (overBy > target * 0.05) {
+      // Heading over target — proactive warning while there's still time to react.
+      const tone: PaceAlert["tone"] = overBy > target * 0.2 ? "bad" : "warning";
+      const recovery =
+        dailyToStayOnTrack !== null && dailyToStayOnTrack > 0
+          ? ` כדי לחזור למסלול, הישארי בערך על ${formatILS(dailyToStayOnTrack)} ליום ב-${daysLeft} הימים שנותרו.`
+          : " כמעט בלתי אפשרי לחזור ליעד החודש — שווה לשים לב להוצאות הגדולות.";
+      paceAlert = {
+        tone,
+        title: `בקצב הנוכחי תחרגי מ${targetLabel} ב-${formatILS(overBy)} עד סוף החודש`,
+        detail: `צפי סוף חודש ${formatILS(projected)} · ${targetLabel} ${formatILS(target)} · נותרו ${daysLeft} ימים.${recovery}`,
+        overBy,
+        dailyToStayOnTrack,
+      };
+    } else if (daysLeft > 0 && dayOfMonth >= daysInMonth * 0.4) {
+      // Comfortably on/under target past the 40% mark — encouraging confirmation.
+      paceAlert = {
+        tone: "good",
+        title: `בקצב מצוין — צפי סוף החודש ${formatILS(projected)}, מתחת ל${targetLabel}`,
+        detail: `${targetLabel} ${formatILS(target)} · נותרו ${daysLeft} ימים בקצב בריא. ${
+          overBy < 0 ? `צפויה לחסוך כ-${formatILS(-overBy)}.` : ""
+        }`.trim(),
+        overBy,
+        dailyToStayOnTrack,
+      };
+    }
+  }
 
   // ---- Health score ----
   let score = 0;
@@ -242,6 +298,7 @@ export async function buildInsights(userId: number, year: number, month: number)
     safePerDay,
     daysLeft,
     projection,
+    paceAlert,
     insights: insights.slice(0, 5),
   };
 }

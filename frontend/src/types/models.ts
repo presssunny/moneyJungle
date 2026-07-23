@@ -264,6 +264,14 @@ export interface Insight {
   tone: "good" | "info" | "warning" | "bad";
 }
 
+export interface PaceAlert {
+  tone: "good" | "warning" | "bad";
+  title: string;
+  detail: string;
+  overBy: number;
+  dailyToStayOnTrack: number | null;
+}
+
 export interface DashboardInsights {
   healthScore: number | null;
   scoreLabel: string;
@@ -274,6 +282,7 @@ export interface DashboardInsights {
     projectedExpenses: number;
     projectedBalance: number;
   } | null;
+  paceAlert: PaceAlert | null;
   insights: Insight[];
 }
 
