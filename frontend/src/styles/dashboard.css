@@ -350,13 +350,24 @@
 
 .hero-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   gap: 16px;
   margin-bottom: 18px;
 }
 
 .summary-card-hero {
   padding: 22px 24px;
+}
+
+/* "Safe to spend today" headline metric — the daily check-in number (PocketGuard-style) */
+.summary-card-accent {
+  background: color-mix(in srgb, var(--primary) 12%, var(--bg-card));
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+  box-shadow: var(--glow, 0 0 0 transparent);
+}
+
+.summary-card-accent .summary-card-value {
+  font-size: 36px;
 }
 
 .summary-card-hero .summary-card-label {
@@ -384,6 +395,275 @@
   .hero-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* Pair achievements + upcoming side-by-side on desktop to cut vertical sprawl */
+.dash-duo {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: start;
+  margin-bottom: 20px;
+}
+
+.dash-duo > .card {
+  margin-bottom: 0;
+}
+
+@media (max-width: 900px) {
+  .dash-duo {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---------- Quick add (natural-language expense entry) ---------- */
+
+.quick-add {
+  margin-bottom: 20px;
+}
+
+.quick-add-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 6px 8px 6px 12px;
+}
+
+.quick-add-form:focus-within {
+  border-color: var(--primary);
+  box-shadow: var(--glow, 0 0 0 transparent);
+}
+
+.quick-add-icon {
+  font-size: 18px;
+}
+
+.quick-add-input {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 14px;
+  font-family: inherit;
+  padding: 8px 4px;
+  outline: none;
+}
+
+.quick-add-result {
+  margin-top: 10px;
+  font-size: 13.5px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--success) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--success) 40%, transparent);
+  border-radius: 10px;
+  padding: 8px 12px;
+}
+
+.quick-add-error {
+  margin-top: 10px;
+  font-size: 13.5px;
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
+  border-radius: 10px;
+  padding: 8px 12px;
+}
+
+/* ---------- Upcoming cash-flow (forward-looking agenda) ---------- */
+
+.upcoming-panel {
+  margin-bottom: 20px;
+}
+
+.upcoming-total {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.upcoming-total strong {
+  color: var(--text);
+  font-size: 15px;
+}
+
+.upcoming-pressure {
+  background: color-mix(in srgb, var(--warning) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warning) 45%, transparent);
+  color: var(--warning);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 13.5px;
+  margin-bottom: 14px;
+}
+
+.upcoming-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.upcoming-day {
+  border-inline-start: 2px solid var(--border);
+  padding-inline-start: 12px;
+}
+
+.upcoming-day-heavy {
+  border-inline-start-color: var(--warning);
+}
+
+.upcoming-day-head {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.upcoming-event {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 0;
+}
+
+.upcoming-event-icon {
+  font-size: 16px;
+  width: 20px;
+  text-align: center;
+}
+
+.upcoming-event-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+.upcoming-event-amount {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ---------- Achievements / gamification ---------- */
+
+.achievements-panel {
+  margin-bottom: 20px;
+}
+
+.achievements-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.achievements-streak {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.achievements-streak-icon {
+  font-size: 30px;
+  line-height: 1;
+}
+
+.achievements-streak-count {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.achievements-streak-label {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.achievements-earned {
+  font-size: 13px;
+  color: var(--text-muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  padding: 4px 12px;
+  font-weight: 600;
+}
+
+.badge-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.badge {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  transition: border-color 0.15s, opacity 0.15s;
+}
+
+.badge-earned {
+  border-color: color-mix(in srgb, var(--success) 55%, var(--border));
+  background: color-mix(in srgb, var(--success) 8%, var(--bg));
+}
+
+.badge-locked {
+  opacity: 0.72;
+}
+
+.badge-icon {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.badge-locked .badge-icon {
+  filter: grayscale(0.7);
+}
+
+.badge-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.badge-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.badge-earned .badge-title span {
+  color: var(--success);
+}
+
+.badge-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.badge-bar {
+  height: 5px;
+  background: var(--bg-card);
+  border-radius: 99px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+
+.badge-bar-fill {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 99px;
+  transition: width 0.4s ease;
 }
 
 /* ---------- Insights panel (health gauge + safe-to-spend + insights) ---------- */

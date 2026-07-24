@@ -1,4 +1,5 @@
 import { prisma } from "../../config/database";
+import { buildRuleCategorizer } from "../categories/categorization.service";
 import { parseExpensesFile } from "./importsParser.service";
 
 /** Hebrew payment-method words → PaymentMethod.type, for matching sheet cells. */
@@ -36,18 +37,12 @@ async function buildMethodMatcher(userId: number) {
 }
 
 async function buildCategorizer(userId: number) {
-  const [rules, categories] = await Promise.all([
-    prisma.categoryRule.findMany({
-      where: { OR: [{ userId }, { userId: null }] },
-      orderBy: { userId: "desc" },
-    }),
+  const [matchByRule, categories] = await Promise.all([
+    buildRuleCategorizer(userId),
     prisma.category.findMany({ where: { OR: [{ userId }, { userId: null }] } }),
   ]);
-  const normalizedRules = rules.map((rule) => ({
-    keyword: rule.keyword.toLowerCase(),
-    categoryId: rule.categoryId,
-  }));
   return (name: string, categoryText: string | null): number | null => {
+    // An explicit category column in the sheet wins over keyword rules.
     if (categoryText) {
       const lowered = categoryText.toLowerCase();
       const byName = categories.find(
@@ -55,9 +50,7 @@ async function buildCategorizer(userId: number) {
       );
       if (byName) return byName.id;
     }
-    const loweredName = name.toLowerCase();
-    const rule = normalizedRules.find((r) => loweredName.includes(r.keyword));
-    return rule?.categoryId ?? null;
+    return matchByRule(name);
   };
 }
 
@@ -89,17 +82,26 @@ export const importsService = {
       where: { userId, expenseDate: { gte: spanStart, lt: spanEnd } },
       select: { businessName: true, amount: true, expenseDate: true },
     });
-    const existingKeys = new Set(
-      existing.map((e) => `${e.businessName}|${Number(e.amount)}|${dateKey(e.expenseDate)}`)
-    );
+    // Count-based dedup: a row already in the DB is skipped, but two genuinely
+    // identical purchases (same name/amount/date) in one file are BOTH kept —
+    // we only skip as many as already exist. Re-importing the same file is still
+    // a no-op because those rows now exist in the DB.
+    const remaining = new Map<string, number>();
+    for (const e of existing) {
+      const key = `${e.businessName}|${Number(e.amount)}|${dateKey(e.expenseDate)}`;
+      remaining.set(key, (remaining.get(key) ?? 0) + 1);
+    }
 
     let created = 0;
     let totalAmount = 0;
     const monthsTouched = new Set<string>();
     for (const { row, expenseDate } of dated) {
       const key = `${row.name}|${row.amount}|${dateKey(expenseDate)}`;
-      if (existingKeys.has(key)) continue;
-      existingKeys.add(key);
+      const left = remaining.get(key) ?? 0;
+      if (left > 0) {
+        remaining.set(key, left - 1); // consume one already-imported match
+        continue;
+      }
       await prisma.expense.create({
         data: {
           userId,

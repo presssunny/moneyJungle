@@ -69,6 +69,23 @@ export async function deleteExpense(id: number): Promise<void> {
   await api.delete(`/expenses/${id}`);
 }
 
+export interface QuickAddResult {
+  expense: Expense;
+  parsed: {
+    amount: number;
+    businessName: string;
+    categoryId: number | null;
+    categoryName: string | null;
+    categoryIcon: string | null;
+  };
+}
+
+/** Free-text quick add: send raw Hebrew text, server parses amount + business + category. */
+export async function quickAddExpense(text: string): Promise<QuickAddResult> {
+  const { data } = await api.post("/expenses/quick-add", { text });
+  return data;
+}
+
 export async function importExpensesFile(file: File, monthKey: string): Promise<ImportExpensesResult> {
   const { year, month } = monthParams(monthKey);
   const form = new FormData();

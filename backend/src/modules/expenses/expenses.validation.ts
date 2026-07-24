@@ -18,6 +18,11 @@ export const listExpensesQuerySchema = z.object({
   categoryId: z.coerce.number().int().positive().optional(),
 });
 
+export const quickAddSchema = z.object({
+  text: z.string().min(1, "יש להקליד טקסט").max(255),
+});
+
 export type CreateExpenseBody = z.infer<typeof createExpenseSchema>;
 export type UpdateExpenseBody = z.infer<typeof updateExpenseSchema>;
 export type ListExpensesQuery = z.infer<typeof listExpensesQuerySchema>;
+export type QuickAddBody = z.infer<typeof quickAddSchema>;

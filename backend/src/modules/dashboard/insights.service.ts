@@ -115,8 +115,10 @@ export async function buildInsights(userId: number, year: number, month: number)
     const overBy = round2(projected - target);
     const targetLabel = targetSource === "goal" ? "היעד" : "ממוצע החודש הקודם";
     // Daily budget for the remaining days that still lands on target.
+    // Null once the target is already spent — there's no positive daily figure.
     const remainingBudget = target - current.expenseTotal;
-    const dailyToStayOnTrack = daysLeft > 0 ? Math.floor(remainingBudget / daysLeft) : null;
+    const dailyToStayOnTrack =
+      daysLeft > 0 && remainingBudget > 0 ? Math.floor(remainingBudget / daysLeft) : null;
 
     if (overBy > target * 0.05) {
       // Heading over target — proactive warning while there's still time to react.
@@ -133,10 +135,15 @@ export async function buildInsights(userId: number, year: number, month: number)
         dailyToStayOnTrack,
       };
     } else if (daysLeft > 0 && dayOfMonth >= daysInMonth * 0.4) {
-      // Comfortably on/under target past the 40% mark — encouraging confirmation.
+      // On/under target past the 40% mark — encouraging confirmation. Only say
+      // "below target" when the forecast is actually below it; otherwise "on track".
+      const title =
+        overBy < 0
+          ? `בקצב מצוין — צפי סוף החודש ${formatILS(projected)}, מתחת ל${targetLabel}`
+          : `בקצב טוב — צפי סוף החודש ${formatILS(projected)}, בערך על ${targetLabel}`;
       paceAlert = {
         tone: "good",
-        title: `בקצב מצוין — צפי סוף החודש ${formatILS(projected)}, מתחת ל${targetLabel}`,
+        title,
         detail: `${targetLabel} ${formatILS(target)} · נותרו ${daysLeft} ימים בקצב בריא. ${
           overBy < 0 ? `צפויה לחסוך כ-${formatILS(-overBy)}.` : ""
         }`.trim(),

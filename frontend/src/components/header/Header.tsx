@@ -1,14 +1,12 @@
-import { useLocation } from "react-router-dom";
-import { NAV_ITEMS } from "../../app/navigation";
+import { NavLink, useLocation } from "react-router-dom";
+import { MANAGE_NAV, routeTitle } from "../../app/navigation";
 import { useGateAuth } from "../../hooks/useGateAuth";
 import { MonthSelector } from "./MonthSelector";
 
 export function Header() {
   const location = useLocation();
   const { logout } = useGateAuth();
-  const current = NAV_ITEMS.find((item) =>
-    item.path === "/" ? location.pathname === "/" : location.pathname.startsWith(item.path)
-  );
+  const current = routeTitle(location.pathname);
 
   return (
     <header className="header">
@@ -17,6 +15,9 @@ export function Header() {
       </h1>
       <div className="header-actions">
         <MonthSelector />
+        <NavLink to={MANAGE_NAV.path} className="header-icon-btn" title={MANAGE_NAV.label} aria-label={MANAGE_NAV.label}>
+          {MANAGE_NAV.icon}
+        </NavLink>
         <button className="header-logout" onClick={logout} title="יציאה">
           יציאה ⎋
         </button>

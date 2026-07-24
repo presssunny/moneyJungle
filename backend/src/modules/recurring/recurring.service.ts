@@ -23,9 +23,14 @@ export const recurringService = {
       orderBy: { nextPaymentDate: "asc" },
       include: { category: true, paymentMethod: true },
     });
-    const monthlyTotal = items
-      .filter((item) => item.frequency === "monthly")
-      .reduce((sum, item) => sum + Number(item.amount), 0);
+    // Monthly-equivalent cost so yearly payments aren't dropped from the total.
+    const monthlyTotal =
+      Math.round(
+        items.reduce(
+          (sum, item) => sum + Number(item.amount) / (item.frequency === "yearly" ? 12 : 1),
+          0
+        ) * 100
+      ) / 100;
     return { items, monthlyTotal };
   },
 
@@ -59,14 +64,17 @@ export const recurringService = {
   },
 
   /**
-   * Materialize all monthly recurring payments into expenses for the given month.
+   * Materialize recurring payments into expenses for the given month:
+   * monthly payments every month, yearly payments only in their anchor month.
    * A recurring payment is skipped when a recurring expense with the same name and
    * amount already exists in that month, so re-running is safe.
    */
   async generate(userId: number, year: number, month: number) {
-    const recurrings = await prisma.recurringPayment.findMany({
-      where: { userId, frequency: "monthly" },
-    });
+    const all = await prisma.recurringPayment.findMany({ where: { userId } });
+    // Yearly payments materialize only in the month they're anchored to.
+    const recurrings = all.filter(
+      (r) => r.frequency === "monthly" || r.nextPaymentDate.getUTCMonth() + 1 === month
+    );
     const { start, end } = monthRange(year, month);
     const existing = await prisma.expense.findMany({
       where: { userId, isRecurring: true, expenseDate: { gte: start, lt: end } },

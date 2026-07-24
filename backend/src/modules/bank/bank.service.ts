@@ -1,7 +1,13 @@
 import { prisma } from "../../config/database";
+import { Prisma } from "../../../generated/prisma/client";
 import { ApiError } from "../../utils/ApiError";
 import { round2 } from "../../utils/money.utils";
-import { parseBankStatement } from "./bankParser.service";
+import { buildRuleCategorizer } from "../categories/categorization.service";
+import {
+  describeIngestionReport,
+  parseBankStatement,
+  parseBankStatementPdf,
+} from "./bankParser.service";
 import {
   CreateBankAccountBody,
   CreateBankTransactionBody,
@@ -17,19 +23,6 @@ async function requireAccount(userId: number, id: number) {
   const account = await prisma.bankAccount.findFirst({ where: { id, userId } });
   if (!account) throw ApiError.notFound("חשבון הבנק לא נמצא");
   return account;
-}
-
-/** Match a description against category rules (user rules win over defaults). */
-async function buildCategorizer(userId: number) {
-  const rules = await prisma.categoryRule.findMany({
-    where: { OR: [{ userId }, { userId: null }] },
-    orderBy: { userId: "desc" },
-  });
-  const normalized = rules.map((rule) => ({ keyword: rule.keyword.toLowerCase(), categoryId: rule.categoryId }));
-  return (description: string): number | null => {
-    const text = description.toLowerCase();
-    return normalized.find((rule) => text.includes(rule.keyword))?.categoryId ?? null;
-  };
 }
 
 export const bankService = {
@@ -54,8 +47,15 @@ export const bankService = {
   },
 
   async updateAccount(userId: number, id: number, body: UpdateBankAccountBody) {
-    await requireAccount(userId, id);
-    return prisma.bankAccount.update({ where: { id }, data: body });
+    const account = await requireAccount(userId, id);
+    // Editing the initial balance must shift the current balance by the same
+    // delta, otherwise the running balance silently drifts from its transactions.
+    const data: Prisma.BankAccountUncheckedUpdateInput = { ...body };
+    if (body.initialBalance != null) {
+      const delta = body.initialBalance - Number(account.initialBalance);
+      data.currentBalance = { increment: round2(delta) };
+    }
+    return prisma.bankAccount.update({ where: { id }, data });
   },
 
   async removeAccount(userId: number, id: number) {
@@ -102,10 +102,27 @@ export const bankService = {
    * amount + type + description) are skipped so re-uploading is safe. The
    * account balance is adjusted once by the net of everything imported.
    */
-  async importStatement(userId: number, accountId: number, buffer: Buffer) {
+  async importStatement(userId: number, accountId: number, buffer: Buffer, fileName = "") {
     await requireAccount(userId, accountId);
-    const rows = parseBankStatement(buffer);
-    const categorize = await buildCategorizer(userId);
+    const isPdf = /\.pdf$/i.test(fileName) || buffer.subarray(0, 5).toString("latin1") === "%PDF-";
+    const statement = isPdf ? await parseBankStatementPdf(buffer) : parseBankStatement(buffer);
+    const { rows, report } = statement;
+    // Ingestion log (Hebrew): which parser ran, what it found and what it could
+    // not read. Rows we are unsure about are listed — never silently dropped.
+    console.log(`[קליטת דוח בנק] ${describeIngestionReport(report)}`);
+    for (const issue of report.rejected) {
+      console.warn(`[קליטת דוח בנק] נדחתה שורה (עמ' ${issue.page ?? "-"}): ${issue.line} — ${issue.reason}`);
+    }
+    for (const issue of report.review) {
+      console.warn(`[קליטת דוח בנק] לבדיקה ידנית (עמ' ${issue.page ?? "-"}): ${issue.line} — ${issue.reason}`);
+    }
+    for (const mismatch of report.balanceMismatches) {
+      console.warn(
+        `[קליטת דוח בנק] אי-התאמת יתרה בשורה ${mismatch.index + 1} (${mismatch.date} ${mismatch.description}): ` +
+          `צפוי ${mismatch.expected}, מודפס ${mismatch.printed}, פער ${mismatch.diff}`
+      );
+    }
+    const categorize = await buildRuleCategorizer(userId);
 
     // Build a dedup key set from existing transactions in the file's date range.
     const dates = rows.map((r) => r.date.getTime());
@@ -162,6 +179,7 @@ export const bankService = {
       skippedDuplicates: rows.length - fresh.length,
       deposits,
       withdrawals,
+      report,
     };
   },
 

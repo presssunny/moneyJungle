@@ -24,7 +24,6 @@ import { formatCurrency, formatDate, formatMonthKey } from "../utils/format";
 
 const FREQUENCIES = [
   { value: "monthly", label: "חודשי" },
-  { value: "weekly", label: "שבועי" },
   { value: "yearly", label: "שנתי" },
 ];
 

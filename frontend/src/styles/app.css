@@ -15,6 +15,15 @@
   top: 0;
   height: 100vh;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Manage/settings link pinned to the bottom, visually separated from the primary rail */
+.sidebar-nav-footer {
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
 }
 
 .sidebar-logo {
@@ -105,6 +114,267 @@
 .header-logout:hover {
   color: var(--danger);
   border-color: var(--danger);
+}
+
+/* Header gear → manage hub (Monarch-style separate settings entry) */
+.header-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 16px;
+  color: var(--text-muted);
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.header-icon-btn:hover,
+.header-icon-btn.active {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+
+/* ---------- Tabbed hub (Transactions / Accounts / Reports / Manage) ---------- */
+
+.hub-tabs {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 20px;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
+}
+
+.hub-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 16px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s;
+}
+
+.hub-tab:hover {
+  color: var(--text);
+}
+
+.hub-tab-active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+
+.hub-tab:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+  border-radius: 4px;
+}
+
+/* ---------- Onboarding (first-run wizard) ---------- */
+
+.onboarding {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  background: var(--bg);
+}
+
+.onboarding-card {
+  width: 100%;
+  max-width: 560px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 32px 28px;
+}
+
+.onboarding-logo {
+  color: var(--primary);
+  font-weight: 700;
+  letter-spacing: 2px;
+  font-size: 15px;
+  margin-bottom: 18px;
+}
+
+.onboarding-title {
+  font-size: 26px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.onboarding-sub {
+  color: var(--text-muted);
+  font-size: 14.5px;
+  margin-bottom: 22px;
+  line-height: 1.5;
+}
+
+.onboarding-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 22px;
+}
+
+.onboarding-step {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  text-align: start;
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.05s;
+}
+
+.onboarding-step:hover:not(:disabled) {
+  border-color: var(--primary);
+}
+
+.onboarding-step:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.onboarding-step:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.onboarding-step-num {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--primary) 16%, transparent);
+  color: var(--primary);
+  font-weight: 700;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.onboarding-step-icon {
+  font-size: 24px;
+}
+
+.onboarding-step-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.onboarding-step-title {
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.onboarding-step-desc {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.onboarding-step-cta {
+  flex-shrink: 0;
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.onboarding-skip {
+  width: 100%;
+}
+
+@media (max-width: 560px) {
+  .onboarding-step-cta {
+    display: none;
+  }
+}
+
+/* ---------- Mobile bottom navigation (hidden on desktop) ---------- */
+
+.bottom-nav {
+  display: none;
+}
+
+@media (max-width: 860px) {
+  .sidebar {
+    display: none;
+  }
+
+  .layout-content {
+    padding: 16px 14px calc(72px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .header {
+    padding: 12px 16px;
+  }
+
+  .bottom-nav {
+    display: flex;
+    position: fixed;
+    inset-inline: 0;
+    bottom: 0;
+    z-index: 40;
+    background: var(--bg-sidebar);
+    border-top: 1px solid var(--border);
+    padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
+    justify-content: space-around;
+  }
+
+  .bottom-nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+    padding: 4px 2px;
+    color: var(--text-muted);
+    font-size: 11px;
+    border-radius: 8px;
+    min-height: 48px;
+    justify-content: center;
+  }
+
+  .bottom-nav-item-active {
+    color: var(--primary);
+  }
+
+  .bottom-nav-icon {
+    font-size: 19px;
+    line-height: 1;
+  }
+
+  .bottom-nav-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+  }
+
+  .hub-tab {
+    padding: 10px 12px;
+    font-size: 13px;
+  }
 }
 
 .layout-content {
