@@ -2,7 +2,8 @@ import { Request, Response } from "express";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { IdParam, resolveMonth } from "../../utils/validation.utils";
 import { expensesService } from "./expenses.service";
-import { CreateExpenseBody, ListExpensesQuery, UpdateExpenseBody } from "./expenses.validation";
+import { quickAddService } from "./quickAdd.service";
+import { CreateExpenseBody, ListExpensesQuery, QuickAddBody, UpdateExpenseBody } from "./expenses.validation";
 
 export const expensesController = {
   list: asyncHandler(async (req: Request, res: Response) => {
@@ -14,6 +15,11 @@ export const expensesController = {
   create: asyncHandler(async (req: Request, res: Response) => {
     const body = req.validated?.body as CreateExpenseBody;
     res.status(201).json(await expensesService.create(req.userId!, body));
+  }),
+
+  quickAdd: asyncHandler(async (req: Request, res: Response) => {
+    const { text } = req.validated?.body as QuickAddBody;
+    res.status(201).json(await quickAddService.add(req.userId!, text));
   }),
 
   update: asyncHandler(async (req: Request, res: Response) => {

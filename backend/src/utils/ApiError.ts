@@ -28,6 +28,10 @@ export class ApiError extends Error {
     return new ApiError(409, message);
   }
 
+  static tooManyRequests(message = "יותר מדי בקשות") {
+    return new ApiError(429, message);
+  }
+
   static internal(message = "שגיאת שרת פנימית") {
     return new ApiError(500, message);
   }

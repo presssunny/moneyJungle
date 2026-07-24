@@ -171,6 +171,7 @@ export interface Settings {
   language: string;
   dateFormat: string;
   monthlyTarget?: Money | null;
+  notificationsJson?: Record<string, unknown> | null;
 }
 
 export interface BankAccount {
@@ -284,6 +285,44 @@ export interface DashboardInsights {
   } | null;
   paceAlert: PaceAlert | null;
   insights: Insight[];
+}
+
+export interface Badge {
+  key: string;
+  icon: string;
+  title: string;
+  description: string;
+  earned: boolean;
+  progress?: number;
+}
+
+export interface Achievements {
+  streak: {
+    months: number;
+    onTrackThisMonth: boolean;
+    hasTarget: boolean;
+    label: string;
+  };
+  monthsTracked: number;
+  earnedCount: number;
+  badges: Badge[];
+}
+
+export interface UpcomingEvent {
+  date: string;
+  kind: "recurring" | "subscription" | "loan" | "reminder";
+  name: string;
+  amount: number;
+  icon: string;
+}
+
+export interface Upcoming {
+  windowDays: number;
+  from: string;
+  to: string;
+  total: number;
+  events: UpcomingEvent[];
+  heaviestDay: { date: string; total: number; count: number } | null;
 }
 
 export interface ImportExpensesResult {

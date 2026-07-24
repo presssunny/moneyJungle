@@ -3,20 +3,30 @@ import { Link, useNavigate } from "react-router-dom";
 import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
 import { EmptyState } from "../components/common/EmptyState";
+import { QuickAddBar } from "../components/common/QuickAddBar";
 import { Loading } from "../components/common/Loading";
+import { AchievementsPanel } from "../components/dashboard/AchievementsPanel";
 import { CategoryBarChart } from "../components/dashboard/CategoryBarChart";
 import { InsightsPanel } from "../components/dashboard/InsightsPanel";
 import { LoanSplitChart } from "../components/dashboard/LoanSplitChart";
 import { MonthlyTrendChart } from "../components/dashboard/MonthlyTrendChart";
 import { PaceAlertBanner } from "../components/dashboard/PaceAlertBanner";
 import { SummaryCard } from "../components/dashboard/SummaryCard";
+import { UpcomingPanel } from "../components/dashboard/UpcomingPanel";
 import { UpdatesTicker } from "../components/dashboard/UpdatesTicker";
 import { ReminderForm } from "../components/reminders/ReminderForm";
 import { useMonth } from "../context/MonthContext";
-import { getCharts, getInsights, getRecent, getSummary } from "../services/dashboard.service";
+import {
+  getAchievements,
+  getCharts,
+  getInsights,
+  getRecent,
+  getSummary,
+  getUpcoming,
+} from "../services/dashboard.service";
 import { listAlerts } from "../services/planning.service";
 import type { DashboardCharts, DashboardSummary, RecentLists } from "../types/dashboard.types";
-import type { Alert, DashboardInsights } from "../types/models";
+import type { Achievements, Alert, DashboardInsights, Upcoming } from "../types/models";
 import { formatCurrency, formatDate } from "../utils/format";
 
 export default function DashboardPage() {
@@ -26,6 +36,8 @@ export default function DashboardPage() {
   const [charts, setCharts] = useState<DashboardCharts | null>(null);
   const [recent, setRecent] = useState<RecentLists | null>(null);
   const [insights, setInsights] = useState<DashboardInsights | null>(null);
+  const [achievements, setAchievements] = useState<Achievements | null>(null);
+  const [upcoming, setUpcoming] = useState<Upcoming | null>(null);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [reminderOpen, setReminderOpen] = useState(false);
   const [tickerKey, setTickerKey] = useState(0);
@@ -35,6 +47,8 @@ export default function DashboardPage() {
     getCharts(monthKey).then(setCharts).catch(() => {});
     getRecent().then(setRecent).catch(() => {});
     getInsights(monthKey).then(setInsights).catch(() => {});
+    getAchievements(monthKey).then(setAchievements).catch(() => {});
+    getUpcoming(45).then(setUpcoming).catch(() => {});
     listAlerts()
       .then((all) => setAlerts(all.filter((a) => !a.isRead && a.severity !== "info").slice(0, 4)))
       .catch(() => {});
@@ -51,16 +65,36 @@ export default function DashboardPage() {
       <UpdatesTicker key={tickerKey} />
 
       <div className="dashboard-actions">
-        <Button onClick={() => navigate("/expenses", { state: { openForm: true } })}>+ הוספת הוצאה</Button>
-        <Button variant="outline" onClick={() => navigate("/imports")}>ייבוא אקסל 📂</Button>
+        <Button onClick={() => navigate("/transactions?tab=expenses", { state: { openForm: true } })}>
+          + הוספת הוצאה
+        </Button>
+        <Button variant="outline" onClick={() => navigate("/transactions?tab=import")}>ייבוא אקסל 📂</Button>
         {alerts.map((alert) => (
-          <Link key={alert.id} to="/alerts" className={`alert-chip alert-chip-${alert.severity}`}>
+          <Link key={alert.id} to="/manage?tab=alerts" className={`alert-chip alert-chip-${alert.severity}`}>
             {alert.title}
           </Link>
         ))}
       </div>
 
+      <QuickAddBar onAdded={load} />
+
       <div className="hero-grid">
+        {/* "Safe to spend today" only makes sense for the month in progress */}
+        {insights?.safePerDay != null && (
+          <SummaryCard
+            label="מותר להוציא היום"
+            icon="💸"
+            value={formatCurrency(insights.safePerDay)}
+            tone={insights.safePerDay > 0 ? "primary" : "danger"}
+            sub={
+              insights.safePerDay > 0
+                ? `נותרו ${insights.daysLeft} ימים החודש`
+                : "אין יתרה פנויה — האטי את הקצב"
+            }
+            size="hero"
+            accent
+          />
+        )}
         <SummaryCard
           label="נשאר החודש"
           value={formatCurrency(summary.balance)}
@@ -74,6 +108,13 @@ export default function DashboardPage() {
       {insights?.paceAlert && <PaceAlertBanner data={insights.paceAlert} />}
 
       {insights && <InsightsPanel data={insights} />}
+
+      {(achievements || upcoming) && (
+        <div className="dash-duo">
+          {achievements && <AchievementsPanel data={achievements} />}
+          {upcoming && <UpcomingPanel data={upcoming} />}
+        </div>
+      )}
 
       <div className="stats-strip">
         {hasBudget && (

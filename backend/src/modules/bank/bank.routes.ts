@@ -84,9 +84,11 @@ bankRoutes.post(
   upload.single("file"),
   validate({ params: idParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    if (!req.file) throw ApiError.badRequest("יש לצרף קובץ אקסל של דף החשבון");
+    if (!req.file) throw ApiError.badRequest("יש לצרף קובץ אקסל או PDF של דף החשבון");
     const { id } = req.validated?.params as IdParam;
-    res.status(201).json(await bankService.importStatement(req.userId!, id, req.file.buffer));
+    res
+      .status(201)
+      .json(await bankService.importStatement(req.userId!, id, req.file.buffer, req.file.originalname));
   })
 );
 

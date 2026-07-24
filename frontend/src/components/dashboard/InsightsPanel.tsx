@@ -46,14 +46,6 @@ export function InsightsPanel({ data }: { data: DashboardInsights }) {
       </div>
 
       <div className="insights-content">
-        {data.safePerDay !== null && (
-          <div className="safe-to-spend">
-            <span className="safe-amount mono">{formatCurrency(data.safePerDay)}</span>
-            <span className="safe-caption">
-              פנוי להוצאה ליום · {data.daysLeft} ימים עד סוף החודש
-            </span>
-          </div>
-        )}
         {data.projection && (
           <div className="projection-line">
             בקצב הנוכחי החודש ייגמר עם{" "}

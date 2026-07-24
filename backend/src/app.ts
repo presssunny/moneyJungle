@@ -1,6 +1,9 @@
 import cors from "cors";
 import express from "express";
+import { env } from "./config/env";
 import { errorMiddleware, notFoundMiddleware } from "./middlewares/error.middleware";
+import { rateLimit } from "./middlewares/rateLimit.middleware";
+import { securityHeaders } from "./middlewares/securityHeaders.middleware";
 import { alertsRoutes } from "./modules/alerts/alerts.routes";
 import { bankRoutes } from "./modules/bank/bank.routes";
 import { budgetsRoutes } from "./modules/budgets/budgets.routes";
@@ -24,12 +27,24 @@ import { updatesRoutes } from "./modules/updates/updates.routes";
 
 const app = express();
 
-app.use(cors());
-app.use(express.json());
+// Trust the reverse-proxy hop so req.ip reflects the real client (rate limiting).
+app.set("trust proxy", 1);
+
+// CORS: restrict to an explicit allow-list when CORS_ORIGIN is set, else allow all (dev).
+const allowedOrigins = env.CORS_ORIGIN.split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+app.use(cors(allowedOrigins.length > 0 ? { origin: allowedOrigins } : {}));
+
+app.use(securityHeaders);
+app.use(express.json({ limit: "1mb" }));
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, service: "monthly-finance-planner" });
 });
+
+// Throttle gate login to slow brute-force against the shared password.
+app.use("/api/gate/login", rateLimit({ windowMs: 15 * 60 * 1000, max: 10 }));
 
 app.use("/api/gate", gateRoutes);
 app.use("/api/dashboard", dashboardRoutes);

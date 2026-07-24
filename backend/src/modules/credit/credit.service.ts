@@ -2,6 +2,7 @@ import { prisma } from "../../config/database";
 import { Prisma } from "../../../generated/prisma/client";
 import { ApiError } from "../../utils/ApiError";
 import { decimalToNumber, round2 } from "../../utils/money.utils";
+import { buildRuleCategorizer } from "../categories/categorization.service";
 import { ParsedCreditRow, parseCreditFile } from "./creditParser.service";
 
 /**
@@ -44,23 +45,6 @@ function monthlyBreakdown(
   return [...map.entries()]
     .map(([monthKey, v]) => ({ monthKey, count: v.count, total: round2(v.total) }))
     .sort((a, b) => b.monthKey.localeCompare(a.monthKey));
-}
-
-/** Match business names against category rules (user rules win over defaults). */
-async function buildCategorizer(userId: number) {
-  const rules = await prisma.categoryRule.findMany({
-    where: { OR: [{ userId }, { userId: null }] },
-    orderBy: { userId: "desc" }, // user rules first (nulls last)
-  });
-  const normalized = rules.map((rule) => ({
-    keyword: rule.keyword.toLowerCase(),
-    categoryId: rule.categoryId,
-  }));
-  return (businessName: string): number | null => {
-    const name = businessName.toLowerCase();
-    const match = normalized.find((rule) => name.includes(rule.keyword));
-    return match?.categoryId ?? null;
-  };
 }
 
 export const creditService = {
@@ -126,7 +110,7 @@ export const creditService = {
     // collapsed into one month.
     const importMonth = override?.importMonth ?? inferred.month;
     const importYear = override?.importYear ?? inferred.year;
-    const categorize = await buildCategorizer(userId);
+    const categorize = await buildRuleCategorizer(userId);
     // The displayed statement total is real spend — revolving-credit financing excluded
     const totalAmount = round2(
       rows.filter((row) => row.transactionType !== "financing").reduce((sum, row) => sum + row.amount, 0)
@@ -192,7 +176,7 @@ export const creditService = {
    * Useful after adding new rules — assigns categories without touching manual ones.
    */
   async recategorize(userId: number) {
-    const categorize = await buildCategorizer(userId);
+    const categorize = await buildRuleCategorizer(userId);
     const pending = await prisma.creditTransaction.findMany({
       where: { userId, categoryId: null, transactionType: { not: "financing" } },
       select: { id: true, businessName: true },

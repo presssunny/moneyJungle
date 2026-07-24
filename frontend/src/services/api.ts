@@ -1,4 +1,5 @@
 import axios from "axios";
+import { toast } from "./toast";
 
 export const TOKEN_KEY = "gate_token";
 
@@ -22,6 +23,15 @@ api.interceptors.response.use(
       if (window.location.pathname !== "/gate") {
         window.location.href = "/gate";
       }
+    }
+    // Surface the failures pages otherwise swallow (a page shows an empty list on
+    // load error; a delete rejects with no UI). Validation (4xx) is left to the
+    // inline form messages, and gate screens handle their own errors, to avoid
+    // double-reporting. Network drops and server (5xx) faults get a global toast.
+    const isGate = url.includes("/gate/");
+    const isServerFault = !error.response || (typeof status === "number" && status >= 500);
+    if (isServerFault && !isGate) {
+      toast.error(error.response ? "שגיאת שרת — חלק מהנתונים אולי לא נטענו" : "אין חיבור לשרת");
     }
     return Promise.reject(error);
   }

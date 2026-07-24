@@ -1,5 +1,7 @@
 import { Outlet } from "react-router-dom";
+import { Toaster } from "../components/common/Toaster";
 import { Header } from "../components/header/Header";
+import { BottomNav } from "../components/nav/BottomNav";
 import { Sidebar } from "../components/sidebar/Sidebar";
 import { MonthProvider } from "../context/MonthContext";
 
@@ -18,6 +20,8 @@ export function AppLayout() {
           </main>
         </div>
       </div>
+      <BottomNav />
+      <Toaster />
     </MonthProvider>
   );
 }

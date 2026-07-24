@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const recurringFrequencies = ["monthly", "weekly", "yearly"] as const;
+export const recurringFrequencies = ["monthly", "yearly"] as const;
 
 export const createRecurringSchema = z.object({
   name: z.string().min(1, "יש להזין שם").max(120),
