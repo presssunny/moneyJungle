@@ -112,4 +112,20 @@ export const defaultCategoryRules: DefaultCategoryRule[] = [
   { keyword: "רב-פס", categoryName: "תחבורה ציבורית" },
   { keyword: "רב פס", categoryName: "תחבורה ציבורית" },
   { keyword: "lime", categoryName: "תחבורה ציבורית" },
+  // Current-account wording. A bank statement names the *mechanism* (an ATM, a
+  // cheque, a transfer), never a business, so without these rules every such row
+  // lands in "לא מסווג" — 15 of the 28 imported rows did exactly that.
+  { keyword: "כספומט", categoryName: "משיכות מזומן" },
+  { keyword: "בנקט", categoryName: "משיכות מזומן" },
+  { keyword: "כספונט", categoryName: "משיכות מזומן" },
+  { keyword: "משיכת מזומן", categoryName: "משיכות מזומן" },
+  { keyword: "משיכת שיק", categoryName: "שיקים והמחאות" },
+  { keyword: "הזמנת שיקים", categoryName: "שיקים והמחאות" },
+  // No bare "שיק" rule: it is a substring of ordinary business names (שיקגו…),
+  // and mislabelling a restaurant as a cheque is worse than leaving it unmatched.
+  { keyword: "פרעון שיק", categoryName: "שיקים והמחאות" },
+  { keyword: "העברה מהחשבון", categoryName: "העברות בנקאיות" },
+  { keyword: "העברה לחשבון", categoryName: "העברות בנקאיות" },
+  { keyword: "העברת כספים", categoryName: "העברות בנקאיות" },
+  { keyword: "מסלקה", categoryName: "העברות בנקאיות" },
 ];
