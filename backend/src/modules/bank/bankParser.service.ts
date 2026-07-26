@@ -401,12 +401,39 @@ function isInterestRow(row: ParsedBankRow): boolean {
  *   - interest_credit: an interest line printed in the credit column — an
  *     account-level interest rebate, never income.
  */
-export type ReconcileLineKind = BankLineKind | "credit_card_payment" | "interest_credit";
+export type ReconcileLineKind =
+  | BankLineKind
+  | "credit_card_payment"
+  | "interest_credit"
+  | "loan_drawdown";
 
 // Credit-card bill settlements drawn from the current account: the generic
 // "כרטיסי אשראי" wording, direct-debit ("עפ״י הרשאה") and the card issuers.
-const CREDIT_CARD_PAYMENT_PATTERN =
-  /כרטיס(?:י)?\s*אשראי|עפ["״'`]?י\s*הרשאה|הרשאה\s*לחיוב|\bכאל\b|ויזה|ישראכרט|מאסטרקארד|לאומי\s*קארד|\bמקס\b|אמריקן\s*אקספרס|דיינרס/;
+// NB: no `\b` anywhere in this file's Hebrew patterns. In JavaScript a word
+// boundary is defined against [A-Za-z0-9_], so a Hebrew letter is a NON-word
+// character and `\bכאל\b` can never match "הרשאה כאל" — the space and the א are
+// both non-word, so there is no boundary between them. Card issuers are therefore
+// anchored on the surrounding characters by hand.
+//
+// Both edges are required, and both matter: without the leading one "כאל" matches
+// inside "מיכאל" and a supplier payment would be excluded from spend as a card
+// settlement; without the trailing one "מקס" matches inside "מקסימום".
+const ISSUER_EDGE = "(?:^|[\\s\\-–־\"״'`(\\[])";
+const ISSUER_NAMES = "כאל|ויזה|ישראכרט|מאסטרקארד|לאומי\\s*קארד|מקס|אמריקן\\s*אקספרס|דיינרס";
+const ISSUER_TAIL = "(?=$|[\\s\\-–־\"״'`)\\],.:]|\\d)";
+
+const CREDIT_CARD_PAYMENT_PATTERN = new RegExp(
+  `כרטיס(?:י)?\\s*אשראי|עפ["״'\`]?י\\s*הרשאה|הרשאה\\s*לחיוב|${ISSUER_EDGE}(?:${ISSUER_NAMES})${ISSUER_TAIL}`
+);
+
+/**
+ * Money RECEIVED from a loan. It arrives in the credit column like any other
+ * deposit, so only the wording tells it apart — and getting it wrong is
+ * expensive: a drawdown is a new liability, never income (CLAUDE.md §5). Interest
+ * lines are already handled above, so anything else naming a loan on the way IN
+ * is the loan itself landing in the account.
+ */
+const LOAN_DRAWDOWN_PATTERN = /הלוו?אה/;
 
 export function classifyBankLine(
   description: string | null,
@@ -418,11 +445,41 @@ export function classifyBankLine(
   if (INTEREST_KINDS.has(base.lineKind) && type === "deposit") {
     return { lineKind: "interest_credit", loanRef: null };
   }
+  // A loan landing in the account: a liability, not income. Only an otherwise
+  // ordinary credit qualifies — a principal/mixed line in the credit column is a
+  // reversal of a repayment, which keeps its own kind and its own bucket.
+  if (type === "deposit" && base.lineKind === "standard" && LOAN_DRAWDOWN_PATTERN.test(text)) {
+    return { lineKind: "loan_drawdown", loanRef: extractLoanRef(text) };
+  }
   // Credit-card settlements only matter on the way OUT (already in credit module).
   if (type === "withdrawal" && base.lineKind === "standard" && CREDIT_CARD_PAYMENT_PATTERN.test(text)) {
     return { lineKind: "credit_card_payment", loanRef: null };
   }
   return base;
+}
+
+/**
+ * Which card a settlement line refers to. The last four digits are the reliable
+ * key — they appear on both the bank line ("כרטיסי אשראי לי - 2349") and the
+ * credit statement ("ויזה 2349"). The issuer name is only a fallback for lines
+ * that name no card at all ("עפ״י הרשאה כאל").
+ */
+export interface CreditCardRef {
+  last4: string | null;
+  issuer: string | null;
+}
+
+const CARD_ISSUER_PATTERN = new RegExp(`${ISSUER_EDGE}(${ISSUER_NAMES})${ISSUER_TAIL}`);
+
+export function creditCardRefOf(description: string | null): CreditCardRef {
+  const text = (description ?? "").replace(/\s+/g, " ").trim();
+  // Take the LAST 4-digit group: issuer codes and branch numbers come first.
+  const digits = text.match(/\d{4}(?!\d)/g);
+  const issuer = CARD_ISSUER_PATTERN.exec(text);
+  return {
+    last4: digits && digits.length > 0 ? digits[digits.length - 1]! : null,
+    issuer: issuer ? issuer[1]!.replace(/\s+/g, " ") : null,
+  };
 }
 
 /** Interest credited back. Stated as fact only — the statement gives no reason. */

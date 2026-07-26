@@ -17,10 +17,11 @@ import {
   reconcileIncome,
   reconcileLoan,
   reconcileReset,
-  type AutoReconcileResult,
   type ReconcileLoanGroup,
   type ReconcileRow,
   type ReconciliationView,
+  type ResolveBucket,
+  type ResolveResult,
 } from "../services/planning.service";
 import { toast } from "../services/toast";
 import { formatCurrency, formatDate } from "../utils/format";
@@ -47,10 +48,14 @@ const LOAN_TYPE_OPTIONS = [
 /**
  * מסך התאמת בנק (reconciliation).
  *
- * דוח בנק מיובא נשמר כתנועות גולמיות. כאן המשתמשת מאשרת לאן כל שורה שייכת — הפקדה
- * הופכת להכנסה, תשלומי קרן/ריבית הופכים/מקושרים להלוואה, משיכה רגילה יכולה להפוך
- * להוצאה. חיובי כרטיס אשראי מוחרגים אוטומטית (כבר מפורטים במודול האשראי) כדי למנוע
- * ספירה כפולה. אחרי אישור, הנתון מופיע בטאב ובדשבורד דרך אותן שאילתות קיימות.
+ * דוח בנק מיובא נשמר כתנועות גולמיות, וכל שורה מקבלת **סיווג** אחד שקובע מה הכסף
+ * הזה: הכנסה, הוצאה שוטפת, ריבית (הוצאה מימונית), קרן הלוואה (הקטנת חוב — לא
+ * הוצאה), קבלת הלוואה (התחייבות — לא הכנסה), חיוב אשראי שכבר מפורט בטאב אשראי
+ * (מוחרג כדי למנוע כפל ספירה) או העברה פנימית.
+ *
+ * המסך הזה הוא מסלול הביקורת של המספרים: הוא מציג לאן הלכה כל שורה ולמה, כולל
+ * הסכומים שבכוונה אינם חלק מההוצאות. שורה בלי סיווג היא באג — היא לא נספרת באף
+ * מספר במערכת — ולכן היא מוצגת באדום.
  */
 export default function BankReconcilePage() {
   const res = useAsync<ReconciliationView>(
@@ -60,15 +65,16 @@ export default function BankReconcilePage() {
   );
   const { expenseCategories } = useLookups();
   const [busy, setBusy] = useState(false);
-  const [autoResult, setAutoResult] = useState<AutoReconcileResult | null>(null);
+  const [autoResult, setAutoResult] = useState<ResolveResult | null>(null);
 
   async function runAuto() {
     setBusy(true);
     try {
       const result = await reconcileAuto();
       setAutoResult(result);
-      const promoted = result.incomeCount + result.spendCount + result.financingCount;
-      toast.success(promoted > 0 ? `${promoted} תנועות נכנסו לסכומים` : "אין תנועות חדשות לשיוך");
+      toast.success(
+        result.changed > 0 ? `${result.changed} שורות סווגו מחדש` : "הסיווג היה מעודכן — אין שינוי"
+      );
       res.reload();
     } catch (err) {
       toast.error(apiErrorMessage(err));
@@ -108,27 +114,53 @@ export default function BankReconcilePage() {
         {(data) => (
           <>
             <div className="reconcile-summary" aria-label="סיכום התאמה">
-              <SummaryChip label="ממתין להכנסה" value={data.summary.pendingIncome} tone="success" />
-              <SummaryChip label="ממתין להלוואה" value={data.summary.pendingLoan} tone="danger" />
-              <SummaryChip label="ממתין להוצאה" value={data.summary.pendingSpend} tone="default" />
-              <SummaryChip label="הושלמו" value={data.summary.done} tone="success" />
-              <SummaryChip label="מוחרגים" value={data.summary.excluded} tone="default" />
+              <SummaryChip label="שורות בדוח" value={data.summary.total} tone="default" />
+              <SummaryChip label="דורש תשומת לב" value={data.summary.needsReview} tone="danger" />
+              <SummaryChip
+                label="ללא סיווג"
+                value={data.summary.unresolved}
+                tone={data.summary.unresolved > 0 ? "danger" : "success"}
+              />
+              <SummaryChip label="מוחרגים (כפל ספירה)" value={data.summary.excluded} tone="default" />
             </div>
 
-            {/* Bulk pass. The per-row controls below stay: this button only
-                handles what the statement says unambiguously. */}
-            <Card title="שיוך אוטומטי">
+            {/* The whole point of the screen: every shekel in the statement, and
+                which figure in the app it ended up in. A row that is absent from
+                the expense total is listed here saying where it went instead. */}
+            <Card title="לאן הלך כל שקל בדוח">
               <p className="muted">
-                מכניס לסכומים כל שורה שהדוח קובע בבירור: הפקדה רגילה → הכנסה, משיכה רגילה → הוצאה,
-                ריבית → הוצאת מימון. שורות שדורשות החלטה שלך נשארות למטה ואינן נספרות עד שתאשרי.
+                כל שורה בדוח מקבלת סיווג. סכומים שאינם הוצאה שוטפת — קרן הלוואה, חיוב אשראי שכבר
+                מפורט בטאב אשראי, העברה פנימית — מופיעים כאן בשם שלהם, כדי שהסכומים בדשבורד לא
+                ייראו חסרים.
               </p>
+              {data.summary.unresolved > 0 && (
+                <p className="tone-danger">
+                  ⚠ {data.summary.unresolved} שורות ללא סיווג — הן אינן נספרות באף מספר במערכת.
+                </p>
+              )}
+              <ResolutionBreakdown data={data} />
               <div className="row-actions">
                 <Button onClick={runAuto} disabled={busy}>
-                  שייכי אוטומטית את מה שברור 🪄
+                  סווגי מחדש את כל הדוח 🪄
                 </Button>
               </div>
-              {autoResult && <AutoResultReport result={autoResult} />}
+              {autoResult && <ResolveReport result={autoResult} />}
             </Card>
+
+            {/* ----- דורש תשומת לב ----- */}
+            {data.needsReview.length > 0 && (
+              <Card title={`דורש תשומת לב (${data.needsReview.length})`}>
+                <p className="muted">
+                  השורות האלו סווגו — הכסף נספר או הוחרג במפורש — אבל הסיווג מבוסס על מה שהדוח לא
+                  אומר במלואו. הסיבה רשומה ליד כל שורה, ואפשר לשנות ידנית.
+                </p>
+                <div className="reconcile-list">
+                  {data.needsReview.map((row) => (
+                    <ReviewRow key={row.id} row={row} busy={busy} run={run} />
+                  ))}
+                </div>
+              </Card>
+            )}
 
             {/* ----- הכנסות שזוהו ----- */}
             <Card title={`הכנסות שזוהו (${data.incomeCandidates.length})`}>
@@ -175,15 +207,17 @@ export default function BankReconcilePage() {
               )}
             </Card>
 
-            {/* ----- חיובי אשראי מוחרגים ----- */}
+            {/* ----- חיובי אשראי ----- */}
             {data.creditCardPayments.length > 0 && (
-              <Card title={`חיובי כרטיס אשראי — מוחרגים (${data.creditCardPayments.length})`}>
+              <Card title={`חיובי כרטיס אשראי (${data.creditCardPayments.length})`}>
                 <p className="muted">
-                  שורות אלו כבר מפורטות במודול האשראי. הן מוחרגות מההוצאות כדי למנוע ספירה כפולה.
+                  חיוב שהכרטיס שלו מיובא לטאב אשראי מוחרג מההוצאות — העסקאות עצמן כבר נספרות שם, וספירה
+                  של שני הצדדים תכפיל את אותו כסף. חיוב של כרטיס שאין לו דוח מיובא כן נספר כהוצאה, אחרת
+                  הכסף פשוט נעלם מהמערכת.
                 </p>
                 <div className="reconcile-list">
                   {data.creditCardPayments.map((row) => (
-                    <ReadonlyRow key={row.id} row={row} note="בכרטיסי האשראי" />
+                    <ReadonlyRow key={row.id} row={row} />
                   ))}
                 </div>
               </Card>
@@ -197,11 +231,7 @@ export default function BankReconcilePage() {
                 </p>
                 <div className="reconcile-list">
                   {data.financingLines.map((row) => (
-                    <ReadonlyRow
-                      key={row.id}
-                      row={row}
-                      note={row.lineKind === "interest_credit" ? "זיכוי ריבית" : "ריבית"}
-                    />
+                    <ReadonlyRow key={row.id} row={row} />
                   ))}
                 </div>
               </Card>
@@ -216,6 +246,7 @@ export default function BankReconcilePage() {
                       <span className="reconcile-date mono">{formatDate(row.date)}</span>
                       <span className="reconcile-desc">{row.description}</span>
                       <span className="reconcile-amount mono">{formatCurrency(row.amount)}</span>
+                      <span className="reconcile-note">{row.resolutionLabel ?? "ללא סיווג"}</span>
                       <Button
                         variant="ghost"
                         size="sm"
@@ -237,80 +268,122 @@ export default function BankReconcilePage() {
 }
 
 /**
- * What the last auto pass did. The held-back list is the important half: it is
- * the app stating, in money, what it refused to guess — so a total that looks
- * complete can be checked against what is knowingly missing from it.
+ * Where the statement's money ended up, by meaning. Split into "counted as
+ * spending / income" and "real money, counted elsewhere" — the second list is the
+ * important one: it is how a total that looks too small proves it is not missing
+ * anything, because every excluded shekel names the figure that holds it.
  */
-function AutoResultReport({ result }: { result: AutoReconcileResult }) {
-  const counted: Array<[string, number, number]> = [
-    ["הכנסות", result.incomeCount, result.incomeTotal],
-    ["הוצאות שוטפות", result.spendCount, result.spendTotal],
-    ["ריבית (הוצאת מימון)", result.financingCount, result.financingTotal],
-  ];
-  const held: Array<[string, number, number, string]> = [
-    [
-      "החזרי קרן הלוואה",
-      result.heldPrincipalCount,
-      result.heldPrincipalTotal,
-      "הקטנת חוב, לא הוצאה — שייכי להלוואה למטה",
-    ],
-    [
-      "תשלומי הלוואה ללא פירוט",
-      result.heldMixedCount,
-      result.heldMixedTotal,
-      "הדוח לא מפצל בין קרן לריבית",
-    ],
-    [
-      "הפקדות חריגות בגודלן",
-      result.heldAtypicalCount,
-      result.heldAtypicalTotal,
-      "גדולות בהרבה משאר ההפקדות — ייתכן שזו הלוואה או העברה, לא הכנסה",
-    ],
-    [
-      "כסף שיצא וחזר",
-      result.heldRoundTripCount,
-      result.heldRoundTripTotal,
-      "נראה כמו העברה פנימית בין חשבונות",
-    ],
-    [
-      "זיכויי ריבית",
-      result.heldInterestCreditCount,
-      result.heldInterestCreditTotal,
-      "החזר ריבית מהבנק — לא הכנסה",
-    ],
-  ];
-  const heldShown = held.filter(([, count]) => count > 0);
+function ResolutionBreakdown({ data }: { data: ReconciliationView }) {
+  const inFigures = new Set([
+    "income",
+    "expense",
+    "financing_charge",
+    "financing_credit",
+    "credit_card_unitemized",
+  ]);
+  const counted = data.byResolution.filter((g) => inFigures.has(g.resolution));
+  const elsewhere = data.byResolution.filter((g) => !inFigures.has(g.resolution));
 
   return (
     <div className="auto-result">
-      <h4>נכנס לסכומים</h4>
+      <h4>נספר בהכנסות ובהוצאות</h4>
       <ul className="auto-result-list">
-        {counted.map(([label, count, total]) => (
-          <li key={label}>
-            <span className="auto-result-label">{label}</span>
-            <span className="muted">{count} תנועות</span>
-            <span className="mono">{formatCurrency(total)}</span>
+        {counted.map((group) => (
+          <li key={group.resolution}>
+            <span className="auto-result-label">{group.label}</span>
+            <span className="muted">{group.count} תנועות</span>
+            <span className="mono">{formatCurrency(group.total)}</span>
           </li>
         ))}
       </ul>
 
-      {heldShown.length > 0 && (
+      {elsewhere.length > 0 && (
         <>
-          <h4>הושאר לך להחליט — לא נספר</h4>
+          <h4>כסף אמיתי שאינו הוצאה שוטפת</h4>
           <ul className="auto-result-list">
-            {heldShown.map(([label, count, total, why]) => (
-              <li key={label}>
-                <span className="auto-result-label">
-                  {label}
-                  <small className="muted"> — {why}</small>
-                </span>
-                <span className="muted">{count} תנועות</span>
-                <span className="mono">{formatCurrency(total)}</span>
+            {elsewhere.map((group) => (
+              <li key={group.resolution}>
+                <span className="auto-result-label">{group.label}</span>
+                <span className="muted">{group.count} תנועות</span>
+                <span className="mono">{formatCurrency(group.total)}</span>
               </li>
             ))}
           </ul>
         </>
       )}
+    </div>
+  );
+}
+
+/** What the last resolve pass decided. Only non-empty buckets are listed. */
+function ResolveReport({ result }: { result: ResolveResult }) {
+  const allBuckets: Array<[string, ResolveBucket]> = [
+    ["הכנסות", result.income],
+    ["הוצאות שוטפות", result.spend],
+    ["ריבית — הוצאה מימונית", result.financingCharged],
+    ["זיכויי ריבית — מימון שלילי", result.financingCredited],
+    ["חיובי אשראי ללא פירוט — נספרו כהוצאה", result.cardUnitemized],
+    ["קרן הלוואה — הקטנת חוב", result.debtReduction],
+    ["תשלומי הלוואה ללא פירוט", result.loanUnsplit],
+    ["קבלת הלוואה — התחייבות", result.loanDrawdown],
+    ["חיובי אשראי מפורטים — מוחרגים", result.cardSettled],
+    ["העברות פנימיות — מוחרגות", result.internalTransfer],
+    ["הוחרג ידנית", result.manualExcluded],
+  ];
+  const buckets = allBuckets.filter(([, bucket]) => bucket.count > 0);
+
+  return (
+    <div className="auto-result">
+      <h4>{result.changed === 0 ? "אין שינוי — הסיווג היה מעודכן" : `${result.changed} שורות עודכנו`}</h4>
+      <ul className="auto-result-list">
+        {buckets.map(([label, bucket]) => (
+          <li key={label}>
+            <span className="auto-result-label">{label}</span>
+            <span className="muted">{bucket.count} תנועות</span>
+            <span className="mono">{formatCurrency(bucket.total)}</span>
+          </li>
+        ))}
+      </ul>
+      <p className={result.unresolved.count > 0 ? "tone-danger" : "muted"}>
+        {result.unresolved.count > 0
+          ? `⚠ ${result.unresolved.count} שורות ללא סיווג (${formatCurrency(result.unresolved.total)}) — אינן נספרות באף מספר`
+          : "כל שורה בדוח קיבלה סיווג — אין כסף שנופל בין הכיסאות"}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * A resolved row that still deserves a second look, with the reason the resolver
+ * wrote. The actions are the escape hatches: exclude it, or send it back to be
+ * resolved again after the underlying data changed.
+ */
+function ReviewRow({ row, busy, run }: RowActionProps) {
+  return (
+    <div className="reconcile-row review-row">
+      <span className="reconcile-date mono">{formatDate(row.date)}</span>
+      <span className="reconcile-desc">
+        {row.description}
+        {row.reconcileNote && <small className="muted block">{row.reconcileNote}</small>}
+      </span>
+      <span className="reconcile-amount mono">{formatCurrency(row.amount)}</span>
+      <span className="reconcile-note">{row.resolutionLabel}</span>
+      <Button
+        variant="ghost"
+        size="sm"
+        disabled={busy}
+        onClick={() => run(() => reconcileExclude(row.id), "הוחרג — לא ייספר")}
+      >
+        הוצא מהסכומים
+      </Button>
+      <Button
+        variant="ghost"
+        size="sm"
+        disabled={busy}
+        onClick={() => run(() => reconcileReset(row.id), "סווג מחדש")}
+      >
+        סווג מחדש
+      </Button>
     </div>
   );
 }
@@ -407,13 +480,17 @@ function SpendRow({
   );
 }
 
-function ReadonlyRow({ row, note }: { row: ReconcileRow; note: string }) {
+/** A row the user does not have to act on: its resolution and reason say it all. */
+function ReadonlyRow({ row }: { row: ReconcileRow }) {
   return (
     <div className="reconcile-row muted-row">
       <span className="reconcile-date mono">{formatDate(row.date)}</span>
-      <span className="reconcile-desc">{row.description}</span>
+      <span className="reconcile-desc">
+        {row.description}
+        {row.reconcileNote && <small className="muted block">{row.reconcileNote}</small>}
+      </span>
       <span className="reconcile-amount mono">{formatCurrency(row.amount)}</span>
-      <span className="reconcile-note">{note}</span>
+      <span className="reconcile-note">{row.resolutionLabel ?? "ללא סיווג"}</span>
     </div>
   );
 }

@@ -114,7 +114,16 @@ export const smartImportService = {
     const account = accounts[0]!;
     const result = await bankService.importStatement(userId, account.id, buffer, fileName);
     const auto = result.autoReconciled;
-    const promoted = auto ? auto.incomeCount + auto.spendCount + auto.financingCount : 0;
+    // Rows that reached a money figure: income, ordinary spend, interest both ways
+    // and card bills nothing else itemizes. Loan principal and settled card bills
+    // are resolved too, but on purpose they belong to no expense figure.
+    const promoted = auto
+      ? auto.income.count +
+        auto.spend.count +
+        auto.financingCharged.count +
+        auto.financingCredited.count +
+        auto.cardUnitemized.count
+      : 0;
     return {
       ...base,
       parsedRows: result.parsed,

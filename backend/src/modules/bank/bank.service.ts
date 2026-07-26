@@ -15,7 +15,7 @@ import {
   CreateBankTransactionBody,
   UpdateBankAccountBody,
 } from "./bank.validation";
-import { reconciliationService } from "./reconciliation.service";
+import { describeResolveResult, reconciliationService } from "./reconciliation.service";
 
 /** Deposits raise the balance; every other transaction type lowers it. */
 function signedAmount(type: string, amount: number): number {
@@ -170,9 +170,10 @@ export const bankService = {
             balanceDelta += signedAmount(r.type, r.amount);
             if (r.type === "deposit") deposits += 1;
             else withdrawals += 1;
-            // Persist the classification so the reconciliation flow knows *what
-            // kind* of money each row is — not just its direction. Credit-card
-            // settlements are auto-excluded (already itemized in credit).
+            // Persist the classification so the resolver knows *what kind* of
+            // money each row is — not just its direction. What each kind MEANS
+            // (and whether a card settlement is excluded) is decided by the
+            // resolver below, which can revisit it when a credit statement lands.
             const { lineKind, loanRef } = classifyBankLine(r.description, r.type);
             return {
               userId,
@@ -184,7 +185,7 @@ export const bankService = {
               categoryId: r.type === "withdrawal" ? categorize(r.description) : null,
               lineKind,
               loanRef,
-              reconcileStatus: lineKind === "credit_card_payment" ? "excluded" : "pending",
+              reconcileStatus: "pending",
             };
           }),
         }),
@@ -195,10 +196,13 @@ export const bankService = {
       ]);
     }
 
-    // Promote the unambiguous rows straight away: an imported statement that
-    // sits in `pending` is invisible to every figure in the app, which reads as
-    // "the import did nothing". Ambiguous rows are still held for review.
-    const autoReconciled = fresh.length > 0 ? await reconciliationService.autoReconcile(userId) : null;
+    // Resolve straight away: a row that sits in `pending` is invisible to every
+    // figure in the app, which reads as "the import did nothing". The resolver
+    // gives every row a meaning — and states in Hebrew what it decided and why.
+    const autoReconciled = fresh.length > 0 ? await reconciliationService.resolveAll(userId) : null;
+    if (autoReconciled) {
+      console.log(`[קליטת דוח בנק] סיווג התנועות: ${describeResolveResult(autoReconciled)}`);
+    }
 
     return {
       parsed: rows.length,
