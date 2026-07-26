@@ -949,3 +949,56 @@
   color: var(--text-muted);
   line-height: 1.5;
 }
+
+/* ---------- KPI row (IA §1: same shape on every tab) ---------- */
+
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+}
+
+.kpi-row-hero {
+  gap: 16px;
+}
+
+/* Never four across on a phone — two columns, then one (§8.2) */
+@media (max-width: 860px) {
+  .kpi-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 420px) {
+  .kpi-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* A KPI that applies a filter when clicked */
+.summary-card-clickable {
+  text-align: start;
+  font: inherit;
+  color: inherit;
+  width: 100%;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.summary-card-clickable:hover {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 6%, var(--bg-card));
+}
+
+.summary-card-footnote {
+  font-size: 11.5px;
+  color: var(--warning);
+  margin-top: 4px;
+}
+
+.chart-footnote {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-size: 12.5px;
+  color: var(--text-muted);
+}

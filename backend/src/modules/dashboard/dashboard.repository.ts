@@ -49,6 +49,21 @@ export const dashboardRepository = {
     });
   },
 
+  /**
+   * Imported bank rows still awaiting a decision. These are deliberately absent
+   * from every money figure (loan principal, unnamed large credits, internal
+   * transfers), so the dashboard has to say they exist — otherwise the totals
+   * look complete while real money sits unaccounted for.
+   */
+  pendingBankRows(userId: number) {
+    return prisma.bankTransaction.groupBy({
+      by: ["lineKind"],
+      where: { userId, reconcileStatus: "pending" },
+      _sum: { amount: true },
+      _count: { _all: true },
+    });
+  },
+
   categories(userId: number) {
     return prisma.category.findMany({
       where: { OR: [{ userId }, { userId: null }] },
