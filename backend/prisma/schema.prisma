@@ -303,6 +303,11 @@ model BankTransaction {
   loanRef         String?  @map("loan_ref") @db.VarChar(20)
   // Reconciliation: has this bank row been surfaced into the right tab yet?
   reconcileStatus String   @default("pending") @map("reconcile_status") @db.VarChar(20) // pending | done | excluded
+  // *How* it was resolved — the financial meaning, not just "handled". Every row
+  // ends with one of these, and `reconcileNote` says why in Hebrew, so no row can
+  // sit outside the figures without a stated reason. See BankResolution.
+  resolution      String?  @map("resolution") @db.VarChar(30)
+  reconcileNote   String?  @map("reconcile_note") @db.VarChar(255)
   linkedIncomeId  Int?     @map("linked_income_id")
   linkedLoanId    Int?     @map("linked_loan_id")
   linkedExpenseId Int?     @map("linked_expense_id")
@@ -316,6 +321,7 @@ model BankTransaction {
   @@index([userId, transactionDate])
   @@index([bankAccountId])
   @@index([userId, reconcileStatus])
+  @@index([userId, resolution])
   @@map("bank_transactions")
 }
 

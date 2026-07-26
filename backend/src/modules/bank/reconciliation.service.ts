@@ -1,7 +1,15 @@
 import { prisma } from "../../config/database";
 import { ApiError } from "../../utils/ApiError";
 import { decimalToNumber, round2 } from "../../utils/money.utils";
+import { buildRuleCategorizer } from "../categories/categorization.service";
 import { classifyBankLine } from "./bankParser.service";
+import {
+  BankResolution,
+  DEBT_RESOLUTIONS,
+  EXPENSE_RESOLUTIONS,
+  RESOLUTION_LABELS,
+} from "./bankResolution";
+import { buildCreditCoverage } from "./creditCoverage.service";
 
 /**
  * Bank reconciliation.
@@ -9,18 +17,29 @@ import { classifyBankLine } from "./bankParser.service";
  * An imported bank statement lands as raw rows in `bank_transactions`. Those rows
  * are NOT copied blindly into incomes/loans/expenses — that would double-count
  * against the credit module and violate the single-source-of-truth rule
- * (CLAUDE.md §4). Instead this service *surfaces* each row with a suggestion and
- * lets the user promote it to the right tab. Promotion creates a real record in
- * the target table and links it back (`linked_*_id`), so the dashboard and every
- * tab pick it up through their existing queries — no read-path had to change.
+ * (CLAUDE.md §4). Instead the resolver decides what each row MEANS, writes that
+ * meaning to `resolution` + `reconcileNote`, and creates a record in the target
+ * table only where the money really belongs to an income/expense figure.
  *
- * Double-count safety: credit-card settlement lines ("כרטיסי אשראי", direct
- * debits to card issuers) are classified `credit_card_payment` and auto-excluded,
- * because those exact charges are already itemized in the credit statement.
+ * The rule the resolver is built around: **every row ends with a resolution.** A
+ * row may legitimately be absent from the expense total — principal lowers debt,
+ * a settled card bill is itemized in the credit module — but then its resolution
+ * names where it went instead. Nothing is left in `pending` without a reason
+ * written on it in Hebrew, because "pending" is invisible in every figure and
+ * silently makes the totals wrong.
+ *
+ * Money-meaning rules (CLAUDE.md §5, banker's rulings):
+ *   - direction comes from the physical column, never from the description text
+ *   - loan interest         → expense (financing), own category
+ *   - interest credited back → NEGATIVE financing expense, never income
+ *   - loan principal        → debt reduction, never an expense
+ *   - combined loan payment → its own bucket, never folded into principal
+ *   - loan received         → a liability, never income
+ *   - card settlement       → excluded only when that card is really itemized
  */
 
 // ---------------------------------------------------------------------------
-// Income-type guessing — a *suggestion* only; the user confirms in the UI.
+// Income-type guessing — a *suggestion* only; the user can change it.
 // ---------------------------------------------------------------------------
 function guessIncomeType(description: string): string {
   const d = description;
@@ -39,6 +58,15 @@ const INCOME_TYPE_LABELS: Record<string, string> = {
 };
 
 // ---------------------------------------------------------------------------
+// Categories the resolver needs by name.
+// ---------------------------------------------------------------------------
+
+/** Carries the cost of credit, so interest never hides inside ordinary spend. */
+const FINANCING_CATEGORY = "ריבית ועמלות בנק";
+/** A card bill nothing itemizes: coarse by nature, so it says so by name. */
+const UNITEMIZED_CARD_CATEGORY = "חיוב אשראי ללא פירוט";
+
+// ---------------------------------------------------------------------------
 // Row shape returned to the client (Decimal already converted to number).
 // ---------------------------------------------------------------------------
 export interface ReconcileRow {
@@ -50,6 +78,11 @@ export interface ReconcileRow {
   lineKind: string;
   loanRef: string | null;
   reconcileStatus: string;
+  resolution: BankResolution | null;
+  resolutionLabel: string | null;
+  reconcileNote: string | null;
+  /** True when a human should look at this row even though it is resolved. */
+  needsReview: boolean;
   linkedIncomeId: number | null;
   linkedLoanId: number | null;
   linkedExpenseId: number | null;
@@ -73,10 +106,26 @@ export interface ReconciliationView {
     pending: number;
     done: number;
     excluded: number;
-    pendingIncome: number;
-    pendingLoan: number;
-    pendingSpend: number;
+    /** Rows with no resolution at all — must always be 0 after a resolve pass. */
+    unresolved: number;
+    needsReview: number;
+    income: number;
+    spend: number;
+    financingNet: number;
+    debtReduction: number;
+    unitemizedCard: number;
+    settledCard: number;
+    internalTransfer: number;
   };
+  /** Everything, grouped by what the money turned out to be. */
+  byResolution: Array<{
+    resolution: BankResolution | "unresolved";
+    label: string;
+    count: number;
+    total: number;
+    rows: ReconcileRow[];
+  }>;
+  needsReview: ReconcileRow[];
   incomeCandidates: ReconcileRow[];
   loanGroups: ReconcileLoanGroup[];
   standardSpend: ReconcileRow[];
@@ -94,13 +143,36 @@ type RawTx = {
   lineKind: string;
   loanRef: string | null;
   reconcileStatus: string;
+  resolution: string | null;
+  reconcileNote: string | null;
   linkedIncomeId: number | null;
   linkedLoanId: number | null;
   linkedExpenseId: number | null;
 };
 
+/**
+ * Resolutions that are correct but coarse or unverifiable from the statement
+ * alone, so the screen keeps showing them: a card bill nothing itemizes, a loan
+ * whose terms are unknown, a repayment the bank never split.
+ */
+const REVIEW_RESOLUTIONS: ReadonlySet<BankResolution> = new Set<BankResolution>([
+  "credit_card_unitemized",
+  "loan_drawdown",
+  "loan_repayment_unsplit",
+]);
+
+/** Marks a row the resolver promoted but flagged in its note. */
+const REVIEW_NOTE_MARK = "לבדיקה:";
+
+function isReviewRow(t: { resolution: string | null; reconcileNote: string | null }): boolean {
+  if (t.resolution === null) return true;
+  if (REVIEW_RESOLUTIONS.has(t.resolution as BankResolution)) return true;
+  return (t.reconcileNote ?? "").startsWith(REVIEW_NOTE_MARK);
+}
+
 function toRow(t: RawTx): ReconcileRow {
   const description = t.description ?? "";
+  const resolution = (t.resolution as BankResolution | null) ?? null;
   const row: ReconcileRow = {
     id: t.id,
     date: t.transactionDate.toISOString().slice(0, 10),
@@ -110,11 +182,15 @@ function toRow(t: RawTx): ReconcileRow {
     lineKind: t.lineKind,
     loanRef: t.loanRef,
     reconcileStatus: t.reconcileStatus,
+    resolution,
+    resolutionLabel: resolution ? RESOLUTION_LABELS[resolution] : null,
+    reconcileNote: t.reconcileNote,
+    needsReview: isReviewRow(t),
     linkedIncomeId: t.linkedIncomeId,
     linkedLoanId: t.linkedLoanId,
     linkedExpenseId: t.linkedExpenseId,
   };
-  if (t.type === "deposit" && t.lineKind !== "interest_credit") {
+  if (t.type === "deposit" && t.lineKind !== "interest_credit" && t.lineKind !== "loan_drawdown") {
     const guess = guessIncomeType(description);
     row.suggestedIncomeType = guess;
     row.suggestedIncomeLabel = INCOME_TYPE_LABELS[guess] ?? guess;
@@ -125,100 +201,49 @@ function toRow(t: RawTx): ReconcileRow {
 const LOAN_KINDS = new Set(["loan_principal", "loan_interest", "loan_mixed"]);
 
 // ---------------------------------------------------------------------------
-// Auto-reconciliation
+// Internal transfers and atypical credits
 // ---------------------------------------------------------------------------
 
-/** Category that carries the cost of credit, so interest never hides in spend. */
-const FINANCING_CATEGORY = "ריבית ועמלות בנק";
-
-/** Interest rows are financing expense (CLAUDE.md §5) — real money, own bucket. */
-const FINANCING_KINDS = new Set(["loan_interest", "overdraft_interest"]);
-
-/** Same rule the parser uses to pair a debit with its returning credit. */
+/** Same amount out and back within a few days may be one internal move. */
 const ROUND_TRIP_MAX_DAYS = 7;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
- * A credit this many times the typical one is not promoted to income on its own
- * say-so. Same ratio the parser uses to flag an atypical salary candidate: a
- * loan drawdown or a transfer between own accounts arrives as an ordinary credit
- * and is indistinguishable from income by wording alone — only its size gives it
- * away. Calling one "income" would overstate earnings and every figure derived
- * from them, so it is held for the user to name.
+ * Wording that means "money moved between accounts". BOTH legs must read like a
+ * transfer before a matching pair is treated as internal.
+ *
+ * Matching on amount and date alone is not enough, and the real statement proves
+ * it: 7,000 left as "העברה מהחשבון" on 05/07 and 7,000 arrived as "זיכוי" on
+ * 10/07. Held as a round trip, both legs vanished — yet the banker's verified
+ * income for the period (114,680.00 ₪) includes that credit, because plain
+ * "זיכוי" with סו״פ 222 is an ordinary incoming receipt, the same code as
+ * קצבת ילדים. Only when both sides say "transfer" is netting them out justified.
  */
-const ATYPICAL_DEPOSIT_RATIO = 10;
+const INTERNAL_TRANSFER_TEXT = /העברה|העברת|לחשבון|מהחשבון|בין\s*חשבונות|הפקדה\s*לחשבון|מסלקה/;
 
-/**
- * Ids of pending credits whose amount dwarfs the other credits. `candidates`
- * must already exclude round-trip legs, so an internal transfer cannot set the
- * baseline. With fewer than three credits there is no meaningful "typical" yet,
- * so nothing is flagged.
- */
-function findAtypicalDepositIds(candidates: Array<{ id: number; amount: number }>): Set<number> {
-  const flagged = new Set<number>();
-  if (candidates.length < 3) return flagged;
-  for (const row of candidates) {
-    const others = candidates.filter((o) => o.id !== row.id).map((o) => o.amount).sort((a, b) => a - b);
-    const median = others[Math.floor(others.length / 2)]!;
-    if (median > 0 && row.amount / median >= ATYPICAL_DEPOSIT_RATIO) flagged.add(row.id);
-  }
-  return flagged;
+interface PairRow {
+  id: number;
+  transactionDate: Date;
+  description: string | null;
+  amount: number;
+  type: string;
+  lineKind: string;
 }
 
-/** What a single auto-reconcile pass did, in money terms — shown to the user. */
-export interface AutoReconcileResult {
-  incomeCount: number;
-  incomeTotal: number;
-  spendCount: number;
-  spendTotal: number;
-  financingCount: number;
-  financingTotal: number;
-  /** Held back for review, with the reason — never silently counted. */
-  heldPrincipalCount: number;
-  heldPrincipalTotal: number;
-  heldMixedCount: number;
-  heldMixedTotal: number;
-  heldRoundTripCount: number;
-  heldRoundTripTotal: number;
-  heldInterestCreditCount: number;
-  heldInterestCreditTotal: number;
-  heldAtypicalCount: number;
-  heldAtypicalTotal: number;
-}
-
-const emptyAutoResult = (): AutoReconcileResult => ({
-  incomeCount: 0,
-  incomeTotal: 0,
-  spendCount: 0,
-  spendTotal: 0,
-  financingCount: 0,
-  financingTotal: 0,
-  heldPrincipalCount: 0,
-  heldPrincipalTotal: 0,
-  heldMixedCount: 0,
-  heldMixedTotal: 0,
-  heldRoundTripCount: 0,
-  heldRoundTripTotal: 0,
-  heldInterestCreditCount: 0,
-  heldInterestCreditTotal: 0,
-  heldAtypicalCount: 0,
-  heldAtypicalTotal: 0,
-});
-
 /**
- * Ids of pending standard rows that look like one internal move (money left and
- * came back for the same amount within a few days). Both legs are returned so
- * neither is promoted: counting the incoming leg would invent income, counting
- * the outgoing leg would invent spending. Rows the user already excluded still
- * take part in the matching — that is how a half-excluded pair is caught.
+ * Ids of legs that form one internal transfer. Every status is considered when
+ * matching, so a pair stays recognisable after one leg was dealt with, but only
+ * the ids are returned — the caller decides what to do with them.
  */
-function findRoundTripIds(rows: Array<{ id: number; transactionDate: Date; amount: number; type: string; lineKind: string; reconcileStatus: string }>): Set<number> {
+function findInternalTransferIds(rows: PairRow[]): Set<number> {
   const held = new Set<number>();
   const takenDeposits = new Set<number>();
-  const standard = rows.filter((r) => r.lineKind === "standard" && r.reconcileStatus !== "done");
+  const standard = rows.filter(
+    (r) => r.lineKind === "standard" && INTERNAL_TRANSFER_TEXT.test((r.description ?? "").trim())
+  );
   for (const withdrawal of standard) {
     if (withdrawal.type !== "withdrawal") continue;
-    let match: (typeof standard)[number] | null = null;
+    let match: PairRow | null = null;
     let bestGap = Number.POSITIVE_INFINITY;
     for (const deposit of standard) {
       if (deposit.id === withdrawal.id || takenDeposits.has(deposit.id)) continue;
@@ -237,34 +262,131 @@ function findRoundTripIds(rows: Array<{ id: number; transactionDate: Date; amoun
   return held;
 }
 
+/**
+ * A credit this many times the typical one is still counted as income — the
+ * statement puts it in the credit column and nothing says otherwise — but it is
+ * flagged, because a one-off wire is exactly what a loan drawdown or a transfer
+ * from another account looks like when the wording gives nothing away.
+ */
+const ATYPICAL_DEPOSIT_RATIO = 10;
+
+function findAtypicalDepositIds(candidates: Array<{ id: number; amount: number }>): Set<number> {
+  const flagged = new Set<number>();
+  if (candidates.length < 3) return flagged;
+  for (const row of candidates) {
+    const others = candidates.filter((o) => o.id !== row.id).map((o) => o.amount).sort((a, b) => a - b);
+    const median = others[Math.floor(others.length / 2)]!;
+    if (median > 0 && row.amount / median >= ATYPICAL_DEPOSIT_RATIO) flagged.add(row.id);
+  }
+  return flagged;
+}
+
+// ---------------------------------------------------------------------------
+// What one resolve pass did, in money terms — logged in Hebrew and returned.
+// ---------------------------------------------------------------------------
+export interface ResolveResult {
+  /** Rows whose resolution/records changed in this pass. */
+  changed: number;
+  income: { count: number; total: number };
+  spend: { count: number; total: number };
+  financingCharged: { count: number; total: number };
+  financingCredited: { count: number; total: number };
+  debtReduction: { count: number; total: number };
+  loanUnsplit: { count: number; total: number };
+  loanDrawdown: { count: number; total: number };
+  cardSettled: { count: number; total: number };
+  cardUnitemized: { count: number; total: number };
+  internalTransfer: { count: number; total: number };
+  manualExcluded: { count: number; total: number };
+  /** Must be 0: a row the resolver could not give a meaning to. */
+  unresolved: { count: number; total: number };
+}
+
+const emptyBucket = () => ({ count: 0, total: 0 });
+
+const emptyResolveResult = (): ResolveResult => ({
+  changed: 0,
+  income: emptyBucket(),
+  spend: emptyBucket(),
+  financingCharged: emptyBucket(),
+  financingCredited: emptyBucket(),
+  debtReduction: emptyBucket(),
+  loanUnsplit: emptyBucket(),
+  loanDrawdown: emptyBucket(),
+  cardSettled: emptyBucket(),
+  cardUnitemized: emptyBucket(),
+  internalTransfer: emptyBucket(),
+  manualExcluded: emptyBucket(),
+  unresolved: emptyBucket(),
+});
+
+const RESULT_BUCKET: Record<BankResolution, keyof Omit<ResolveResult, "changed">> = {
+  income: "income",
+  expense: "spend",
+  financing_charge: "financingCharged",
+  financing_credit: "financingCredited",
+  debt_reduction: "debtReduction",
+  loan_repayment_unsplit: "loanUnsplit",
+  loan_drawdown: "loanDrawdown",
+  credit_card_settled: "cardSettled",
+  credit_card_unitemized: "cardUnitemized",
+  internal_transfer: "internalTransfer",
+  manual_excluded: "manualExcluded",
+};
+
+/** The record a resolution needs in another table, if any. */
+type TargetRecord = "income" | "expense" | "none";
+
+interface ResolutionTarget {
+  resolution: BankResolution;
+  status: "done" | "excluded";
+  note: string;
+  record: TargetRecord;
+  /** Expense only: which category, and whether the amount is negative. */
+  categoryId?: number | null;
+  negative?: boolean;
+}
+
 async function requireTx(userId: number, id: number) {
   const tx = await prisma.bankTransaction.findFirst({ where: { id, userId } });
   if (!tx) throw ApiError.notFound("התנועה הבנקאית לא נמצאה");
   return tx;
 }
 
+interface ResolverRow {
+  id: number;
+  transactionDate: Date;
+  description: string | null;
+  amount: number;
+  type: string;
+  lineKind: string;
+  loanRef: string | null;
+  categoryId: number | null;
+  reconcileStatus: string;
+  resolution: string | null;
+  reconcileNote: string | null;
+  linkedIncomeId: number | null;
+  linkedLoanId: number | null;
+  linkedExpenseId: number | null;
+}
+
 export const reconciliationService = {
   /**
-   * Recompute lineKind/loanRef from the description for every row that the user
-   * has not touched yet (status = pending). Idempotent — safe to run repeatedly.
-   * This back-fills rows imported before classification was persisted, and marks
-   * credit-card settlements as excluded so they never reach the spend figures.
+   * Recompute lineKind/loanRef from the description for every row the user has not
+   * resolved by hand. Idempotent — safe to run repeatedly. This back-fills rows
+   * imported before a classification rule existed.
    */
   async backfillClassification(userId: number): Promise<number> {
     const rows = await prisma.bankTransaction.findMany({
-      where: { userId, reconcileStatus: "pending" },
+      where: { userId, resolution: { not: "manual_excluded" } },
       select: { id: true, description: true, type: true, lineKind: true, loanRef: true },
     });
     let updated = 0;
     for (const r of rows) {
       const type = r.type === "deposit" ? "deposit" : "withdrawal";
       const { lineKind, loanRef } = classifyBankLine(r.description, type);
-      const nextStatus = lineKind === "credit_card_payment" ? "excluded" : "pending";
       if (lineKind !== r.lineKind || (loanRef ?? null) !== (r.loanRef ?? null)) {
-        await prisma.bankTransaction.update({
-          where: { id: r.id },
-          data: { lineKind, loanRef, reconcileStatus: nextStatus },
-        });
+        await prisma.bankTransaction.update({ where: { id: r.id }, data: { lineKind, loanRef } });
         updated += 1;
       }
     }
@@ -272,135 +394,96 @@ export const reconciliationService = {
   },
 
   /**
-   * Promote every pending row the statement classifies unambiguously, so an
-   * imported file reaches the dashboard figures without 50 manual clicks.
+   * Give every imported bank row a financial meaning, and make the records in the
+   * other tables agree with it.
    *
-   * What is promoted: ordinary credits become Income, ordinary debits become
-   * Expense, and interest (loan or overdraft) becomes a financing Expense in its
-   * own category — interest is a real cost of credit (CLAUDE.md §5).
+   * Idempotent and self-correcting: it is the same pass on a fresh import and on
+   * a re-run, and when a decision changes (a credit statement arrives and a card
+   * bill that used to be counted as spend becomes itemized) the record it created
+   * earlier is removed. That is what keeps the bank and credit sources from ever
+   * double-counting the same money.
    *
-   * What is deliberately held for review, because promoting it would state
-   * something the statement never said:
-   *   - loan principal: debt reduction, not spending. Belongs to a Loan, and a
-   *     loan needs terms only the user can supply.
-   *   - loan_mixed: a combined repayment with no principal/interest split.
-   *   - round-trip legs: money that left and came back — an internal transfer.
-   *   - interest credits: a rebate, never income.
-   *
-   * Idempotent: only `pending` rows are touched, and each promoted row is marked
-   * done + linked, so re-running promotes nothing twice. `reset` undoes a row.
+   * Rows the user resolved by hand (`manual_excluded`) are never touched.
    */
-  async autoReconcile(userId: number): Promise<AutoReconcileResult> {
+  async resolveAll(userId: number): Promise<ResolveResult> {
     await this.backfillClassification(userId);
-    const rows = await prisma.bankTransaction.findMany({
-      where: { userId },
-      orderBy: [{ transactionDate: "asc" }, { id: "asc" }],
-      select: {
-        id: true,
-        transactionDate: true,
-        description: true,
-        amount: true,
-        type: true,
-        lineKind: true,
-        categoryId: true,
-        reconcileStatus: true,
-      },
-    });
-    const shaped = rows.map((r) => ({ ...r, amount: decimalToNumber(r.amount) }));
-    const roundTripIds = findRoundTripIds(shaped);
-    // Baseline for "typical" is drawn from real credits only: round-trip legs
-    // are internal moves, so letting one set the median would mask an outlier.
+
+    const [rawRows, coverage, categorize, financingCategoryId, unitemizedCategoryId] =
+      await Promise.all([
+        prisma.bankTransaction.findMany({
+          where: { userId },
+          orderBy: [{ transactionDate: "asc" }, { id: "asc" }],
+          select: {
+            id: true,
+            transactionDate: true,
+            description: true,
+            amount: true,
+            type: true,
+            lineKind: true,
+            loanRef: true,
+            categoryId: true,
+            reconcileStatus: true,
+            resolution: true,
+            reconcileNote: true,
+            linkedIncomeId: true,
+            linkedLoanId: true,
+            linkedExpenseId: true,
+          },
+        }),
+        buildCreditCoverage(userId),
+        buildRuleCategorizer(userId),
+        categoryIdByName(userId, FINANCING_CATEGORY),
+        categoryIdByName(userId, UNITEMIZED_CARD_CATEGORY),
+      ]);
+
+    const rows: ResolverRow[] = rawRows.map((r) => ({ ...r, amount: decimalToNumber(r.amount) }));
+    const internalTransferIds = findInternalTransferIds(rows);
     const atypicalIds = findAtypicalDepositIds(
-      shaped.filter(
-        (r) => r.type === "deposit" && r.lineKind === "standard" && !roundTripIds.has(r.id)
+      rows.filter(
+        (r) => r.type === "deposit" && r.lineKind === "standard" && !internalTransferIds.has(r.id)
       )
     );
 
-    const financingCategory = await prisma.category.findFirst({
-      where: { name: FINANCING_CATEGORY, OR: [{ userId }, { userId: null }] },
-      select: { id: true },
-    });
-
-    const result = emptyAutoResult();
-    for (const row of shaped) {
-      if (row.reconcileStatus !== "pending") continue;
-
-      if (roundTripIds.has(row.id)) {
-        result.heldRoundTripCount += 1;
-        result.heldRoundTripTotal = round2(result.heldRoundTripTotal + row.amount);
-        continue;
-      }
-      if (row.lineKind === "loan_principal") {
-        result.heldPrincipalCount += 1;
-        result.heldPrincipalTotal = round2(result.heldPrincipalTotal + row.amount);
-        continue;
-      }
-      if (row.lineKind === "loan_mixed") {
-        result.heldMixedCount += 1;
-        result.heldMixedTotal = round2(result.heldMixedTotal + row.amount);
-        continue;
-      }
-      if (row.lineKind === "interest_credit") {
-        result.heldInterestCreditCount += 1;
-        result.heldInterestCreditTotal = round2(result.heldInterestCreditTotal + row.amount);
-        continue;
-      }
-      if (atypicalIds.has(row.id)) {
-        result.heldAtypicalCount += 1;
-        result.heldAtypicalTotal = round2(result.heldAtypicalTotal + row.amount);
+    const result = emptyResolveResult();
+    for (const row of rows) {
+      if (row.resolution === "manual_excluded") {
+        addToBucket(result, "manual_excluded", row.amount);
         continue;
       }
 
-      if (row.type === "deposit" && row.lineKind === "standard") {
-        const income = await prisma.income.create({
-          data: {
-            userId,
-            amount: row.amount,
-            type: guessIncomeType(row.description ?? ""),
-            description: row.description ?? null,
-            incomeDate: row.transactionDate,
-          },
-        });
-        await prisma.bankTransaction.update({
-          where: { id: row.id },
-          data: { reconcileStatus: "done", linkedIncomeId: income.id },
-        });
-        result.incomeCount += 1;
-        result.incomeTotal = round2(result.incomeTotal + row.amount);
-        continue;
-      }
+      const target = decideTarget(row, {
+        coverage,
+        categorize,
+        financingCategoryId,
+        unitemizedCategoryId,
+        internalTransferIds,
+        atypicalIds,
+      });
 
-      if (row.type === "withdrawal" && (row.lineKind === "standard" || FINANCING_KINDS.has(row.lineKind))) {
-        const isFinancing = FINANCING_KINDS.has(row.lineKind);
-        const expense = await prisma.expense.create({
-          data: {
-            userId,
-            amount: row.amount,
-            categoryId: isFinancing ? (financingCategory?.id ?? null) : row.categoryId,
-            businessName: row.description ?? null,
-            description: row.description ?? null,
-            expenseDate: row.transactionDate,
-            source: "bank_import",
-          },
-        });
-        await prisma.bankTransaction.update({
-          where: { id: row.id },
-          data: { reconcileStatus: "done", linkedExpenseId: expense.id },
-        });
-        if (isFinancing) {
-          result.financingCount += 1;
-          result.financingTotal = round2(result.financingTotal + row.amount);
-        } else {
-          result.spendCount += 1;
-          result.spendTotal = round2(result.spendTotal + row.amount);
-        }
-      }
+      const changed = await applyTarget(userId, row, target);
+      if (changed) result.changed += 1;
+      addToBucket(result, target.resolution, row.amount);
     }
+
+    const unresolved = await prisma.bankTransaction.aggregate({
+      where: { userId, resolution: null },
+      _sum: { amount: true },
+      _count: { _all: true },
+    });
+    result.unresolved = {
+      count: unresolved._count._all,
+      total: round2(decimalToNumber(unresolved._sum.amount)),
+    };
     return result;
   },
 
+  /** Kept for callers/routes that predate the resolver naming. */
+  async autoReconcile(userId: number): Promise<ResolveResult> {
+    return this.resolveAll(userId);
+  },
+
   async getReconciliation(userId: number): Promise<ReconciliationView> {
-    await this.backfillClassification(userId);
+    await this.resolveAll(userId);
     const txs = (await prisma.bankTransaction.findMany({
       where: { userId },
       orderBy: [{ transactionDate: "asc" }, { id: "asc" }],
@@ -413,6 +496,8 @@ export const reconciliationService = {
         lineKind: true,
         loanRef: true,
         reconcileStatus: true,
+        resolution: true,
+        reconcileNote: true,
         linkedIncomeId: true,
         linkedLoanId: true,
         linkedExpenseId: true,
@@ -421,23 +506,64 @@ export const reconciliationService = {
 
     const rows = txs.map(toRow);
     const pending = rows.filter((r) => r.reconcileStatus === "pending");
+    const totalOf = (list: ReconcileRow[]) => round2(list.reduce((sum, r) => sum + r.amount, 0));
+    const withResolution = (resolution: BankResolution) =>
+      rows.filter((r) => r.resolution === resolution);
 
-    const incomeCandidates = pending.filter((r) => r.type === "deposit" && r.lineKind !== "interest_credit");
-    const loanRows = pending.filter((r) => LOAN_KINDS.has(r.lineKind));
-    const standardSpend = pending.filter(
-      (r) => r.type === "withdrawal" && r.lineKind === "standard"
+    // Grouped by meaning: this is the view that answers "which rows make up this
+    // figure?" for every number the dashboard shows.
+    const order: Array<BankResolution | "unresolved"> = [
+      "income",
+      "expense",
+      "financing_charge",
+      "financing_credit",
+      "credit_card_unitemized",
+      "debt_reduction",
+      "loan_repayment_unsplit",
+      "loan_drawdown",
+      "credit_card_settled",
+      "internal_transfer",
+      "manual_excluded",
+      "unresolved",
+    ];
+    const byResolution = order
+      .map((resolution) => {
+        const group =
+          resolution === "unresolved"
+            ? rows.filter((r) => r.resolution === null)
+            : withResolution(resolution);
+        return {
+          resolution,
+          label:
+            resolution === "unresolved"
+              ? "ללא סיווג — דורש טיפול"
+              : RESOLUTION_LABELS[resolution],
+          count: group.length,
+          total: totalOf(group),
+          rows: group,
+        };
+      })
+      .filter((group) => group.count > 0);
+
+    const financingNet = round2(
+      totalOf(withResolution("financing_charge")) - totalOf(withResolution("financing_credit"))
     );
+
+    const incomeCandidates = pending.filter(
+      (r) => r.type === "deposit" && r.lineKind !== "interest_credit"
+    );
+    const loanRows = rows.filter(
+      (r) => LOAN_KINDS.has(r.lineKind) && r.resolution !== "financing_charge"
+    );
+    const standardSpend = pending.filter((r) => r.type === "withdrawal" && r.lineKind === "standard");
     const financingLines = rows.filter(
-      (r) =>
-        (r.lineKind === "overdraft_interest" || r.lineKind === "interest_credit") &&
-        r.reconcileStatus === "pending"
+      (r) => r.resolution === "financing_charge" || r.resolution === "financing_credit"
     );
     const creditCardPayments = rows.filter((r) => r.lineKind === "credit_card_payment");
     const done = rows.filter((r) => r.reconcileStatus === "done");
 
     // Group loan-payment rows by loan reference. Principal lines often carry no
-    // number in the statement, so they collect under a "no number" group the
-    // user assigns manually.
+    // number in the statement, so they collect under a "no number" group.
     const groupsMap = new Map<string, ReconcileLoanGroup>();
     for (const r of loanRows) {
       const key = r.loanRef ?? "__none__";
@@ -472,10 +598,20 @@ export const reconciliationService = {
         pending: pending.length,
         done: done.length,
         excluded: rows.filter((r) => r.reconcileStatus === "excluded").length,
-        pendingIncome: incomeCandidates.length,
-        pendingLoan: loanRows.length,
-        pendingSpend: standardSpend.length,
+        unresolved: rows.filter((r) => r.resolution === null).length,
+        needsReview: rows.filter((r) => r.needsReview).length,
+        income: totalOf(withResolution("income")),
+        spend: totalOf(withResolution("expense")),
+        financingNet,
+        debtReduction: round2(
+          totalOf(withResolution("debt_reduction")) + totalOf(withResolution("loan_repayment_unsplit"))
+        ),
+        unitemizedCard: totalOf(withResolution("credit_card_unitemized")),
+        settledCard: totalOf(withResolution("credit_card_settled")),
+        internalTransfer: totalOf(withResolution("internal_transfer")),
       },
+      byResolution,
+      needsReview: rows.filter((r) => r.needsReview),
       incomeCandidates,
       loanGroups,
       standardSpend,
@@ -485,11 +621,128 @@ export const reconciliationService = {
     };
   },
 
+  /**
+   * Loan activity as the statement actually reports it, grouped per loan
+   * reference. Nothing here is invented: the amounts are the bank's own lines, so
+   * a loan whose terms the user never entered still shows its real repayments.
+   *
+   * Read-only and derived — `bank_transactions` stays the single source, so these
+   * figures can never drift from the reconciliation screen.
+   */
+  async loanActivityFromStatement(userId: number) {
+    const rows = await prisma.bankTransaction.findMany({
+      where: {
+        userId,
+        OR: [
+          { lineKind: { in: ["loan_principal", "loan_interest", "loan_mixed", "loan_drawdown"] } },
+          { resolution: { in: ["debt_reduction", "loan_repayment_unsplit", "loan_drawdown"] } },
+        ],
+      },
+      orderBy: [{ transactionDate: "asc" }, { id: "asc" }],
+      select: {
+        id: true,
+        transactionDate: true,
+        description: true,
+        amount: true,
+        type: true,
+        lineKind: true,
+        loanRef: true,
+        resolution: true,
+        reconcileNote: true,
+        linkedLoanId: true,
+      },
+    });
+
+    interface Group {
+      loanRef: string | null;
+      label: string;
+      principalPaid: number;
+      interestPaid: number;
+      interestRefunded: number;
+      unsplitPaid: number;
+      drawdown: number;
+      linkedLoanId: number | null;
+      months: string[];
+      rows: Array<{
+        id: number;
+        date: string;
+        description: string;
+        amount: number;
+        lineKind: string;
+        resolution: string | null;
+        note: string | null;
+      }>;
+    }
+
+    const groups = new Map<string, Group>();
+    for (const r of rows) {
+      const key = r.loanRef ?? (r.lineKind === "loan_drawdown" ? "__drawdown__" : "__none__");
+      let g = groups.get(key);
+      if (!g) {
+        g = {
+          loanRef: r.loanRef,
+          label: r.loanRef
+            ? `הלוואה ${r.loanRef}`
+            : r.lineKind === "loan_drawdown"
+              ? "הלוואות שהתקבלו — טרם הוגדרו"
+              : "תשלומי הלוואה ללא מספר בדוח",
+          principalPaid: 0,
+          interestPaid: 0,
+          interestRefunded: 0,
+          unsplitPaid: 0,
+          drawdown: 0,
+          linkedLoanId: r.linkedLoanId,
+          months: [],
+          rows: [],
+        };
+        groups.set(key, g);
+      }
+      const amount = decimalToNumber(r.amount);
+      const isIn = r.type === "deposit";
+      if (r.lineKind === "loan_principal" && !isIn) g.principalPaid = round2(g.principalPaid + amount);
+      else if (r.lineKind === "loan_mixed" && !isIn) g.unsplitPaid = round2(g.unsplitPaid + amount);
+      else if (r.lineKind === "loan_interest" && !isIn) g.interestPaid = round2(g.interestPaid + amount);
+      else if (r.lineKind === "loan_interest" && isIn)
+        g.interestRefunded = round2(g.interestRefunded + amount);
+      else if (r.lineKind === "loan_drawdown") g.drawdown = round2(g.drawdown + amount);
+
+      const month = r.transactionDate.toISOString().slice(0, 7);
+      if (!g.months.includes(month)) g.months.push(month);
+      if (g.linkedLoanId === null) g.linkedLoanId = r.linkedLoanId;
+      g.rows.push({
+        id: r.id,
+        date: r.transactionDate.toISOString().slice(0, 10),
+        description: r.description ?? "",
+        amount,
+        lineKind: r.lineKind,
+        resolution: r.resolution,
+        note: r.reconcileNote,
+      });
+    }
+
+    const items = [...groups.values()].sort((a, b) => {
+      if (a.loanRef === null) return 1;
+      if (b.loanRef === null) return -1;
+      return a.loanRef.localeCompare(b.loanRef);
+    });
+
+    const totals = {
+      principalPaid: round2(items.reduce((s, g) => s + g.principalPaid, 0)),
+      interestPaid: round2(items.reduce((s, g) => s + g.interestPaid, 0)),
+      interestRefunded: round2(items.reduce((s, g) => s + g.interestRefunded, 0)),
+      unsplitPaid: round2(items.reduce((s, g) => s + g.unsplitPaid, 0)),
+      drawdown: round2(items.reduce((s, g) => s + g.drawdown, 0)),
+      /** Everything that lowered debt: principal + repayments with no split. */
+      debtReduction: round2(items.reduce((s, g) => s + g.principalPaid + g.unsplitPaid, 0)),
+    };
+    return { groups: items, totals };
+  },
+
   /** Promote a deposit into a real Income record, linked back to the bank row. */
   async linkIncome(userId: number, transactionId: number, body: { type: string; description?: string | null }) {
     const tx = await requireTx(userId, transactionId);
     if (tx.type !== "deposit") throw ApiError.badRequest("רק הפקדה יכולה להפוך להכנסה");
-    if (tx.reconcileStatus === "done") throw ApiError.conflict("התנועה כבר שויכה");
+    if (tx.linkedIncomeId) throw ApiError.conflict("התנועה כבר שויכה להכנסה");
     const income = await prisma.income.create({
       data: {
         userId,
@@ -501,7 +754,12 @@ export const reconciliationService = {
     });
     await prisma.bankTransaction.update({
       where: { id: tx.id },
-      data: { reconcileStatus: "done", linkedIncomeId: income.id },
+      data: {
+        reconcileStatus: "done",
+        resolution: "income",
+        reconcileNote: "סווג להכנסה ידנית",
+        linkedIncomeId: income.id,
+      },
     });
     return income;
   },
@@ -515,7 +773,7 @@ export const reconciliationService = {
     const tx = await requireTx(userId, transactionId);
     if (tx.type !== "withdrawal" || tx.lineKind !== "standard")
       throw ApiError.badRequest("רק משיכה רגילה יכולה להפוך להוצאה שוטפת");
-    if (tx.reconcileStatus === "done") throw ApiError.conflict("התנועה כבר שויכה");
+    if (tx.linkedExpenseId) throw ApiError.conflict("התנועה כבר שויכה להוצאה");
     const expense = await prisma.expense.create({
       data: {
         userId,
@@ -529,16 +787,24 @@ export const reconciliationService = {
     });
     await prisma.bankTransaction.update({
       where: { id: tx.id },
-      data: { reconcileStatus: "done", linkedExpenseId: expense.id },
+      data: {
+        reconcileStatus: "done",
+        resolution: "expense",
+        reconcileNote: "סווג להוצאה ידנית",
+        linkedExpenseId: expense.id,
+      },
     });
     return expense;
   },
 
   /**
    * Create a Loan from a detected group (or link its rows to an existing loan),
-   * and mark every supplied bank row done + linked. The stateful loan fields
-   * (original amount, rate, term) come from the user — a statement line cannot
-   * supply them — with monthlyPayment pre-filled by the caller from the group.
+   * and mark every supplied bank row linked. The stateful loan fields (original
+   * amount, rate, term) come from the user — a statement line cannot supply them.
+   *
+   * The rows keep their own resolution: a principal line stays debt reduction and
+   * a drawdown stays a liability. Linking adds the loan they belong to; it never
+   * turns them into spending or income.
    */
   async linkLoan(
     userId: number,
@@ -565,14 +831,18 @@ export const reconciliationService = {
       const existing = await prisma.loan.findFirst({ where: { id: loanId, userId } });
       if (!existing) throw ApiError.notFound("ההלוואה לא נמצאה");
     } else {
+      // A drawdown states the loan's own amount, so it is the one case where the
+      // statement itself supplies the opening balance.
+      const drawdown = txs.find((t) => t.lineKind === "loan_drawdown");
+      const drawdownAmount = drawdown ? decimalToNumber(drawdown.amount) : undefined;
       const created = await prisma.loan.create({
         data: {
           userId,
           loanName: body.loanName ?? "הלוואה מיובאת",
           loanType: body.loanType ?? "bank",
           lenderName: body.lenderName ?? null,
-          originalAmount: body.originalAmount ?? 0,
-          currentBalance: body.currentBalance ?? body.originalAmount ?? 0,
+          originalAmount: body.originalAmount ?? drawdownAmount ?? 0,
+          currentBalance: body.currentBalance ?? body.originalAmount ?? drawdownAmount ?? 0,
           annualInterestRate: body.annualInterestRate ?? 0,
           monthlyPayment: body.monthlyPayment ?? 0,
           startDate: body.startDate ? new Date(body.startDate) : txs[0]!.transactionDate,
@@ -588,18 +858,33 @@ export const reconciliationService = {
     return prisma.loan.findFirst({ where: { id: loanId, userId } });
   },
 
-  /** Set aside a row as not-a-new-record (e.g. an internal transfer). */
-  async exclude(userId: number, transactionId: number) {
-    await requireTx(userId, transactionId);
-    return prisma.bankTransaction.update({
-      where: { id: transactionId },
-      data: { reconcileStatus: "excluded", linkedIncomeId: null, linkedLoanId: null, linkedExpenseId: null },
+  /**
+   * Set a row aside by hand (an internal move the resolver could not see, a line
+   * the user knows is not theirs). Any record it created is removed, and the row
+   * is marked `manual_excluded` so the resolver leaves it alone from now on.
+   */
+  async exclude(userId: number, transactionId: number, note?: string) {
+    const tx = await requireTx(userId, transactionId);
+    await prisma.$transaction(async (db) => {
+      if (tx.linkedIncomeId) await db.income.deleteMany({ where: { id: tx.linkedIncomeId, userId } });
+      if (tx.linkedExpenseId) await db.expense.deleteMany({ where: { id: tx.linkedExpenseId, userId } });
+      await db.bankTransaction.update({
+        where: { id: transactionId },
+        data: {
+          reconcileStatus: "excluded",
+          resolution: "manual_excluded",
+          reconcileNote: note ?? "הוחרג ידנית על ידי המשתמשת",
+          linkedIncomeId: null,
+          linkedLoanId: null,
+          linkedExpenseId: null,
+        },
+      });
     });
   },
 
   /**
    * Undo a reconciliation: delete the record it created (so nothing is left
-   * double-counted) and return the row to pending.
+   * double-counted) and hand the row back to the resolver.
    */
   async reset(userId: number, transactionId: number) {
     const tx = await requireTx(userId, transactionId);
@@ -617,11 +902,285 @@ export const reconciliationService = {
         where: { id: tx.id },
         data: {
           reconcileStatus: "pending",
+          resolution: null,
+          reconcileNote: null,
           linkedIncomeId: null,
           linkedLoanId: null,
           linkedExpenseId: null,
         },
       });
     });
+    // Give it a meaning again straight away, so a reset row is never left invisible.
+    await this.resolveAll(userId);
   },
 };
+
+// ---------------------------------------------------------------------------
+// Resolver internals
+// ---------------------------------------------------------------------------
+
+async function categoryIdByName(userId: number, name: string): Promise<number | null> {
+  const category = await prisma.category.findFirst({
+    where: { name, OR: [{ userId }, { userId: null }] },
+    select: { id: true },
+  });
+  return category?.id ?? null;
+}
+
+function addToBucket(result: ResolveResult, resolution: BankResolution, amount: number): void {
+  const bucket = result[RESULT_BUCKET[resolution]];
+  bucket.count += 1;
+  bucket.total = round2(bucket.total + amount);
+}
+
+interface DecideContext {
+  coverage: Awaited<ReturnType<typeof buildCreditCoverage>>;
+  categorize: (text: string) => number | null;
+  financingCategoryId: number | null;
+  unitemizedCategoryId: number | null;
+  internalTransferIds: Set<number>;
+  atypicalIds: Set<number>;
+}
+
+/**
+ * The whole classification policy, in one place: row in → meaning out. Pure, so
+ * it can be reasoned about (and tested) without touching the database.
+ */
+function decideTarget(row: ResolverRow, ctx: DecideContext): ResolutionTarget {
+  const isIn = row.type === "deposit";
+
+  // Interest, both directions. A refund is a negative financing expense — real
+  // money back on a real cost — and never income (CLAUDE.md §5).
+  if (row.lineKind === "loan_interest" || row.lineKind === "overdraft_interest") {
+    if (isIn) {
+      return {
+        resolution: "financing_credit",
+        status: "done",
+        note: "זיכוי ריבית — נרשם כהוצאה מימונית שלילית, לא כהכנסה",
+        record: "expense",
+        categoryId: ctx.financingCategoryId,
+        negative: true,
+      };
+    }
+    return {
+      resolution: "financing_charge",
+      status: "done",
+      note: "ריבית — הוצאה מימונית, לא הוצאה שוטפת",
+      record: "expense",
+      categoryId: ctx.financingCategoryId,
+    };
+  }
+  if (row.lineKind === "interest_credit") {
+    return {
+      resolution: "financing_credit",
+      status: "done",
+      note: "זיכוי ריבית — נרשם כהוצאה מימונית שלילית, לא כהכנסה",
+      record: "expense",
+      categoryId: ctx.financingCategoryId,
+      negative: true,
+    };
+  }
+
+  // Loan principal: debt goes down, nothing was consumed. Never an expense.
+  if (row.lineKind === "loan_principal") {
+    return {
+      resolution: "debt_reduction",
+      status: "done",
+      note: "תשלום קרן — הקטנת חוב, לא הוצאה שוטפת. מוצג בטאב הלוואות",
+      record: "none",
+    };
+  }
+
+  // Combined repayment with no breakdown in the statement. Its own bucket: any
+  // split we invented would be a number the bank never printed.
+  if (row.lineKind === "loan_mixed") {
+    return {
+      resolution: "loan_repayment_unsplit",
+      status: "done",
+      note: `${REVIEW_NOTE_MARK} תשלום הלוואה ${row.loanRef ?? ""} ללא פירוט קרן/ריבית בדוח — לא נספר כהוצאה שוטפת`.trim(),
+      record: "none",
+    };
+  }
+
+  // A loan received creates a liability, not income.
+  if (row.lineKind === "loan_drawdown") {
+    return {
+      resolution: "loan_drawdown",
+      status: "done",
+      note: `${REVIEW_NOTE_MARK} קבלת הלוואה — התחייבות ולא הכנסה. יש להשלים את תנאי ההלוואה בטאב הלוואות`,
+      record: "none",
+    };
+  }
+
+  // Card settlements: excluded only when that card is really itemized elsewhere.
+  if (row.lineKind === "credit_card_payment") {
+    const verdict = ctx.coverage.verdictFor(row);
+    if (verdict.covered) {
+      return {
+        resolution: "credit_card_settled",
+        status: "excluded",
+        note: verdict.reason,
+        record: "none",
+      };
+    }
+    return {
+      resolution: "credit_card_unitemized",
+      status: "done",
+      note: `${REVIEW_NOTE_MARK} ${verdict.reason}`,
+      record: "expense",
+      categoryId: ctx.unitemizedCategoryId,
+    };
+  }
+
+  // Internal transfer: both legs held out, so neither invents income nor spend.
+  if (ctx.internalTransferIds.has(row.id)) {
+    return {
+      resolution: "internal_transfer",
+      status: "excluded",
+      note: "העברה פנימית בין חשבונות — שני צדי התנועה מוחרגים",
+      record: "none",
+    };
+  }
+
+  if (isIn) {
+    const atypical = ctx.atypicalIds.has(row.id);
+    return {
+      resolution: "income",
+      status: "done",
+      note: atypical
+        ? `${REVIEW_NOTE_MARK} תקבול חריג בגודלו מול שאר התקבולים — סווג כהכנסה לפי עמודת הזכות. אם זו קבלת הלוואה או העברה מחשבון אחר, יש לשנות ידנית`
+        : "הפקדה בעמודת הזכות — סווג כהכנסה",
+      record: "income",
+    };
+  }
+
+  return {
+    resolution: "expense",
+    status: "done",
+    note: "משיכה בעמודת החובה — סווג כהוצאה שוטפת",
+    record: "expense",
+    categoryId: ctx.categorize(row.description ?? "") ?? row.categoryId,
+  };
+}
+
+/**
+ * Make the database agree with a decision. Returns whether anything changed, so a
+ * re-run on settled data is silent.
+ *
+ * The order matters: records that no longer belong are deleted BEFORE the right
+ * one is created, so a row can never hold two links at once (which is exactly how
+ * a double count would start).
+ */
+async function applyTarget(userId: number, row: ResolverRow, target: ResolutionTarget): Promise<boolean> {
+  let changed = false;
+  const wantedAmount = target.negative ? round2(-row.amount) : row.amount;
+
+  // 1. Drop records the new meaning does not call for.
+  if (row.linkedIncomeId !== null && target.record !== "income") {
+    await prisma.income.deleteMany({ where: { id: row.linkedIncomeId, userId } });
+    row.linkedIncomeId = null;
+    changed = true;
+  }
+  if (row.linkedExpenseId !== null && target.record !== "expense") {
+    await prisma.expense.deleteMany({ where: { id: row.linkedExpenseId, userId } });
+    row.linkedExpenseId = null;
+    changed = true;
+  }
+
+  // 2. Create or correct the record the meaning does call for.
+  if (target.record === "income" && row.linkedIncomeId === null) {
+    const income = await prisma.income.create({
+      data: {
+        userId,
+        amount: wantedAmount,
+        type: guessIncomeType(row.description ?? ""),
+        description: row.description ?? null,
+        incomeDate: row.transactionDate,
+      },
+    });
+    row.linkedIncomeId = income.id;
+    changed = true;
+  }
+  if (target.record === "expense") {
+    if (row.linkedExpenseId === null) {
+      const expense = await prisma.expense.create({
+        data: {
+          userId,
+          amount: wantedAmount,
+          categoryId: target.categoryId ?? null,
+          businessName: row.description ?? null,
+          description: row.description ?? null,
+          expenseDate: row.transactionDate,
+          source: "bank_import",
+        },
+      });
+      row.linkedExpenseId = expense.id;
+      changed = true;
+    } else {
+      // Correct an existing record: the amount sign (a credit re-read as a
+      // refund) and a category that was never filled. A category the user chose
+      // by hand is left alone — only a null one is filled in.
+      const existing = await prisma.expense.findFirst({
+        where: { id: row.linkedExpenseId, userId },
+        select: { id: true, amount: true, categoryId: true },
+      });
+      if (existing) {
+        const data: { amount?: number; categoryId?: number } = {};
+        if (round2(decimalToNumber(existing.amount)) !== wantedAmount) data.amount = wantedAmount;
+        if (existing.categoryId === null && target.categoryId != null) data.categoryId = target.categoryId;
+        if (Object.keys(data).length > 0) {
+          await prisma.expense.update({ where: { id: existing.id }, data });
+          changed = true;
+        }
+      }
+    }
+  }
+
+  // 3. Record the meaning on the bank row itself.
+  if (
+    row.reconcileStatus !== target.status ||
+    row.resolution !== target.resolution ||
+    row.reconcileNote !== target.note ||
+    changed
+  ) {
+    await prisma.bankTransaction.update({
+      where: { id: row.id },
+      data: {
+        reconcileStatus: target.status,
+        resolution: target.resolution,
+        reconcileNote: target.note,
+        linkedIncomeId: row.linkedIncomeId,
+        linkedExpenseId: row.linkedExpenseId,
+      },
+    });
+    changed =
+      changed ||
+      row.reconcileStatus !== target.status ||
+      row.resolution !== target.resolution ||
+      row.reconcileNote !== target.note;
+  }
+  return changed;
+}
+
+/** One-line Hebrew summary of a resolve pass, for the import log. */
+export function describeResolveResult(result: ResolveResult): string {
+  const parts = [
+    `הכנסות ${result.income.total.toFixed(2)} (${result.income.count})`,
+    `הוצאות שוטפות ${result.spend.total.toFixed(2)} (${result.spend.count})`,
+    `ריבית ${result.financingCharged.total.toFixed(2)} (${result.financingCharged.count})`,
+    `זיכויי ריבית ${result.financingCredited.total.toFixed(2)} (${result.financingCredited.count})`,
+    `קרן/הקטנת חוב ${result.debtReduction.total.toFixed(2)} (${result.debtReduction.count})`,
+    `תשלומי הלוואה ללא פירוט ${result.loanUnsplit.total.toFixed(2)} (${result.loanUnsplit.count})`,
+    `קבלת הלוואה ${result.loanDrawdown.total.toFixed(2)} (${result.loanDrawdown.count})`,
+    `חיובי אשראי מפורטים ${result.cardSettled.total.toFixed(2)} (${result.cardSettled.count})`,
+    `חיובי אשראי ללא פירוט ${result.cardUnitemized.total.toFixed(2)} (${result.cardUnitemized.count})`,
+    `העברות פנימיות ${result.internalTransfer.total.toFixed(2)} (${result.internalTransfer.count})`,
+  ];
+  const tail =
+    result.unresolved.count > 0
+      ? ` · ⚠ ללא סיווג: ${result.unresolved.count} שורות (${result.unresolved.total.toFixed(2)})`
+      : " · אין שורות ללא סיווג";
+  return `${result.changed} שורות עודכנו · ${parts.join(" · ")}${tail}`;
+}
+
+export { EXPENSE_RESOLUTIONS, DEBT_RESOLUTIONS };

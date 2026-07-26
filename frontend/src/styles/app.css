@@ -1902,6 +1902,23 @@
 .attention-critical { border-inline-start-color: var(--danger); }
 .attention-info { border-inline-start-color: var(--secondary); }
 
+/* "יצא מהחשבון אבל אינו הוצאה" — a label/hint pair with the amount pinned to the
+   end, so the amounts line up and can be read as a column. */
+.non-spending-list > li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border-inline-start: 3px solid var(--border);
+  background: color-mix(in srgb, var(--text-muted) 6%, transparent);
+  font-size: 14px;
+}
+
+/* Puts a secondary line under its label instead of beside it. */
+.block { display: block; }
+
 .attention-icon { font-size: 17px; }
 .attention-text { flex: 1; min-width: 0; }
 .attention-go { color: var(--text-muted); }
@@ -2010,6 +2027,12 @@
 }
 .reconcile-row.done { opacity: 0.8; }
 .reconcile-row.muted-row { opacity: 0.75; }
+/* A resolved row that still needs a human eye: marked, but not as an error —
+   the money IS counted, the classification is just coarser than the rest. */
+.reconcile-row.review-row {
+  border-inline-start: 3px solid var(--warning);
+  background: color-mix(in srgb, var(--warning) 7%, transparent);
+}
 .reconcile-date { color: var(--text-muted); white-space: nowrap; }
 .reconcile-desc { flex: 1 1 180px; min-width: 120px; }
 .reconcile-amount { font-weight: 700; white-space: nowrap; }

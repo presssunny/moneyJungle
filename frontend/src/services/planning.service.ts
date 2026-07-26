@@ -133,6 +133,23 @@ export async function importBankStatement(accountId: number, file: File): Promis
 
 // ---------- Bank reconciliation ----------
 
+/**
+ * What a bank row turned out to MEAN. Mirrors `BankResolution` on the server —
+ * the labels come with the payload, so the wording lives in one place.
+ */
+export type BankResolution =
+  | "income"
+  | "expense"
+  | "financing_charge"
+  | "financing_credit"
+  | "debt_reduction"
+  | "loan_repayment_unsplit"
+  | "loan_drawdown"
+  | "credit_card_settled"
+  | "credit_card_unitemized"
+  | "internal_transfer"
+  | "manual_excluded";
+
 export interface ReconcileRow {
   id: number;
   date: string;
@@ -142,6 +159,11 @@ export interface ReconcileRow {
   lineKind: string;
   loanRef: string | null;
   reconcileStatus: string;
+  resolution: BankResolution | null;
+  resolutionLabel: string | null;
+  /** Hebrew reason for the decision — always shown next to the row. */
+  reconcileNote: string | null;
+  needsReview: boolean;
   linkedIncomeId: number | null;
   linkedLoanId: number | null;
   linkedExpenseId: number | null;
@@ -165,10 +187,25 @@ export interface ReconciliationView {
     pending: number;
     done: number;
     excluded: number;
-    pendingIncome: number;
-    pendingLoan: number;
-    pendingSpend: number;
+    /** Rows with no meaning at all. Anything above 0 is money falling through. */
+    unresolved: number;
+    needsReview: number;
+    income: number;
+    spend: number;
+    financingNet: number;
+    debtReduction: number;
+    unitemizedCard: number;
+    settledCard: number;
+    internalTransfer: number;
   };
+  byResolution: Array<{
+    resolution: BankResolution | "unresolved";
+    label: string;
+    count: number;
+    total: number;
+    rows: ReconcileRow[];
+  }>;
+  needsReview: ReconcileRow[];
   incomeCandidates: ReconcileRow[];
   loanGroups: ReconcileLoanGroup[];
   standardSpend: ReconcileRow[];
@@ -182,28 +219,71 @@ export async function getReconciliation(): Promise<ReconciliationView> {
   return data;
 }
 
-/** What one auto-reconcile pass promoted, and what it held back and why. */
-export interface AutoReconcileResult {
-  incomeCount: number;
-  incomeTotal: number;
-  spendCount: number;
-  spendTotal: number;
-  financingCount: number;
-  financingTotal: number;
-  heldPrincipalCount: number;
-  heldPrincipalTotal: number;
-  heldMixedCount: number;
-  heldMixedTotal: number;
-  heldRoundTripCount: number;
-  heldRoundTripTotal: number;
-  heldInterestCreditCount: number;
-  heldInterestCreditTotal: number;
-  heldAtypicalCount: number;
-  heldAtypicalTotal: number;
+/** One bucket of a resolve pass: how many rows and how much money. */
+export interface ResolveBucket {
+  count: number;
+  total: number;
 }
 
-export async function reconcileAuto(): Promise<AutoReconcileResult> {
+/** What one resolve pass decided, bucket by bucket. */
+export interface ResolveResult {
+  changed: number;
+  income: ResolveBucket;
+  spend: ResolveBucket;
+  financingCharged: ResolveBucket;
+  financingCredited: ResolveBucket;
+  debtReduction: ResolveBucket;
+  loanUnsplit: ResolveBucket;
+  loanDrawdown: ResolveBucket;
+  cardSettled: ResolveBucket;
+  cardUnitemized: ResolveBucket;
+  internalTransfer: ResolveBucket;
+  manualExcluded: ResolveBucket;
+  /** Must stay 0 — a row the resolver could not give a meaning to. */
+  unresolved: ResolveBucket;
+}
+
+export async function reconcileAuto(): Promise<ResolveResult> {
   const { data } = await api.post("/bank/reconciliation/auto");
+  return data;
+}
+
+/** Loan activity as the bank statement reports it — no invented loan terms. */
+export interface StatementLoanGroup {
+  loanRef: string | null;
+  label: string;
+  principalPaid: number;
+  interestPaid: number;
+  interestRefunded: number;
+  unsplitPaid: number;
+  drawdown: number;
+  linkedLoanId: number | null;
+  months: string[];
+  rows: Array<{
+    id: number;
+    date: string;
+    description: string;
+    amount: number;
+    lineKind: string;
+    resolution: string | null;
+    note: string | null;
+  }>;
+}
+
+export interface StatementLoanActivity {
+  groups: StatementLoanGroup[];
+  totals: {
+    principalPaid: number;
+    interestPaid: number;
+    interestRefunded: number;
+    unsplitPaid: number;
+    drawdown: number;
+    debtReduction: number;
+  };
+}
+
+export async function getStatementLoanActivity(): Promise<StatementLoanActivity> {
+  const { data } = await api.get("/bank/reconciliation/loans");
   return data;
 }
 

@@ -119,14 +119,27 @@ bankRoutes.get(
 );
 
 /**
- * Promote every unambiguous pending row in one pass. Also back-fills statements
- * imported before auto-reconciliation existed, whose rows are still pending and
- * therefore missing from every figure in the app.
+ * Give every imported bank row a financial meaning in one pass, and make the
+ * records in the other tabs agree with it. Also back-fills statements imported
+ * before the resolver existed, whose rows are still pending and therefore missing
+ * from every figure in the app.
  */
 bankRoutes.post(
   "/reconciliation/auto",
   asyncHandler(async (req: Request, res: Response) => {
-    res.json(await reconciliationService.autoReconcile(req.userId!));
+    res.json(await reconciliationService.resolveAll(req.userId!));
+  })
+);
+
+/**
+ * Loan activity exactly as the statement reports it: principal, interest and
+ * combined payments per loan reference, plus loans received. Derived from
+ * `bank_transactions`, so it can never drift from the reconciliation screen.
+ */
+bankRoutes.get(
+  "/reconciliation/loans",
+  asyncHandler(async (req: Request, res: Response) => {
+    res.json(await reconciliationService.loanActivityFromStatement(req.userId!));
   })
 );
 
