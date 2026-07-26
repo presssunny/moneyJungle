@@ -23,6 +23,54 @@ async function monthTotals(userId: number, year: number, month: number) {
   };
 }
 
+/**
+ * Bank rows of one month, totalled by what they mean. Expense-bearing resolutions
+ * are deliberately NOT re-added to any spend figure here: their amounts already
+ * live in `expenses` (that is what the resolver created), and summing them again
+ * would be the double count the whole design exists to prevent. They are reported
+ * so the user can see which part of the expense total came from where.
+ */
+async function bankResolutionTotals(userId: number, year: number, month: number) {
+  const { start, end } = monthRange(year, month);
+  const groups = await dashboardRepository.bankRowsByResolution(userId, start, end);
+  const totalOf = (resolution: string) =>
+    round2(
+      groups
+        .filter((g) => g.resolution === resolution)
+        .reduce((sum, g) => sum + decimalToNumber(g._sum.amount), 0)
+    );
+  const countOf = (resolution: string | null) =>
+    groups.filter((g) => g.resolution === resolution).reduce((n, g) => n + g._count._all, 0);
+
+  const financingCharged = totalOf("financing_charge");
+  const financingCredited = totalOf("financing_credit");
+  return {
+    income: totalOf("income"),
+    spend: totalOf("expense"),
+    financingCharged,
+    financingCredited,
+    financingNet: round2(financingCharged - financingCredited),
+    /** Loan principal + repayments the statement never split: debt, not spending. */
+    debtReduction: round2(totalOf("debt_reduction") + totalOf("loan_repayment_unsplit")),
+    principal: totalOf("debt_reduction"),
+    loanUnsplit: totalOf("loan_repayment_unsplit"),
+    loanDrawdown: totalOf("loan_drawdown"),
+    /** Card bills already itemized in the credit tab — excluded, no double count. */
+    cardSettled: totalOf("credit_card_settled"),
+    /** Card bills nothing itemizes: counted as expense, flagged as coarse. */
+    unitemizedCard: totalOf("credit_card_unitemized"),
+    internalTransfer: totalOf("internal_transfer"),
+    manualExcluded: totalOf("manual_excluded"),
+    /** Rows with no meaning at all. Must be 0 — anything here is a real dead end. */
+    unresolvedTotal: round2(
+      groups
+        .filter((g) => g.resolution === null)
+        .reduce((sum, g) => sum + decimalToNumber(g._sum.amount), 0)
+    ),
+    unresolvedCount: countOf(null),
+  };
+}
+
 /** Merged spent-per-category (manual expenses + confirmed credit) for a month. */
 export async function spentByCategory(
   userId: number,
@@ -93,6 +141,12 @@ export const dashboardService = {
       .filter((g) => g.lineKind === "loan_principal" || g.lineKind === "loan_mixed")
       .reduce((sum, g) => sum + decimalToNumber(g._sum.amount), 0);
 
+    // Bank money that is real but is NOT spending, per resolution. Without these
+    // the month looks like it lost money: 4,198.38 ₪ of loan repayment and 7,654.79 ₪
+    // of already-itemized card settlements leave the account and appear in no
+    // expense figure — correctly, but only if the dashboard names them.
+    const bankMonth = await bankResolutionTotals(userId, year, month);
+
     return {
       incomeTotal: totals.incomeTotal,
       expenseTotal: totals.expenseTotal,
@@ -101,7 +155,11 @@ export const dashboardService = {
       bankReview: {
         pendingCount,
         pendingPrincipal: round2(pendingPrincipal),
+        unresolvedCount: bankMonth.unresolvedCount,
+        needsAttention: round2(bankMonth.unitemizedCard + bankMonth.loanDrawdown),
       },
+      /** Bank rows of this month by meaning — the audit trail for every figure above. */
+      bankMonth,
       savingsMonthly: round2(savingsMonthly),
       budget: {
         total: round2(budgetTotal),

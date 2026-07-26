@@ -50,15 +50,32 @@ export const dashboardRepository = {
   },
 
   /**
-   * Imported bank rows still awaiting a decision. These are deliberately absent
-   * from every money figure (loan principal, unnamed large credits, internal
-   * transfers), so the dashboard has to say they exist — otherwise the totals
-   * look complete while real money sits unaccounted for.
+   * Imported bank rows still awaiting a decision. After a resolve pass this is
+   * normally empty — every row gets a meaning — so anything here is a genuine
+   * dead end that the dashboard must say out loud.
    */
   pendingBankRows(userId: number) {
     return prisma.bankTransaction.groupBy({
       by: ["lineKind"],
       where: { userId, reconcileStatus: "pending" },
+      _sum: { amount: true },
+      _count: { _all: true },
+    });
+  },
+
+  /**
+   * Bank rows grouped by what they turned out to MEAN, for a single month.
+   *
+   * This is how the dashboard accounts for money that is real but is not spending:
+   * loan principal lowers debt, a settled card bill is itemized in the credit tab,
+   * an internal transfer is not a payment. Each of those has to be visible as
+   * itself — reporting only income and expenses makes the statement look like it
+   * is missing money.
+   */
+  bankRowsByResolution(userId: number, start: Date, end: Date) {
+    return prisma.bankTransaction.groupBy({
+      by: ["resolution"],
+      where: { userId, transactionDate: { gte: start, lt: end } },
       _sum: { amount: true },
       _count: { _all: true },
     });
