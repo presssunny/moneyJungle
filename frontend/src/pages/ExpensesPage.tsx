@@ -1,20 +1,17 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { useLocation } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useLocation, useSearchParams } from "react-router-dom";
+import { AsyncSection } from "../components/common/AsyncSection";
 import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
-import { CategoryBarChart } from "../components/dashboard/CategoryBarChart";
-import { MonthProgressPanel } from "../components/dashboard/MonthProgressPanel";
-import { SummaryCard } from "../components/dashboard/SummaryCard";
-import { updateSettings } from "../services/planning.service";
-import type { CategorySlice } from "../types/dashboard.types";
 import { EmptyState } from "../components/common/EmptyState";
 import { ErrorMessage } from "../components/common/ErrorMessage";
 import { Input } from "../components/common/Input";
-import { Loading } from "../components/common/Loading";
 import { Modal } from "../components/common/Modal";
 import { Select } from "../components/common/Select";
+import { SkeletonRows } from "../components/common/Skeleton";
 import { Table, type Column } from "../components/common/Table";
 import { useMonth } from "../context/MonthContext";
+import { useAsync } from "../hooks/useAsync";
 import { useLookups } from "../hooks/useLookups";
 import { apiErrorMessage } from "../services/api";
 import {
@@ -24,7 +21,6 @@ import {
   listExpenses,
   updateExpense,
   type ExpenseInput,
-  type MonthProgress,
 } from "../services/finance.service";
 import type { Expense } from "../types/models";
 import { formatCurrency, formatDate } from "../utils/format";
@@ -38,38 +34,40 @@ const emptyForm = (monthKey: string): ExpenseInput => ({
   description: "",
 });
 
+/**
+ * The expenses table (sub-tab of טאב "תנועות").
+ *
+ * The month KPI row, the category chart and the month-pace panel used to live
+ * here; they moved up to `TransactionsPage` and to `BudgetsPage` respectively
+ * (IA §4.1 / §5.2) so the same number is not a KPI card in two places (§1.1).
+ * What stays here is the table plus its local filters.
+ */
 export default function ExpensesPage() {
   const { monthKey } = useMonth();
   const location = useLocation();
+  const [params, setParams] = useSearchParams();
   const { expenseCategories, paymentMethods } = useLookups();
-  const [expenses, setExpenses] = useState<Expense[] | null>(null);
-  const [total, setTotal] = useState(0);
-  const [progress, setProgress] = useState<MonthProgress | null>(null);
   const [filterCategory, setFilterCategory] = useState<number | undefined>();
+  const [search, setSearch] = useState("");
+  // Entry point from the "לא מסווגות" KPI on the hub above.
+  const [onlyUncategorized, setOnlyUncategorized] = useState(params.get("uncat") === "1");
+  const [onlyRecurring, setOnlyRecurring] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Expense | null>(null);
   const [form, setForm] = useState<ExpenseInput>(emptyForm(monthKey));
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [importMessage, setImportMessage] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const load = useCallback(() => {
-    listExpenses(monthKey, filterCategory)
-      .then((data) => {
-        setExpenses(data.expenses);
-        setTotal(data.total);
-        setProgress(data.progress);
-      })
-      .catch(() => setExpenses([]));
-  }, [monthKey, filterCategory]);
+  const expensesRes = useAsync(
+    () => listExpenses(monthKey, filterCategory),
+    [monthKey, filterCategory, reloadKey],
+    "לא הצלחנו לטעון את התנועות"
+  );
 
-  async function saveTarget(value: number | null) {
-    await updateSettings({ monthlyTarget: value });
-    load();
-  }
-
-  useEffect(load, [load]);
+  const load = () => setReloadKey((k) => k + 1);
 
   // The dashboard's "הוספת הוצאה" button lands here with openForm state
   useEffect(() => {
@@ -81,40 +79,37 @@ export default function ExpensesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const UNCATEGORIZED_COLOR = "#6D6875";
+  const allRows = useMemo(() => expensesRes.data?.expenses ?? [], [expensesRes.data]);
 
-  // Mini-dashboard, computed from the already-loaded rows (credit + manual) —
-  // no extra request, always consistent with the table and the category filter.
-  const stats = useMemo(() => {
-    const rows = expenses ?? [];
-    const count = rows.length;
-    let largest = 0;
-    let creditTotal = 0;
-    const byCat = new Map<string, CategorySlice>();
-    for (const r of rows) {
-      const value = Number(r.amount);
-      if (value > largest) largest = value;
-      if (r.source === "credit") creditTotal += value;
-      const key = r.category?.name ?? "לא מסווג";
-      const existing = byCat.get(key);
-      if (existing) existing.value += value;
-      else
-        byCat.set(key, {
-          name: key,
-          color: r.category?.color ?? UNCATEGORIZED_COLOR,
-          icon: r.category?.icon ?? undefined,
-          value,
-        });
-    }
-    return {
-      count,
-      largest,
-      creditTotal,
-      manualTotal: total - creditTotal,
-      average: count > 0 ? total / count : 0,
-      slices: [...byCat.values()],
-    };
-  }, [expenses, total]);
+  const rows = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    return allRows.filter((row) => {
+      if (onlyUncategorized && row.categoryId !== null) return false;
+      if (onlyRecurring && !row.isRecurring) return false;
+      if (needle) {
+        const haystack = `${row.businessName ?? ""} ${row.description ?? ""} ${row.category?.name ?? ""}`.toLowerCase();
+        if (!haystack.includes(needle)) return false;
+      }
+      return true;
+    });
+  }, [allRows, search, onlyUncategorized, onlyRecurring]);
+
+  const filtersActive = search.trim() !== "" || onlyUncategorized || onlyRecurring || filterCategory !== undefined;
+
+  function clearFilters() {
+    setSearch("");
+    setOnlyUncategorized(false);
+    setOnlyRecurring(false);
+    setFilterCategory(undefined);
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("uncat");
+        return next;
+      },
+      { replace: true }
+    );
+  }
 
   function openCreate() {
     setEditing(null);
@@ -172,8 +167,6 @@ export default function ExpensesPage() {
     }
   }
 
-  if (!expenses) return <Loading />;
-
   const columns: Column<Expense>[] = [
     { key: "date", header: "תאריך", render: (row) => formatDate(row.expenseDate) },
     {
@@ -200,7 +193,7 @@ export default function ExpensesPage() {
             {row.category.icon} {row.category.name}
           </span>
         ) : (
-          <span className="text-muted">לא מסווג</span>
+          <span className="text-warning">לא מסווג</span>
         ),
     },
     {
@@ -223,8 +216,8 @@ export default function ExpensesPage() {
           <span className="text-muted" title="עסקת אשראי — לעריכה עברי לטאב אשראי">🔒</span>
         ) : (
           <span className="row-actions">
-            <Button size="sm" variant="ghost" onClick={() => openEdit(row)}>✏️</Button>
-            <Button size="sm" variant="ghost" onClick={() => remove(row)}>🗑️</Button>
+            <Button size="sm" variant="ghost" onClick={() => openEdit(row)} aria-label="עריכה">✏️</Button>
+            <Button size="sm" variant="ghost" onClick={() => remove(row)} aria-label="מחיקה">🗑️</Button>
           </span>
         ),
     },
@@ -248,51 +241,83 @@ export default function ExpensesPage() {
             e.target.value = "";
           }}
         />
-        <Select
-          options={expenseCategories.map((c) => ({ value: c.id, label: `${c.icon ?? ""} ${c.name}` }))}
-          placeholder="כל הקטגוריות"
-          value={filterCategory ?? ""}
-          onChange={(e) => setFilterCategory(e.target.value ? Number(e.target.value) : undefined)}
-        />
       </div>
 
       {importMessage && <div className="info-banner">{importMessage}</div>}
 
-      {progress && (progress.target != null || progress.isCurrentMonth) && (
-        <MonthProgressPanel progress={progress} onSaveTarget={saveTarget} />
-      )}
-
-      {expenses.length > 0 && (
-        <div className="expenses-overview">
-          <div className="stats-strip">
-            <SummaryCard label="סה״כ החודש" value={formatCurrency(total)} tone="danger" />
-            <SummaryCard label="מספר עסקאות" value={String(stats.count)} />
-            <SummaryCard label="הוצאה ממוצעת" value={formatCurrency(stats.average)} />
-            {stats.creditTotal > 0 ? (
-              <SummaryCard
-                label="מתוכן אשראי"
-                value={formatCurrency(stats.creditTotal)}
-                sub={`מזומן / אחר: ${formatCurrency(stats.manualTotal)}`}
-              />
-            ) : (
-              <SummaryCard label="ההוצאה הגדולה" value={formatCurrency(stats.largest)} />
-            )}
-          </div>
-          {stats.slices.length > 0 && (
-            <Card title="הוצאות לפי קטגוריה">
-              <CategoryBarChart data={stats.slices} />
-            </Card>
+      <Card>
+        <div className="filter-bar">
+          <Input
+            placeholder="חיפוש בית עסק / תיאור…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            aria-label="חיפוש חופשי"
+          />
+          <Select
+            options={expenseCategories.map((c) => ({ value: c.id, label: `${c.icon ?? ""} ${c.name}` }))}
+            placeholder="כל הקטגוריות"
+            value={filterCategory ?? ""}
+            onChange={(e) => setFilterCategory(e.target.value ? Number(e.target.value) : undefined)}
+            aria-label="סינון לפי קטגוריה"
+          />
+          <label className="filter-toggle">
+            <input
+              type="checkbox"
+              checked={onlyUncategorized}
+              onChange={(e) => setOnlyUncategorized(e.target.checked)}
+            />
+            רק לא מסווגות
+          </label>
+          <label className="filter-toggle">
+            <input type="checkbox" checked={onlyRecurring} onChange={(e) => setOnlyRecurring(e.target.checked)} />
+            רק תשלומים קבועים
+          </label>
+          {filtersActive && (
+            <Button size="sm" variant="ghost" onClick={clearFilters}>
+              ניקוי מסננים ✕
+            </Button>
           )}
         </div>
-      )}
 
-      <Card>
-        <Table
-          columns={columns}
-          rows={expenses}
-          rowKey={(row) => `${row.source ?? "manual"}-${row.id}`}
-          emptyState={<EmptyState icon="🧾" title="אין הוצאות החודש" hint="הוסיפי הוצאה, ייבאי אקסל, או ייבאי דוח אשראי בטאב אשראי" />}
-        />
+        <AsyncSection
+          resource={expensesRes}
+          errorTitle="לא הצלחנו לטעון את התנועות"
+          skeleton={<SkeletonRows rows={6} />}
+        >
+          {() => (
+            <Table
+              columns={columns}
+              rows={rows}
+              rowKey={(row) => `${row.source ?? "manual"}-${row.id}`}
+              emptyState={
+                /* "אין נתונים" and "המסנן חתך הכול" need opposite actions, so they
+                   must not share one message (§4.5). */
+                allRows.length > 0 || filtersActive ? (
+                  <EmptyState
+                    icon="🔍"
+                    title="אין תוצאות למסננים הנוכחיים"
+                    action={
+                      <Button size="sm" variant="outline" onClick={clearFilters}>
+                        ניקוי מסננים
+                      </Button>
+                    }
+                  />
+                ) : (
+                  <EmptyState
+                    icon="🧾"
+                    title="אין הוצאות החודש"
+                    hint="הוסיפי הוצאה, ייבאי אקסל, או ייבאי דוח אשראי בטאב חשבונות"
+                    action={
+                      <Button size="sm" onClick={openCreate}>
+                        + הוספת הוצאה
+                      </Button>
+                    }
+                  />
+                )
+              }
+            />
+          )}
+        </AsyncSection>
       </Card>
 
       <Modal title={editing ? "עריכת הוצאה" : "הוספת הוצאה"} open={formOpen} onClose={() => setFormOpen(false)}>

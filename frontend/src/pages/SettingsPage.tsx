@@ -1,17 +1,19 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Card } from "../components/common/Card";
+import { SkeletonRows } from "../components/common/Skeleton";
+import { WidgetError } from "../components/common/WidgetError";
 import { THEMES, useTheme } from "../context/ThemeContext";
+import { useAsync } from "../hooks/useAsync";
 import { getSettings, updateSettings } from "../services/planning.service";
 import type { Settings } from "../types/models";
 
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
-  const [settings, setSettings] = useState<Settings | null>(null);
   const [saved, setSaved] = useState(false);
 
-  useEffect(() => {
-    getSettings().then(setSettings).catch(() => {});
-  }, []);
+  const settingsRes = useAsync(() => getSettings(), [], "לא הצלחנו לטעון את ההעדפות");
+  const settings = settingsRes.data;
+  const setSettings = settingsRes.setData;
 
   async function saveField(field: keyof Settings, value: string) {
     if (!settings) return;
@@ -47,9 +49,14 @@ export default function SettingsPage() {
         </div>
       </Card>
 
-      {settings && (
-        <Card title="העדפות כלליות">
-          {saved && <div className="info-banner">נשמר ✓</div>}
+      <Card title="העדפות כלליות">
+        {settingsRes.error && !settings && (
+          <WidgetError title="לא הצלחנו לטעון את ההעדפות" detail={settingsRes.error} onRetry={settingsRes.reload} />
+        )}
+        {!settings && !settingsRes.error && <SkeletonRows rows={2} label="טוען העדפות" />}
+        {settings && (
+          <>
+            {saved && <div className="info-banner">נשמר ✓</div>}
           <div className="settings-rows">
             <label className="settings-row">
               <span>מטבע</span>
@@ -74,9 +81,10 @@ export default function SettingsPage() {
                 <option value="YYYY-MM-DD">2026-12-31</option>
               </select>
             </label>
-          </div>
-        </Card>
-      )}
+            </div>
+          </>
+        )}
+      </Card>
     </>
   );
 }

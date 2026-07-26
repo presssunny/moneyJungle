@@ -1531,3 +1531,520 @@
   font-weight: 700;
   white-space: nowrap;
 }
+
+/* ==========================================================================
+   IA rebuild (stages א'–ג'): sticky filter strip, widget states, uncertainty
+   language, mobile "more" sheet. Every colour here is a theme token — these
+   states must read correctly in all 8 themes, light and dark.
+   ========================================================================== */
+
+/* ---------- Sticky topbar: header + global filters ---------- */
+
+.layout-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--bg);
+}
+
+/* The header no longer sticks on its own — the topbar wrapper does, so the
+   filter strip can never overlap the page title. */
+.header {
+  position: static;
+}
+
+.filter-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap; /* never a horizontal scroller on mobile (§8.2) */
+  gap: 10px;
+  padding: 10px 24px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-sidebar) 45%, var(--bg));
+}
+
+.filter-strip-label {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.filter-strip-note {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--primary) 40%, var(--border));
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  color: var(--text);
+  font-size: 12.5px;
+  font-family: inherit;
+}
+
+.filter-chip:hover {
+  border-color: var(--primary);
+}
+
+/* A focused element must not hide underneath the sticky topbar (§8.3) */
+.layout-content :target,
+.layout-content [tabindex]:focus-visible,
+.layout-content a:focus-visible,
+.layout-content button:focus-visible {
+  scroll-margin-top: 140px;
+}
+
+@media (max-width: 860px) {
+  .filter-strip {
+    padding: 8px 14px;
+  }
+}
+
+/* ---------- Local filter rows above tables ---------- */
+
+.filter-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 10px;
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.filter-toggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+}
+
+.filter-toggle:hover {
+  color: var(--text);
+}
+
+/* ---------- Widget-level error (replaces the swallowed catch) ---------- */
+
+.widget-error {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--border));
+  border-inline-start: 3px solid var(--danger);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--danger) 8%, var(--bg-card));
+}
+
+.widget-error-inline {
+  padding: 8px 12px;
+  margin-bottom: 10px;
+}
+
+.widget-error-icon {
+  font-size: 20px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.widget-error-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.widget-error-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.widget-error-detail {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* ---------- Loading skeletons ---------- */
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--text-muted) 12%, var(--bg-card)),
+    color-mix(in srgb, var(--text-muted) 22%, var(--bg-card)),
+    color-mix(in srgb, var(--text-muted) 12%, var(--bg-card))
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+  border-radius: 6px;
+}
+
+@keyframes skeleton-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; }
+}
+
+.skeleton-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.skeleton-line-xs { height: 10px; width: 40%; }
+.skeleton-line-sm { height: 12px; width: 55%; }
+.skeleton-line-lg { height: 24px; width: 80%; }
+
+.skeleton-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 12px 4px;
+}
+
+.skeleton-bar {
+  flex: 1;
+  border-radius: 6px 6px 0 0;
+}
+
+.skeleton-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 6px 0;
+}
+
+.skeleton-row {
+  height: 34px;
+  width: 100%;
+}
+
+/* ---------- Uncertainty language (§1.2) ---------- */
+
+.uncert-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.6;
+  white-space: nowrap;
+  width: fit-content;
+}
+
+/* Scenario: muted, no new hue — it is a real number, just not a measured one. */
+.uncert-badge-scenario {
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--text-muted) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text-muted) 35%, transparent);
+}
+
+/* Unknown: attention-worthy but never good/bad — warning hue, dashed outline. */
+.uncert-badge-unknown {
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--warning) 55%, transparent);
+}
+
+.uncert-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.uncert-value-scenario .mono { color: var(--text-muted); }
+.uncert-value-unknown .mono { color: var(--text-muted); }
+
+/* Row/card marker for a value we cannot know yet. */
+.state-unknown {
+  border-style: dashed !important;
+  border-color: color-mix(in srgb, var(--warning) 55%, var(--border)) !important;
+}
+
+.state-scenario .summary-card-value {
+  color: var(--text-muted);
+}
+
+/* ---------- Mobile "עוד" sheet (§8.1) ---------- */
+
+.bottom-sheet-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: flex-end;
+}
+
+.bottom-sheet {
+  width: 100%;
+  background: var(--bg-card);
+  border-top: 1px solid var(--border);
+  border-radius: 16px 16px 0 0;
+  padding: 10px 16px calc(80px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bottom-sheet-handle {
+  width: 44px;
+  height: 4px;
+  border-radius: 99px;
+  background: var(--border);
+  margin: 4px auto 10px;
+}
+
+.bottom-sheet-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 0 12px;
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 15px;
+}
+
+.bottom-sheet-item:hover,
+.bottom-sheet-item.active {
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  color: var(--primary);
+}
+
+.bottom-sheet-close {
+  min-height: 48px;
+  margin-top: 6px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: none;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+/* ---------- Accounts hub overview strip (§6.1) ---------- */
+
+.overview-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.overview-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-card);
+  font-size: 13px;
+}
+
+.overview-chip-loading {
+  width: 150px;
+  height: 38px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-muted) 14%, var(--bg-card));
+}
+
+.overview-chip-label {
+  color: var(--text-muted);
+}
+
+.overview-chip-value {
+  font-weight: 700;
+}
+
+/* ---------- Attention list (§3.3) ---------- */
+
+.attention-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.attention-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border-inline-start: 3px solid var(--border);
+  background: color-mix(in srgb, var(--text-muted) 6%, transparent);
+  color: var(--text);
+  font-size: 14px;
+}
+
+.attention-item:hover {
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+}
+
+.attention-warning { border-inline-start-color: var(--warning); }
+.attention-critical { border-inline-start-color: var(--danger); }
+.attention-info { border-inline-start-color: var(--secondary); }
+
+.attention-icon { font-size: 17px; }
+.attention-text { flex: 1; min-width: 0; }
+.attention-go { color: var(--text-muted); }
+
+/* ---------- Bigger tap targets in table rows (§8.4) ---------- */
+
+@media (pointer: coarse) {
+  .row-actions .btn,
+  .bank-account-delete,
+  .filter-chip,
+  .bottom-nav-item {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* ---------- Bank reconciliation ---------- */
+.reconcile-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.reconcile-page .muted {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.reconcile-page .tone-success { color: var(--success); }
+.reconcile-page .tone-danger { color: var(--danger); }
+
+.reconcile-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.reconcile-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-card);
+  font-size: 13px;
+}
+.reconcile-chip-value { font-weight: 700; }
+.reconcile-chip-label { color: var(--text-muted); }
+.reconcile-chip.tone-success .reconcile-chip-value { color: var(--success); }
+.reconcile-chip.tone-danger .reconcile-chip-value { color: var(--danger); }
+
+/* Report of the last auto-reconcile pass: what was counted, what was held. */
+.auto-result {
+  margin-top: 14px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.auto-result h4 {
+  margin: 12px 0 6px;
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.auto-result h4:first-child { margin-top: 0; }
+.auto-result-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.auto-result-list li {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 12px;
+  align-items: baseline;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+.auto-result-list li:last-child { border-bottom: none; }
+.auto-result-label { min-width: 0; }
+.auto-result-label small { display: block; font-size: 12px; }
+
+@media (max-width: 560px) {
+  .auto-result-list li {
+    grid-template-columns: 1fr auto;
+  }
+  .auto-result-label { grid-column: 1 / -1; }
+}
+
+.reconcile-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.reconcile-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--text-muted) 5%, transparent);
+  font-size: 14px;
+}
+.reconcile-row.done { opacity: 0.8; }
+.reconcile-row.muted-row { opacity: 0.75; }
+.reconcile-date { color: var(--text-muted); white-space: nowrap; }
+.reconcile-desc { flex: 1 1 180px; min-width: 120px; }
+.reconcile-amount { font-weight: 700; white-space: nowrap; }
+.reconcile-note {
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+.reconcile-row .field { margin: 0; min-width: 130px; }
+
+.reconcile-loan-group {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-card);
+}
+.reconcile-loan-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.reconcile-loan-totals {
+  flex: 1 1 auto;
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+.reconcile-loan-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  align-items: end;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+}

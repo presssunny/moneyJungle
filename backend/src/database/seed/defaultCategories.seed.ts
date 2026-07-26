@@ -27,6 +27,7 @@ export const defaultCategories: DefaultCategory[] = [
   { name: "בילויים", type: "expense", icon: "🎉", color: "#FF6D00" },
   { name: "מנויים חודשיים", type: "expense", icon: "🔁", color: "#7B2CBF" },
   { name: "הלוואות", type: "expense", icon: "🏦", color: "#D62828" },
+  { name: "ריבית ועמלות בנק", type: "expense", icon: "🏧", color: "#C1121F" },
   { name: "חיסכון", type: "expense", icon: "🐷", color: "#2EC4B6" },
   { name: "העברות בנקאיות", type: "expense", icon: "🔄", color: "#6C757D" },
   { name: "משיכות מזומן", type: "expense", icon: "🏧", color: "#7C8794" },

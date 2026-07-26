@@ -8,6 +8,9 @@ export function useLookups() {
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
 
   useEffect(() => {
+    // Deliberately silent: these only populate <select> options. A failure leaves
+    // the dropdowns empty and is already reported by the global toast in api.ts;
+    // an error panel per dropdown would drown the widget errors that matter.
     listCategories().then(setCategories).catch(() => {});
     listPaymentMethods().then(setPaymentMethods).catch(() => {});
   }, []);

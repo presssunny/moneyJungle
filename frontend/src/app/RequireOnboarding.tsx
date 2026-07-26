@@ -35,6 +35,9 @@ export function RequireOnboarding({ children }: { children: ReactNode }) {
           !!summary && (summary.incomeTotal > 0 || summary.expenseTotal > 0 || summary.creditTotal > 0);
         if (isOnboardingComplete(settings) || hasData) {
           localStorage.setItem(ONBOARDED_KEY, "1");
+          // Deliberately silent (fail-open): this is a background write of a
+          // convenience flag. The local flag is already set, so the user is in;
+          // blocking or alarming her over a bookkeeping PATCH would be wrong.
           if (!isOnboardingComplete(settings)) completeOnboarding(settings).catch(() => {});
           setStatus("ok");
         } else {

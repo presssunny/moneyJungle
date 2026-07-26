@@ -1,16 +1,22 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { AsyncSection } from "../components/common/AsyncSection";
 import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
 import { EmptyState } from "../components/common/EmptyState";
 import { Input } from "../components/common/Input";
-import { Loading } from "../components/common/Loading";
 import { Modal } from "../components/common/Modal";
 import { Select } from "../components/common/Select";
+import { SkeletonCard, SkeletonChart, SkeletonRows } from "../components/common/Skeleton";
 import { Table, type Column } from "../components/common/Table";
+import { WidgetError } from "../components/common/WidgetError";
+import { CategoryBarChart } from "../components/dashboard/CategoryBarChart";
+import { SummaryCard } from "../components/dashboard/SummaryCard";
 import { useMonth } from "../context/MonthContext";
+import { useAsync } from "../hooks/useAsync";
 import { useLookups } from "../hooks/useLookups";
 import { apiErrorMessage } from "../services/api";
+import { getCharts } from "../services/dashboard.service";
 import {
   confirmCreditImport,
   deleteCreditImport,
@@ -22,14 +28,23 @@ import {
 } from "../services/finance.service";
 import { createRule } from "../services/planning.service";
 import type { CreditImport, CreditImportDetail, CreditTransaction } from "../types/models";
-import { formatCurrency, formatDate, formatMonthKey } from "../utils/format";
+import { currentMonthKey, formatCurrency, formatDate, formatMonthKey } from "../utils/format";
 
+/**
+ * טאב־משנה "אשראי" (IA §6.2).
+ *
+ * The KPI row is scoped to the **selected import** — that is the only credit
+ * data actually loaded on this screen, so every card says so in its sub-line.
+ * Claiming an account-wide number from one file would be a made-up figure.
+ * "אשראי מתגלגל" is called out explicitly because CLAUDE.md §5 excludes it from
+ * every expense total; without the note the number looks like a missing expense.
+ */
 export default function CreditPage() {
   const { monthKey, setMonthKey } = useMonth();
   const navigate = useNavigate();
   const { expenseCategories } = useLookups();
-  const [imports, setImports] = useState<CreditImport[] | null>(null);
   const [selected, setSelected] = useState<CreditImportDetail | null>(null);
+  const [detailError, setDetailError] = useState("");
   const [monthFilter, setMonthFilter] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [catFilter, setCatFilter] = useState<string>("");
@@ -37,29 +52,39 @@ export default function CreditPage() {
   const [learn, setLearn] = useState<{ keyword: string; categoryId: number; categoryName: string } | null>(null);
   const [message, setMessage] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const importsRes = useAsync(() => listCreditImports(), [reloadKey], "לא הצלחנו לטעון את ייבואי האשראי");
+  const chartsRes = useAsync(() => getCharts(monthKey), [monthKey, reloadKey], "לא הצלחנו לטעון את פילוח האשראי");
+  const imports = importsRes.data;
+
+  const load = () => setReloadKey((k) => k + 1);
 
   function viewMonthOnDashboard(monthKey: string) {
     setMonthKey(monthKey);
     navigate("/");
   }
 
-  const load = useCallback(() => {
-    listCreditImports()
-      .then((list) => {
-        setImports(list);
-        // Auto-open the most recent import so its month-by-month split is
-        // visible right away instead of hidden behind a click.
-        setSelected((current) => {
-          if (current || list.length === 0) return current;
-          getCreditImport(list[0].id).then(setSelected).catch(() => {});
-          return current;
-        });
+  // Auto-open the most recent import so its month-by-month split is visible
+  // right away instead of hidden behind a click.
+  useEffect(() => {
+    if (!imports || imports.length === 0 || selected) return;
+    let alive = true;
+    getCreditImport(imports[0].id)
+      .then((detail) => {
+        if (alive) {
+          setSelected(detail);
+          setDetailError("");
+        }
       })
-      .catch(() => setImports([]));
-  }, []);
-
-  useEffect(load, [load]);
+      .catch((err: unknown) => {
+        if (alive) setDetailError(apiErrorMessage(err, "לא הצלחנו לפתוח את הייבוא האחרון"));
+      });
+    return () => {
+      alive = false;
+    };
+  }, [imports, selected]);
 
   async function onUpload(file: File) {
     setUploading(true);
@@ -140,7 +165,23 @@ export default function CreditPage() {
     load();
   }
 
-  if (!imports) return <Loading />;
+  // --- KPI inputs (§6.2) -------------------------------------------------
+  // Everything below is a count/sum over rows that are already on screen; no
+  // financial rule is recomputed. "financing" is shown separately because
+  // CLAUDE.md §5 excludes it from expense totals.
+  const pendingImports = (imports ?? []).filter((imp) => imp.status !== "confirmed");
+  const pendingTransactions = pendingImports.reduce((sum, imp) => sum + imp.totalTransactions, 0);
+  const selectedTransactions = selected?.transactions ?? [];
+  const financingTotal = selectedTransactions
+    .filter((tx) => tx.transactionType === "financing")
+    .reduce((sum, tx) => sum + Number(tx.amount), 0);
+  const uncategorizedCount = selectedTransactions.filter(
+    (tx) => tx.categoryId === null && tx.transactionType !== "financing"
+  ).length;
+  const thisMonth = currentMonthKey();
+  const nextBilling =
+    (selected?.monthlyBreakdown ?? []).filter((m) => m.monthKey >= thisMonth).sort((a, b) => a.monthKey.localeCompare(b.monthKey))[0] ??
+    null;
 
   const monthRange = (row: CreditImport) => {
     if (row.firstBillingDate && row.lastBillingDate) {
@@ -168,8 +209,8 @@ export default function CreditPage() {
       align: "left",
       render: (row) => (
         <span className="row-actions">
-          <Button size="sm" variant="ghost" onClick={() => openImport(row)}>👁️</Button>
-          <Button size="sm" variant="ghost" onClick={() => removeImport(row)}>🗑️</Button>
+          <Button size="sm" variant="ghost" onClick={() => openImport(row)} aria-label="פתיחת הייבוא">👁️</Button>
+          <Button size="sm" variant="ghost" onClick={() => removeImport(row)} aria-label="מחיקת הייבוא">🗑️</Button>
         </span>
       ),
     },
@@ -258,14 +299,88 @@ export default function CreditPage() {
       </div>
 
       {message && <div className="info-banner">{message}</div>}
+      {detailError && (
+        <WidgetError title="לא הצלחנו לפתוח את הייבוא האחרון" detail={detailError} onRetry={load} inline />
+      )}
+
+      {/* KPI (§6.2) — scoped to the selected import, and each card says so. */}
+      <div className="kpi-row">
+        <AsyncSection
+          resource={importsRes}
+          errorTitle="לא הצלחנו לטעון את נתוני האשראי"
+          skeleton={<SkeletonCard />}
+        >
+          {() => (
+            <>
+              <SummaryCard
+                label="חיוב קרוב"
+                value={nextBilling ? formatCurrency(nextBilling.total) : "—"}
+                // Without a loaded import we genuinely do not know — not ₪0 (§1.2).
+                certainty={nextBilling ? "measured" : "unknown"}
+                sub={nextBilling ? `${formatMonthKey(nextBilling.monthKey)} · בייבוא הנבחר` : "לא נטען ייבוא עם חיוב עתידי"}
+              />
+              <SummaryCard
+                label="עסקאות ממתינות לאישור"
+                value={String(pendingTransactions)}
+                tone={pendingTransactions > 0 ? "warning" : "success"}
+                sub={pendingTransactions > 0 ? `ב־${pendingImports.length} ייבואים` : "הכול מאושר ✓"}
+              />
+              <SummaryCard
+                label="אשראי מתגלגל"
+                value={formatCurrency(financingTotal)}
+                sub="מימון פנימי — לא נספר בהוצאות"
+              />
+              <SummaryCard
+                label="לא מסווגות באשראי"
+                value={String(uncategorizedCount)}
+                tone={uncategorizedCount > 0 ? "warning" : "success"}
+                sub={uncategorizedCount > 0 ? "בייבוא הנבחר · לחיצה מסננת" : "בייבוא הנבחר"}
+                onClick={uncategorizedCount > 0 ? () => setCatFilter("none") : undefined}
+              />
+            </>
+          )}
+        </AsyncSection>
+      </div>
+
+      <Card title={`אשראי לפי קטגוריה — ${formatMonthKey(monthKey)}`}>
+        <AsyncSection
+          resource={chartsRes}
+          errorTitle="לא הצלחנו לטעון את פילוח האשראי"
+          skeleton={<SkeletonChart />}
+          isEmpty={(data) => data.creditByCategory.length === 0}
+          emptyState={
+            <EmptyState
+              icon="💳"
+              title="אין עסקאות אשראי בחודש הזה"
+              hint="גררי לכאן קובץ אקסל מאתר חברת האשראי"
+            />
+          }
+        >
+          {(data) => <CategoryBarChart data={data.creditByCategory} />}
+        </AsyncSection>
+      </Card>
 
       <Card title="ייבואים">
-        <Table
-          columns={importColumns}
-          rows={imports}
-          rowKey={(row) => row.id}
-          emptyState={<EmptyState icon="💳" title="אין ייבואי אשראי" hint="ייבאי קובץ אקסל של פירוט חיובי האשראי" />}
-        />
+        <AsyncSection
+          resource={importsRes}
+          errorTitle="לא הצלחנו לטעון את ייבואי האשראי"
+          skeleton={<SkeletonRows rows={3} />}
+        >
+          {(rows) => (
+            <Table
+              columns={importColumns}
+              rows={rows}
+              rowKey={(row) => row.id}
+              emptyState={
+                <EmptyState
+                  icon="💳"
+                  title="אין עדיין ייבוא אשראי"
+                  hint="גררי לכאן קובץ אקסל מאתר חברת האשראי"
+                />
+              }
+            />
+          )}
+        </AsyncSection>
       </Card>
 
       {selected && selected.monthlyBreakdown && selected.monthlyBreakdown.length > 1 && (
@@ -372,7 +487,31 @@ export default function CreditPage() {
             columns={txColumns}
             rows={filteredTransactions}
             rowKey={(row) => row.id}
-            emptyState={<EmptyState icon="🔍" title="אין עסקאות שמתאימות לסינון" hint="נסי לנקות חלק מהמסננים" />}
+            emptyState={
+              /* Genuinely empty vs "the filter cut everything" need opposite actions (§4.5). */
+              selectedTransactions.length === 0 ? (
+                <EmptyState icon="💳" title="אין עסקאות בייבוא הזה" />
+              ) : (
+                <EmptyState
+                  icon="🔍"
+                  title="אין תוצאות למסננים הנוכחיים"
+                  action={
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setSearch("");
+                        setCatFilter("");
+                        setTypeFilter("");
+                        setMonthFilter(null);
+                      }}
+                    >
+                      ניקוי מסננים
+                    </Button>
+                  }
+                />
+              )
+            }
           />
         </Card>
       )}

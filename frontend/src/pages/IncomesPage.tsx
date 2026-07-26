@@ -1,14 +1,16 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
+import { AsyncSection } from "../components/common/AsyncSection";
 import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
 import { EmptyState } from "../components/common/EmptyState";
 import { ErrorMessage } from "../components/common/ErrorMessage";
 import { Input } from "../components/common/Input";
-import { Loading } from "../components/common/Loading";
 import { Modal } from "../components/common/Modal";
 import { Select } from "../components/common/Select";
+import { SkeletonRows } from "../components/common/Skeleton";
 import { Table, type Column } from "../components/common/Table";
 import { useMonth } from "../context/MonthContext";
+import { useAsync } from "../hooks/useAsync";
 import { apiErrorMessage } from "../services/api";
 import { createIncome, deleteIncome, listIncomes, updateIncome, type IncomeInput } from "../services/finance.service";
 import type { Income } from "../types/models";
@@ -36,24 +38,16 @@ const emptyForm = (monthKey: string): IncomeInput => ({
 
 export default function IncomesPage() {
   const { monthKey } = useMonth();
-  const [incomes, setIncomes] = useState<Income[] | null>(null);
-  const [total, setTotal] = useState(0);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Income | null>(null);
   const [form, setForm] = useState<IncomeInput>(emptyForm(monthKey));
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
-  const load = useCallback(() => {
-    listIncomes(monthKey)
-      .then((data) => {
-        setIncomes(data.incomes);
-        setTotal(data.total ?? data.incomes.reduce((sum, income) => sum + Number(income.amount), 0));
-      })
-      .catch(() => setIncomes([]));
-  }, [monthKey]);
-
-  useEffect(load, [load]);
+  const incomesRes = useAsync(() => listIncomes(monthKey), [monthKey, reloadKey], "לא הצלחנו לטעון את ההכנסות");
+  const load = () => setReloadKey((k) => k + 1);
+  const total = incomesRes.data?.total ?? 0;
 
   function openCreate() {
     setEditing(null);
@@ -98,8 +92,6 @@ export default function IncomesPage() {
     load();
   }
 
-  if (!incomes) return <Loading />;
-
   const columns: Column<Income>[] = [
     { key: "date", header: "תאריך", render: (row) => formatDate(row.incomeDate) },
     { key: "desc", header: "תיאור", render: (row) => row.description || "—" },
@@ -116,8 +108,8 @@ export default function IncomesPage() {
       align: "left",
       render: (row) => (
         <span className="row-actions">
-          <Button size="sm" variant="ghost" onClick={() => openEdit(row)}>✏️</Button>
-          <Button size="sm" variant="ghost" onClick={() => remove(row)}>🗑️</Button>
+          <Button size="sm" variant="ghost" onClick={() => openEdit(row)} aria-label="עריכה">✏️</Button>
+          <Button size="sm" variant="ghost" onClick={() => remove(row)} aria-label="מחיקה">🗑️</Button>
         </span>
       ),
     },
@@ -133,12 +125,31 @@ export default function IncomesPage() {
       </div>
 
       <Card>
-        <Table
-          columns={columns}
-          rows={incomes}
-          rowKey={(row) => row.id}
-          emptyState={<EmptyState icon="💰" title="אין הכנסות החודש" hint="הוסיפי משכורת, קצבה או כל הכנסה אחרת" />}
-        />
+        <AsyncSection
+          resource={incomesRes}
+          errorTitle="לא הצלחנו לטעון את ההכנסות"
+          skeleton={<SkeletonRows rows={5} />}
+        >
+          {(data) => (
+            <Table
+              columns={columns}
+              rows={data.incomes}
+              rowKey={(row) => row.id}
+              emptyState={
+                <EmptyState
+                  icon="💰"
+                  title="אין הכנסות החודש"
+                  hint="הוסיפי משכורת, קצבה או כל הכנסה אחרת"
+                  action={
+                    <Button size="sm" onClick={openCreate}>
+                      + הוספת הכנסה
+                    </Button>
+                  }
+                />
+              }
+            />
+          )}
+        </AsyncSection>
       </Card>
 
       <Modal title={editing ? "עריכת הכנסה" : "הוספת הכנסה"} open={formOpen} onClose={() => setFormOpen(false)}>

@@ -1,11 +1,14 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
+import { AsyncSection } from "../components/common/AsyncSection";
 import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
 import { EmptyState } from "../components/common/EmptyState";
 import { ErrorMessage } from "../components/common/ErrorMessage";
 import { Input } from "../components/common/Input";
-import { Loading } from "../components/common/Loading";
 import { Modal } from "../components/common/Modal";
+import { SkeletonCard, SkeletonRows } from "../components/common/Skeleton";
+import { SummaryCard } from "../components/dashboard/SummaryCard";
+import { useAsync } from "../hooks/useAsync";
 import { apiErrorMessage } from "../services/api";
 import {
   createSavingsGoal,
@@ -20,20 +23,22 @@ import { formatCurrency, formatDate } from "../utils/format";
 
 const emptyForm: SavingsGoalInput = { goalName: "", targetAmount: 0, currentAmount: 0, monthlyTarget: null, targetDate: null };
 
+/**
+ * טאב־משנה "חיסכון" (IA §6.4). Three KPIs, not four — a fourth would be padding.
+ * No chart here on purpose: the per-goal progress bars already carry it.
+ */
 export default function SavingsPage() {
-  const [goals, setGoals] = useState<SavingsGoal[] | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<SavingsGoal | null>(null);
   const [form, setForm] = useState<SavingsGoalInput>(emptyForm);
   const [error, setError] = useState("");
   const [depositGoal, setDepositGoal] = useState<SavingsGoal | null>(null);
   const [depositAmount, setDepositAmount] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
 
-  const load = useCallback(() => {
-    listSavingsGoals().then(setGoals).catch(() => setGoals([]));
-  }, []);
-
-  useEffect(load, [load]);
+  const goalsRes = useAsync(() => listSavingsGoals(), [reloadKey], "לא הצלחנו לטעון את יעדי החיסכון");
+  const load = () => setReloadKey((k) => k + 1);
+  const goals = goalsRes.data ?? [];
 
   function openCreate() {
     setEditing(null);
@@ -84,28 +89,67 @@ export default function SavingsPage() {
     load();
   }
 
-  if (!goals) return <Loading />;
-
   const totalSaved = goals.reduce((sum, g) => sum + Number(g.currentAmount), 0);
+  const totalTarget = goals.reduce((sum, g) => sum + Number(g.targetAmount), 0);
+  const completion = totalTarget > 0 ? (totalSaved / totalTarget) * 100 : null;
 
   return (
     <>
       <div className="page-toolbar">
         <Button onClick={openCreate}>+ יעד חיסכון</Button>
-        {goals.length > 0 && (
-          <div className="toolbar-total">
-            נחסך סה״כ: <strong className="mono text-success">{formatCurrency(totalSaved)}</strong>
-          </div>
-        )}
       </div>
 
-      {goals.length === 0 ? (
-        <Card>
-          <EmptyState icon="🐷" title="אין יעדי חיסכון" hint="חופשה, רכב חדש, קרן חירום — הגדירי יעד ותתחילי לחסוך" />
-        </Card>
-      ) : (
+      {/* KPI (§6.4) */}
+      <div className="kpi-row">
+        <AsyncSection
+          resource={goalsRes}
+          errorTitle="לא הצלחנו לטעון את יעדי החיסכון"
+          skeleton={<SkeletonCard />}
+          isEmpty={(data) => data.length === 0}
+          emptyState={
+            <SummaryCard label="חיסכון" value="—" certainty="unknown" sub="אין עדיין יעדי חיסכון" />
+          }
+        >
+          {() => (
+            <>
+              <SummaryCard label="סה״כ נחסך" value={formatCurrency(totalSaved)} tone="success" />
+              <SummaryCard label="יעד כולל" value={formatCurrency(totalTarget)} />
+              <SummaryCard
+                label="אחוז השלמה"
+                value={completion === null ? "—" : `${Math.round(completion)}%`}
+                // Goals with no target amount cannot produce a percentage (§1.2).
+                certainty={completion === null ? "unknown" : "measured"}
+                tone={completion !== null && completion >= 100 ? "success" : "primary"}
+                sub={`${goals.length} יעדים`}
+              />
+            </>
+          )}
+        </AsyncSection>
+      </div>
+
+      <AsyncSection
+        resource={goalsRes}
+        errorTitle="לא הצלחנו לטעון את יעדי החיסכון"
+        skeleton={<SkeletonRows rows={3} />}
+        isEmpty={(data) => data.length === 0}
+        emptyState={
+          <Card>
+            <EmptyState
+              icon="🐷"
+              title="אין עדיין יעדי חיסכון"
+              hint="הגדירי יעד — אפילו קטן — כדי לראות התקדמות"
+              action={
+                <Button size="sm" onClick={openCreate}>
+                  + יעד חיסכון
+                </Button>
+              }
+            />
+          </Card>
+        }
+      >
+        {(goalList) => (
         <div className="budget-grid">
-          {goals.map((goal) => {
+          {goalList.map((goal) => {
             const current = Number(goal.currentAmount);
             const target = Number(goal.targetAmount);
             const percent = target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 0;
@@ -114,8 +158,8 @@ export default function SavingsPage() {
                 <div className="budget-card-head">
                   <span className="budget-card-name">🐷 {goal.goalName}</span>
                   <span className="row-actions">
-                    <Button size="sm" variant="ghost" onClick={() => openEdit(goal)}>✏️</Button>
-                    <Button size="sm" variant="ghost" onClick={() => remove(goal)}>🗑️</Button>
+                    <Button size="sm" variant="ghost" onClick={() => openEdit(goal)} aria-label="עריכה">✏️</Button>
+                    <Button size="sm" variant="ghost" onClick={() => remove(goal)} aria-label="מחיקה">🗑️</Button>
                   </span>
                 </div>
                 <div className="budget-bar">
@@ -135,7 +179,8 @@ export default function SavingsPage() {
             );
           })}
         </div>
-      )}
+        )}
+      </AsyncSection>
 
       <Modal title={editing ? "עריכת יעד" : "יעד חיסכון חדש"} open={formOpen} onClose={() => setFormOpen(false)}>
         <form onSubmit={submit}>
