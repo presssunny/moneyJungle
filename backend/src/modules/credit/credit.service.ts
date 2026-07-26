@@ -2,6 +2,7 @@ import { prisma } from "../../config/database";
 import { Prisma } from "../../../generated/prisma/client";
 import { ApiError } from "../../utils/ApiError";
 import { decimalToNumber, round2 } from "../../utils/money.utils";
+import { reconciliationService } from "../bank/reconciliation.service";
 import { buildRuleCategorizer } from "../categories/categorization.service";
 import { hashFile } from "../imports/statementDetector.service";
 import { ParsedCreditRow, parseCreditFile } from "./creditParser.service";
@@ -210,6 +211,10 @@ export const creditService = {
       throw ApiError.badRequest("הייבוא כבר אושר");
     }
     await prisma.creditImport.update({ where: { id }, data: { status: "confirmed" } });
+    // A confirmed statement changes what the bank's card settlements mean: charges
+    // this file itemizes must stop being counted as lump-sum spend, or the same
+    // money is counted twice (CLAUDE.md §4). Re-resolving is what closes that loop.
+    await reconciliationService.resolveAll(userId);
     return this.getImport(userId, id);
   },
 
@@ -217,6 +222,9 @@ export const creditService = {
     const creditImport = await prisma.creditImport.findFirst({ where: { id, userId } });
     if (!creditImport) throw ApiError.notFound("הייבוא לא נמצא");
     await prisma.creditImport.delete({ where: { id } }); // cascades to transactions
+    // The mirror case: without this file, its card is no longer itemized anywhere,
+    // so the bank settlements it silenced have to become visible spend again.
+    await reconciliationService.resolveAll(userId);
   },
 
   /**
