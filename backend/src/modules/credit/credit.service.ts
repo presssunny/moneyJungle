@@ -3,6 +3,7 @@ import { Prisma } from "../../../generated/prisma/client";
 import { ApiError } from "../../utils/ApiError";
 import { decimalToNumber, round2 } from "../../utils/money.utils";
 import { buildRuleCategorizer } from "../categories/categorization.service";
+import { hashFile } from "../imports/statementDetector.service";
 import { ParsedCreditRow, parseCreditFile } from "./creditParser.service";
 
 /**
@@ -103,7 +104,49 @@ export const creditService = {
     buffer: Buffer,
     override?: { importMonth?: number; importYear?: number }
   ) {
-    const rows = parseCreditFile(buffer);
+    const parsedRows = parseCreditFile(buffer);
+    const fileHash = hashFile(buffer);
+
+    // Same bytes, any file name: this exact statement was already taken in.
+    const sameFile = await prisma.creditImport.findFirst({
+      where: { userId, fileHash },
+      select: { id: true, fileName: true, createdAt: true, totalTransactions: true, status: true },
+    });
+
+    // Keep only transactions not already stored, so re-uploading a statement
+    // that overlaps last month's adds the new days and nothing else. Matching
+    // is on the statement's own identifying fields — a card re-issues the same
+    // business/amount pair often, so the date must take part.
+    const existing = await prisma.creditTransaction.findMany({
+      where: { userId },
+      select: { transactionDate: true, businessName: true, amount: true, paymentCount: true },
+    });
+    const keyOf = (date: Date, business: string, amount: number, payments: number) =>
+      `${date.toISOString().slice(0, 10)}|${business.trim()}|${round2(amount)}|${payments}`;
+    const seen = new Set(
+      existing.map((t) => keyOf(t.transactionDate, t.businessName, Number(t.amount), t.paymentCount))
+    );
+    const rows = parsedRows.filter((row) => {
+      const key = keyOf(row.transactionDate, row.businessName, row.amount, row.paymentCount);
+      if (seen.has(key)) return false;
+      seen.add(key); // also collapses repeats inside the same file
+      return true;
+    });
+    const skippedDuplicates = parsedRows.length - rows.length;
+
+    // Nothing new at all — report it instead of creating an empty import that
+    // the user would have to find and delete.
+    if (rows.length === 0) {
+      return {
+        alreadyImported: true,
+        skippedDuplicates,
+        parsedRows: parsedRows.length,
+        previousImport: sameFile
+          ? { id: sameFile.id, fileName: sameFile.fileName, createdAt: sameFile.createdAt }
+          : null,
+      } as const;
+    }
+
     const inferred = inferImportMonth(rows);
     // Label uses the newest billing month; each transaction is still attributed
     // to its own billing month everywhere else, so a multi-month file is not
@@ -116,11 +159,6 @@ export const creditService = {
       rows.filter((row) => row.transactionType !== "financing").reduce((sum, row) => sum + row.amount, 0)
     );
 
-    // Warn (don't block) if the same file looks already imported — avoids
-    // silently double-counting when a statement is uploaded twice.
-    const duplicate = await prisma.creditImport.findFirst({
-      where: { userId, fileName, totalTransactions: rows.length },
-    });
 
     const created = await prisma.$transaction(async (tx) => {
       const creditImport = await tx.creditImport.create({
@@ -132,6 +170,7 @@ export const creditService = {
           totalTransactions: rows.length,
           totalAmount,
           status: "pending",
+          fileHash,
         },
       });
       await tx.creditTransaction.createMany({
@@ -152,7 +191,16 @@ export const creditService = {
       return creditImport;
     });
     const detail = await this.getImport(userId, created.id);
-    return { ...detail, possibleDuplicate: Boolean(duplicate) };
+    return {
+      ...detail,
+      alreadyImported: false as const,
+      /** Rows this file shared with data already stored — taken in only once. */
+      skippedDuplicates,
+      parsedRows: parsedRows.length,
+      previousImport: sameFile
+        ? { id: sameFile.id, fileName: sameFile.fileName, createdAt: sameFile.createdAt }
+        : null,
+    };
   },
 
   async confirmImport(userId: number, id: number) {

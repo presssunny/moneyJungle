@@ -6,6 +6,8 @@ import { ApiError } from "../../utils/ApiError";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { MonthQuery, monthQuerySchema, resolveMonth } from "../../utils/validation.utils";
 import { importsService } from "./imports.service";
+import { smartImportService } from "./smartImport.service";
+import { detectStatement, type StatementKind } from "./statementDetector.service";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -15,6 +17,47 @@ const upload = multer({
 export const importsRoutes = Router();
 
 importsRoutes.use(gateAuth);
+
+const FORCED_KINDS: readonly StatementKind[] = ["bank", "credit"];
+
+function readForcedKind(value: unknown): StatementKind | undefined {
+  return FORCED_KINDS.find((kind) => kind === value);
+}
+
+/**
+ * Look at a file and say what it is, without importing anything. Lets the UI
+ * show the user what will happen before she commits to it.
+ */
+importsRoutes.post(
+  "/detect",
+  upload.single("file"),
+  asyncHandler(async (req: Request, res: Response) => {
+    if (!req.file) throw ApiError.badRequest("יש לצרף קובץ");
+    const fileName = Buffer.from(req.file.originalname, "latin1").toString("utf8");
+    const detection = detectStatement(req.file.buffer, fileName);
+    res.json({ ...detection, fileName });
+  })
+);
+
+/** Import a statement of either kind — the app works out which. */
+importsRoutes.post(
+  "/smart",
+  upload.single("file"),
+  asyncHandler(async (req: Request, res: Response) => {
+    if (!req.file) throw ApiError.badRequest("יש לצרף קובץ אקסל או PDF");
+    const fileName = Buffer.from(req.file.originalname, "latin1").toString("utf8");
+    res
+      .status(201)
+      .json(
+        await smartImportService.importFile(
+          req.userId!,
+          fileName,
+          req.file.buffer,
+          readForcedKind(req.body?.kind)
+        )
+      );
+  })
+);
 
 importsRoutes.post(
   "/expenses",
