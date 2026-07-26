@@ -28,6 +28,7 @@ import {
 } from "../services/dashboard.service";
 import { listCreditImports } from "../services/finance.service";
 import { listAlerts } from "../services/planning.service";
+import type { DashboardSummary } from "../types/dashboard.types";
 import { formatCurrency, formatDate } from "../utils/format";
 
 /**
@@ -82,20 +83,37 @@ export default function DashboardPage() {
       tone: "warning",
     });
   }
-  // Bank rows the import deliberately held back. Money that exists but is in no
-  // total is the one thing the dashboard must never stay quiet about.
-  if (summary && summary.bankReview.pendingCount > 0) {
+  // Money that exists but sits in no total is the one thing the dashboard must
+  // never stay quiet about — so an unresolved row is critical, not a warning.
+  if (summary && summary.bankReview.unresolvedCount > 0) {
+    attention.push({
+      id: "bank-unresolved",
+      icon: "🚧",
+      text: `${summary.bankReview.unresolvedCount} תנועות בנק ללא סיווג — לא נספרות באף מספר`,
+      to: "/accounts?tab=reconcile",
+      tone: "critical",
+    });
+  } else if (summary && summary.bankReview.pendingCount > 0) {
     attention.push({
       id: "bank-review",
       icon: "🏦",
-      text:
-        summary.bankReview.pendingPrincipal > 0
-          ? `${summary.bankReview.pendingCount} תנועות בנק ממתינות לך — כולל ${formatCurrency(
-              summary.bankReview.pendingPrincipal
-            )} החזרי קרן הלוואה`
-          : `${summary.bankReview.pendingCount} תנועות בנק ממתינות לסיווג`,
+      text: `${summary.bankReview.pendingCount} תנועות בנק ממתינות לסיווג`,
       to: "/accounts?tab=reconcile",
       tone: "warning",
+    });
+  }
+  // Resolved, counted, but coarse: a card bill with no itemized statement behind
+  // it, or a loan received whose terms are unknown. Worth a look, not an alarm.
+  if (summary && summary.bankReview.needsAttention > 0) {
+    attention.push({
+      id: "bank-coarse",
+      icon: "💳",
+      text:
+        summary.bankMonth.unitemizedCard > 0
+          ? `${formatCurrency(summary.bankMonth.unitemizedCard)} חיובי אשראי ללא פירוט — נספרים כהוצאה אחת`
+          : `${formatCurrency(summary.bankMonth.loanDrawdown)} הלוואה שהתקבלה — יש להשלים את תנאי ההלוואה`,
+      to: "/accounts?tab=reconcile",
+      tone: "info",
     });
   }
   const pendingCredit = (creditRes.data ?? []).filter((imp) => imp.status !== "confirmed");
@@ -198,6 +216,13 @@ export default function DashboardPage() {
           </div>
         )}
       </AsyncSection>
+
+      {/* Money that left the account this month and is deliberately NOT in "יצא
+          החודש": loan principal lowers debt, a settled card bill is itemized in
+          the credit tab, an internal transfer is not a payment. Without this the
+          statement and the dashboard look like they disagree — they don't, and
+          this is the line that proves it. */}
+      {summary && <NonSpendingRow bank={summary.bankMonth} />}
 
       {/* KPI row (§3.1). Two resources feed it, each failing independently. */}
       <div className="kpi-row kpi-row-hero">
@@ -444,5 +469,55 @@ export default function DashboardPage() {
         }}
       />
     </>
+  );
+}
+
+/**
+ * Bank money of this month that is real but is not spending, each item naming the
+ * figure that holds it instead. Rendered only when there is something to say.
+ *
+ * This closes the gap between "what left the account" and "יצא החודש": the two
+ * differ by exactly these amounts, and stating them is what makes the difference
+ * checkable instead of suspicious.
+ */
+function NonSpendingRow({ bank }: { bank: DashboardSummary["bankMonth"] }) {
+  const items: Array<{ label: string; value: number; hint: string }> = [
+    {
+      label: "הקטנת חוב",
+      value: bank.debtReduction,
+      hint:
+        bank.loanUnsplit > 0
+          ? `קרן ${formatCurrency(bank.principal)} + ${formatCurrency(bank.loanUnsplit)} ללא פירוט`
+          : "תשלומי קרן הלוואה — לא הוצאה",
+    },
+    {
+      label: "חיובי אשראי מפורטים",
+      value: bank.cardSettled,
+      hint: "העסקאות עצמן נספרות בטאב אשראי",
+    },
+    { label: "העברות פנימיות", value: bank.internalTransfer, hint: "בין חשבונות שלך — לא תשלום" },
+    {
+      label: "הלוואה שהתקבלה",
+      value: bank.loanDrawdown,
+      hint: "התחייבות חדשה — לא הכנסה",
+    },
+  ].filter((item) => item.value > 0);
+
+  if (items.length === 0) return null;
+
+  return (
+    <Card title="יצא מהחשבון אבל אינו הוצאה">
+      <ul className="attention-list non-spending-list">
+        {items.map((item) => (
+          <li key={item.label}>
+            <span className="attention-text">
+              {item.label}
+              <small className="text-muted block">{item.hint}</small>
+            </span>
+            <span className="mono">{formatCurrency(item.value)}</span>
+          </li>
+        ))}
+      </ul>
+    </Card>
   );
 }
