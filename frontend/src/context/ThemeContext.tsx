@@ -106,6 +106,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
           applyTheme(data.theme);
         }
       })
+      // Deliberately silent (fail-open): the theme already applied from
+      // localStorage, so a failed sync changes nothing the user can see. Showing
+      // an error for a cosmetic preference would be worse than the failure.
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -114,6 +117,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setThemeState(next);
     applyTheme(next);
     if (isLoggedIn()) {
+      // Deliberately silent (fail-open): the theme is already applied locally and
+      // persisted to localStorage; failing to persist it server-side only means
+      // it will not follow to another device. Not worth an error state.
       api.patch("/settings", { theme: next }).catch(() => {});
     }
   }
