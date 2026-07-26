@@ -1,8 +1,11 @@
 import { NavLink, useLocation } from "react-router-dom";
 import { MANAGE_NAV, routeTitle } from "../../app/navigation";
 import { useGateAuth } from "../../hooks/useGateAuth";
-import { MonthSelector } from "./MonthSelector";
 
+/**
+ * Title + account actions only. The month picker moved to the sticky FilterBar
+ * below (IA §2.3) so all global filters live in one row, on every tab.
+ */
 export function Header() {
   const location = useLocation();
   const { logout } = useGateAuth();
@@ -14,7 +17,6 @@ export function Header() {
         <span aria-hidden>{current?.icon}</span> {current?.label ?? ""}
       </h1>
       <div className="header-actions">
-        <MonthSelector />
         <NavLink to={MANAGE_NAV.path} className="header-icon-btn" title={MANAGE_NAV.label} aria-label={MANAGE_NAV.label}>
           {MANAGE_NAV.icon}
         </NavLink>

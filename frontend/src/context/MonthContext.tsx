@@ -1,6 +1,13 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
-import { currentMonthKey } from "../utils/format";
+import type { ReactNode } from "react";
+import { FiltersProvider, useFilters } from "./FiltersContext";
 
+/**
+ * Compatibility shim.
+ *
+ * The month is no longer its own context — it is the `range` slice of the
+ * global filters (IA §2.2). `useMonth()` is kept as-is so every existing page
+ * keeps working unchanged; new code should read `useFilters()` directly.
+ */
 interface MonthContextValue {
   /** Selected month as "YYYY-MM" */
   monthKey: string;
@@ -10,27 +17,12 @@ interface MonthContextValue {
   goToday: () => void;
 }
 
-const MonthContext = createContext<MonthContextValue | null>(null);
-
+/** @deprecated Use `FiltersProvider`. Kept so older imports do not break. */
 export function MonthProvider({ children }: { children: ReactNode }) {
-  const [monthKey, setMonthKey] = useState(currentMonthKey());
-
-  const value = useMemo<MonthContextValue>(() => {
-    const [year, month] = monthKey.split("-").map(Number);
-    return {
-      monthKey,
-      year,
-      month,
-      setMonthKey,
-      goToday: () => setMonthKey(currentMonthKey()),
-    };
-  }, [monthKey]);
-
-  return <MonthContext.Provider value={value}>{children}</MonthContext.Provider>;
+  return <FiltersProvider>{children}</FiltersProvider>;
 }
 
 export function useMonth(): MonthContextValue {
-  const ctx = useContext(MonthContext);
-  if (!ctx) throw new Error("useMonth must be used inside MonthProvider");
-  return ctx;
+  const { monthKey, year, month, setMonthKey, goToday } = useFilters();
+  return { monthKey, year, month, setMonthKey, goToday };
 }
