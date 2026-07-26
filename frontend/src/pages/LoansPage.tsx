@@ -17,6 +17,7 @@ import {
   updateLoan,
   type LoanInput,
 } from "../services/finance.service";
+import type { StatementLoanActivity, StatementLoanGroup } from "../services/planning.service";
 import type { Loan, LoanScheduleRow, LoanTotals } from "../types/models";
 import { formatCurrency } from "../utils/format";
 
@@ -45,6 +46,7 @@ const emptyForm: LoanInput = {
 export default function LoansPage() {
   const [loans, setLoans] = useState<Loan[] | null>(null);
   const [totals, setTotals] = useState<LoanTotals | null>(null);
+  const [fromStatement, setFromStatement] = useState<StatementLoanActivity | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Loan | null>(null);
   const [form, setForm] = useState<LoanInput>(emptyForm);
@@ -56,6 +58,7 @@ export default function LoansPage() {
       .then((data) => {
         setLoans(data.loans);
         setTotals(data.totals);
+        setFromStatement(data.fromStatement);
       })
       .catch(() => setLoans([]));
   }, []);
@@ -174,6 +177,62 @@ export default function LoansPage() {
     },
   ];
 
+  // Loan activity straight from the statement. Deliberately no "balance" column:
+  // the statement says what was paid, never how much is left, and printing a
+  // remaining balance we cannot know would be an invented number.
+  const statementColumns: Column<StatementLoanGroup>[] = [
+    {
+      key: "label",
+      header: "הלוואה",
+      render: (row) => (
+        <span>
+          <strong>{row.label}</strong>
+          <small className="text-muted block">
+            {row.months.join(", ")} · {row.rows.length} שורות בדוח
+          </small>
+        </span>
+      ),
+    },
+    {
+      key: "principal",
+      header: "קרן ששולמה",
+      align: "left",
+      render: (row) => <span className="mono">{formatCurrency(row.principalPaid)}</span>,
+    },
+    {
+      key: "interest",
+      header: "ריבית ששולמה",
+      align: "left",
+      render: (row) => (
+        <span className="mono text-warning">{formatCurrency(row.interestPaid)}</span>
+      ),
+    },
+    {
+      key: "unsplit",
+      header: "ללא פירוט",
+      align: "left",
+      render: (row) =>
+        row.unsplitPaid > 0 ? (
+          <span className="mono" title="הדוח לא מפצל בין קרן לריבית">
+            {formatCurrency(row.unsplitPaid)}
+          </span>
+        ) : (
+          <span className="text-muted">—</span>
+        ),
+    },
+    {
+      key: "drawdown",
+      header: "התקבל",
+      align: "left",
+      render: (row) =>
+        row.drawdown > 0 ? (
+          <span className="mono text-success">{formatCurrency(row.drawdown)}</span>
+        ) : (
+          <span className="text-muted">—</span>
+        ),
+    },
+  ];
+
   return (
     <>
       <div className="page-toolbar">
@@ -195,6 +254,27 @@ export default function LoansPage() {
           emptyState={<EmptyState icon="📉" title="אין הלוואות" hint="הוסיפי הלוואה כדי לעקוב אחרי ריביות והחזרים" />}
         />
       </Card>
+
+      {fromStatement && fromStatement.groups.length > 0 && (
+        <Card title="תשלומי הלוואות לפי הדוח הבנקאי">
+          <p className="text-muted">
+            הסכומים כאן הם השורות של הבנק עצמו, לא תחזית: קרן שכבר שולמה (הקטנת חוב — לא הוצאה),
+            ריבית שנגבתה (הוצאה מימונית) ותשלומים שהדוח לא פיצל בין קרן לריבית. הלוואה שלא הוגדרה
+            למעלה עדיין מופיעה כאן, כדי שהתשלומים שלה לא ייעלמו.
+          </p>
+          <div className="toolbar-total">
+            קרן ששולמה <strong className="mono">{formatCurrency(fromStatement.totals.principalPaid)}</strong> · ריבית{" "}
+            <strong className="mono text-warning">{formatCurrency(fromStatement.totals.interestPaid)}</strong> · ללא
+            פירוט <strong className="mono">{formatCurrency(fromStatement.totals.unsplitPaid)}</strong> · סה״כ הקטנת חוב{" "}
+            <strong className="mono text-success">{formatCurrency(fromStatement.totals.debtReduction)}</strong>
+          </div>
+          <Table
+            columns={statementColumns}
+            rows={fromStatement.groups}
+            rowKey={(row) => row.loanRef ?? row.label}
+          />
+        </Card>
+      )}
 
       <Modal title={editing ? "עריכת הלוואה" : "הוספת הלוואה"} open={formOpen} onClose={() => setFormOpen(false)}>
         <form onSubmit={submit}>
