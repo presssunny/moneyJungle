@@ -1,5 +1,6 @@
 import { ApiError } from "../../utils/ApiError";
 import { decimalToNumber, round2 } from "../../utils/money.utils";
+import { reconciliationService } from "../bank/reconciliation.service";
 import { amortizationSchedule, computeLoan } from "./loanCalculator.service";
 import { loansRepository } from "./loans.repository";
 import { CreateLoanBody, UpdateLoanBody } from "./loans.validation";
@@ -36,7 +37,12 @@ export const loansService = {
       annualInterest: round2(active.reduce((sum, l) => sum + l.computed.estimatedAnnualInterest, 0)),
       activeCount: active.length,
     };
-    return { loans: items, totals };
+    // What the bank statement actually reports about loans. A loan the user never
+    // entered still has real repayments in the account, and principal is debt
+    // reduction rather than spending — this is where that money is accounted for
+    // instead of sitting outside every figure.
+    const fromStatement = await reconciliationService.loanActivityFromStatement(userId);
+    return { loans: items, totals, fromStatement };
   },
 
   create(userId: number, body: CreateLoanBody) {
