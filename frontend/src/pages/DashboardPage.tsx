@@ -1,14 +1,15 @@
-import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { AsyncSection } from "../components/common/AsyncSection";
 import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
 import { EmptyState } from "../components/common/EmptyState";
 import { QuickAddBar } from "../components/common/QuickAddBar";
-import { Loading } from "../components/common/Loading";
+import { SkeletonCard, SkeletonChart, SkeletonRows } from "../components/common/Skeleton";
 import { AchievementsPanel } from "../components/dashboard/AchievementsPanel";
+import { AttentionPanel, type AttentionItem } from "../components/dashboard/AttentionPanel";
 import { CategoryBarChart } from "../components/dashboard/CategoryBarChart";
 import { InsightsPanel } from "../components/dashboard/InsightsPanel";
-import { LoanSplitChart } from "../components/dashboard/LoanSplitChart";
 import { MonthlyTrendChart } from "../components/dashboard/MonthlyTrendChart";
 import { PaceAlertBanner } from "../components/dashboard/PaceAlertBanner";
 import { SummaryCard } from "../components/dashboard/SummaryCard";
@@ -16,6 +17,7 @@ import { UpcomingPanel } from "../components/dashboard/UpcomingPanel";
 import { UpdatesTicker } from "../components/dashboard/UpdatesTicker";
 import { ReminderForm } from "../components/reminders/ReminderForm";
 import { useMonth } from "../context/MonthContext";
+import { useAsync } from "../hooks/useAsync";
 import {
   getAchievements,
   getCharts,
@@ -24,155 +26,319 @@ import {
   getSummary,
   getUpcoming,
 } from "../services/dashboard.service";
+import { listCreditImports } from "../services/finance.service";
 import { listAlerts } from "../services/planning.service";
-import type { DashboardCharts, DashboardSummary, RecentLists } from "../types/dashboard.types";
-import type { Achievements, Alert, DashboardInsights, Upcoming } from "../types/models";
 import { formatCurrency, formatDate } from "../utils/format";
 
+/**
+ * טאב "בית" — the state-and-direction tab (IA §3): "am I OK right now, and
+ * where is this heading?". Raw totals (income / expenses / credit / loans) moved
+ * to their own tabs per the no-duplicate-KPI rule (§1.1); what is left here is
+ * the daily check-in plus a list of things that need attention.
+ */
 export default function DashboardPage() {
   const { monthKey } = useMonth();
   const navigate = useNavigate();
-  const [summary, setSummary] = useState<DashboardSummary | null>(null);
-  const [charts, setCharts] = useState<DashboardCharts | null>(null);
-  const [recent, setRecent] = useState<RecentLists | null>(null);
-  const [insights, setInsights] = useState<DashboardInsights | null>(null);
-  const [achievements, setAchievements] = useState<Achievements | null>(null);
-  const [upcoming, setUpcoming] = useState<Upcoming | null>(null);
-  const [alerts, setAlerts] = useState<Alert[]>([]);
   const [reminderOpen, setReminderOpen] = useState(false);
   const [tickerKey, setTickerKey] = useState(0);
 
-  const load = useCallback(() => {
-    getSummary(monthKey).then(setSummary).catch(() => {});
-    getCharts(monthKey).then(setCharts).catch(() => {});
-    getRecent().then(setRecent).catch(() => {});
-    getInsights(monthKey).then(setInsights).catch(() => {});
-    getAchievements(monthKey).then(setAchievements).catch(() => {});
-    getUpcoming(45).then(setUpcoming).catch(() => {});
-    listAlerts()
-      .then((all) => setAlerts(all.filter((a) => !a.isRead && a.severity !== "info").slice(0, 4)))
-      .catch(() => {});
-  }, [monthKey]);
+  // One resource per widget: a failure in any of these is visible and retryable
+  // on its own, and never blanks the rest of the page (§1.3).
+  const summaryRes = useAsync(() => getSummary(monthKey), [monthKey], "לא הצלחנו לטעון את נתוני החודש");
+  const chartsRes = useAsync(() => getCharts(monthKey), [monthKey], "לא הצלחנו לטעון את הגרפים");
+  const insightsRes = useAsync(() => getInsights(monthKey), [monthKey], "התובנות לא זמינות כרגע");
+  const recentRes = useAsync(() => getRecent(), [monthKey], "לא הצלחנו לטעון את התנועות");
+  const achievementsRes = useAsync(() => getAchievements(monthKey), [monthKey], "לא הצלחנו לטעון את ההישגים");
+  const upcomingRes = useAsync(() => getUpcoming(45), [monthKey], "לא הצלחנו לטעון את התשלומים הקרובים");
+  const alertsRes = useAsync(() => listAlerts(), [monthKey], "לא הצלחנו לטעון את ההתראות");
+  const creditRes = useAsync(() => listCreditImports(), [monthKey], "לא הצלחנו לטעון את ייבואי האשראי");
 
-  useEffect(load, [load]);
+  function reloadAll() {
+    summaryRes.reload();
+    chartsRes.reload();
+    insightsRes.reload();
+    recentRes.reload();
+    achievementsRes.reload();
+    upcomingRes.reload();
+    alertsRes.reload();
+    creditRes.reload();
+  }
 
-  if (!summary) return <Loading />;
+  const summary = summaryRes.data;
+  const insights = insightsRes.data;
 
-  const hasBudget = summary.budget.total > 0;
+  // Brand-new account: no income, no expenses, no credit. Four ₪0 cards read as
+  // a malfunction, so we show one welcome screen instead (§3.5).
+  const isBrandNew =
+    summary !== null && summary.incomeTotal === 0 && summary.expenseTotal === 0 && summary.creditTotal === 0;
+
+  const attention: AttentionItem[] = [];
+  if (summary && summary.budget.overrunCount > 0) {
+    attention.push({
+      id: "budget",
+      icon: "🎯",
+      text: `חריגה ב־${summary.budget.overrunCount} קטגוריות תקציב`,
+      to: "/budgets",
+      tone: "warning",
+    });
+  }
+  // Bank rows the import deliberately held back. Money that exists but is in no
+  // total is the one thing the dashboard must never stay quiet about.
+  if (summary && summary.bankReview.pendingCount > 0) {
+    attention.push({
+      id: "bank-review",
+      icon: "🏦",
+      text:
+        summary.bankReview.pendingPrincipal > 0
+          ? `${summary.bankReview.pendingCount} תנועות בנק ממתינות לך — כולל ${formatCurrency(
+              summary.bankReview.pendingPrincipal
+            )} החזרי קרן הלוואה`
+          : `${summary.bankReview.pendingCount} תנועות בנק ממתינות לסיווג`,
+      to: "/accounts?tab=reconcile",
+      tone: "warning",
+    });
+  }
+  const pendingCredit = (creditRes.data ?? []).filter((imp) => imp.status !== "confirmed");
+  if (pendingCredit.length > 0) {
+    const pendingTx = pendingCredit.reduce((sum, imp) => sum + imp.totalTransactions, 0);
+    attention.push({
+      id: "credit",
+      icon: "💳",
+      text: `${pendingTx} עסקאות אשראי ממתינות לאישור`,
+      to: "/accounts?tab=credit",
+      tone: "warning",
+    });
+  }
+  for (const alert of (alertsRes.data ?? []).filter((a) => !a.isRead && a.severity !== "info").slice(0, 2)) {
+    attention.push({ id: `alert-${alert.id}`, icon: "🚨", text: alert.title, to: "/manage?tab=alerts", tone: alert.severity });
+  }
+
+  if (isBrandNew) {
+    return (
+      <>
+        <QuickAddBar onAdded={reloadAll} />
+        <Card>
+          <EmptyState
+            icon="🌴"
+            title="ברוכה הבאה — עוד לא נכנסו נתונים"
+            hint="הדרך המהירה: ייבוא דוח אשראי או דף חשבון בנק"
+            action={
+              <div className="row-actions">
+                <Button onClick={() => navigate("/transactions?tab=import")}>ייבוא קובץ 📂</Button>
+                <Button
+                  variant="outline"
+                  onClick={() => navigate("/transactions?tab=expenses", { state: { openForm: true } })}
+                >
+                  הוספה ידנית
+                </Button>
+              </div>
+            }
+          />
+        </Card>
+      </>
+    );
+  }
 
   return (
     <>
       <UpdatesTicker key={tickerKey} />
 
-      <div className="dashboard-actions">
+      <div className="page-toolbar">
         <Button onClick={() => navigate("/transactions?tab=expenses", { state: { openForm: true } })}>
           + הוספת הוצאה
         </Button>
-        <Button variant="outline" onClick={() => navigate("/transactions?tab=import")}>ייבוא אקסל 📂</Button>
-        {alerts.map((alert) => (
-          <Link key={alert.id} to="/manage?tab=alerts" className={`alert-chip alert-chip-${alert.severity}`}>
-            {alert.title}
-          </Link>
-        ))}
+        <Button variant="outline" onClick={() => navigate("/transactions?tab=import")}>
+          ייבוא אקסל 📂
+        </Button>
       </div>
 
-      <QuickAddBar onAdded={load} />
+      <QuickAddBar onAdded={reloadAll} />
 
-      <div className="hero-grid">
-        {/* "Safe to spend today" only makes sense for the month in progress */}
-        {insights?.safePerDay != null && (
-          <SummaryCard
-            label="מותר להוציא היום"
-            icon="💸"
-            value={formatCurrency(insights.safePerDay)}
-            tone={insights.safePerDay > 0 ? "primary" : "danger"}
-            sub={
-              insights.safePerDay > 0
-                ? `נותרו ${insights.daysLeft} ימים החודש`
-                : "אין יתרה פנויה — האטי את הקצב"
-            }
-            size="hero"
-            accent
-          />
+      {/* The plain question first: what came in, what went out, what is left.
+          Everything below this row is derived from these three numbers, and a
+          derived figure is unreadable while its inputs are off-screen. */}
+      <AsyncSection
+        resource={summaryRes}
+        errorTitle="לא הצלחנו לטעון את נתוני החודש"
+        skeleton={<SkeletonCard />}
+      >
+        {(data) => (
+          <div className="kpi-row kpi-row-hero">
+            <SummaryCard
+              label="נכנס החודש"
+              icon="💰"
+              value={formatCurrency(data.incomeTotal)}
+              tone="success"
+              size="hero"
+              onClick={() => navigate("/transactions?tab=incomes")}
+            />
+            <SummaryCard
+              label="יצא החודש"
+              icon="🧾"
+              value={formatCurrency(data.expenseTotal)}
+              tone="danger"
+              size="hero"
+              sub={data.creditTotal > 0 ? `כולל ${formatCurrency(data.creditTotal)} אשראי` : undefined}
+              onClick={() => navigate("/transactions?tab=expenses")}
+            />
+            <SummaryCard
+              label="נשאר"
+              icon={data.balance >= 0 ? "🟢" : "🔴"}
+              value={formatCurrency(data.balance)}
+              tone={data.balance >= 0 ? "primary" : "danger"}
+              size="hero"
+              accent
+              sub={data.balance >= 0 ? "נכנס פחות יצא" : "יצא יותר ממה שנכנס"}
+              footnote={
+                data.bankReview.pendingCount > 0
+                  ? `${data.bankReview.pendingCount} תנועות בנק עוד לא נספרות`
+                  : undefined
+              }
+            />
+          </div>
         )}
-        <SummaryCard
-          label="נשאר החודש"
-          value={formatCurrency(summary.balance)}
-          tone={summary.balance >= 0 ? "primary" : "danger"}
-          size="hero"
-        />
-        <SummaryCard label="הכנסות" value={formatCurrency(summary.incomeTotal)} tone="success" size="hero" />
-        <SummaryCard label="הוצאות" value={formatCurrency(summary.expenseTotal)} tone="danger" size="hero" />
+      </AsyncSection>
+
+      {/* KPI row (§3.1). Two resources feed it, each failing independently. */}
+      <div className="kpi-row kpi-row-hero">
+        <AsyncSection
+          resource={insightsRes}
+          errorTitle="לא הצלחנו לטעון את מצב היום"
+          skeleton={<SkeletonCard />}
+        >
+          {(data) => (
+            <>
+              {/* "Safe to spend today" only exists for a month in progress. */}
+              {data.safePerDay != null && (
+                <SummaryCard
+                  label="מותר להוציא היום"
+                  icon="💸"
+                  value={formatCurrency(data.safePerDay)}
+                  tone={data.safePerDay > 0 ? "primary" : "danger"}
+                  sub={
+                    data.safePerDay > 0
+                      ? `נותרו ${data.daysLeft} ימים החודש`
+                      : "אין יתרה פנויה — האטי את הקצב"
+                  }
+                  size="hero"
+                  accent
+                />
+              )}
+            </>
+          )}
+        </AsyncSection>
+
+        <AsyncSection
+          resource={summaryRes}
+          errorTitle="לא הצלחנו לטעון את נתוני החודש"
+          skeleton={<SkeletonCard />}
+        >
+          {(data) => (
+            <SummaryCard
+              label="נשאר החודש"
+              value={formatCurrency(data.balance)}
+              tone={data.balance >= 0 ? "primary" : "danger"}
+              size="hero"
+            />
+          )}
+        </AsyncSection>
+
+        <AsyncSection resource={insightsRes} errorTitle="התחזית לא זמינה" skeleton={<SkeletonCard />}>
+          {(data) => (
+            <>
+              {/* A projection is an assumption, not a measurement — marked as such (§1.2). */}
+              <SummaryCard
+                label="תחזית סוף חודש"
+                value={formatCurrency(data.projection?.projectedBalance ?? 0)}
+                certainty={data.projection ? "scenario" : "unknown"}
+                size="hero"
+                sub={data.projection ? `לפי קצב של ${formatCurrency(data.projection.dailyBurn)} ליום` : undefined}
+              />
+              <SummaryCard
+                label="ציון בריאות"
+                value={data.healthScore != null ? `${data.healthScore}/100` : "—"}
+                certainty={data.healthScore != null ? "measured" : "unknown"}
+                sub={data.scoreLabel}
+                size="hero"
+              />
+            </>
+          )}
+        </AsyncSection>
       </div>
 
       {insights?.paceAlert && <PaceAlertBanner data={insights.paceAlert} />}
 
-      {insights && <InsightsPanel data={insights} />}
+      <AttentionPanel items={attention} />
 
-      {(achievements || upcoming) && (
-        <div className="dash-duo">
-          {achievements && <AchievementsPanel data={achievements} />}
-          {upcoming && <UpcomingPanel data={upcoming} />}
-        </div>
-      )}
+      <AsyncSection
+        resource={insightsRes}
+        errorTitle="התובנות לא זמינות כרגע"
+        skeleton={<SkeletonChart height={180} label="טוען תובנות" />}
+        isEmpty={(data) => data.insights.length === 0 && data.healthScore === null}
+        emptyState={
+          <Card>
+            <EmptyState icon="💡" title="נאסוף עוד קצת נתונים ונחזור עם תובנות" />
+          </Card>
+        }
+      >
+        {(data) => <InsightsPanel data={data} />}
+      </AsyncSection>
 
-      <div className="stats-strip">
-        {hasBudget && (
-          <SummaryCard
-            label="ניצול תקציב"
-            value={`${Math.round(summary.budget.usedPercent)}%`}
-            tone={summary.budget.usedPercent > 100 ? "danger" : summary.budget.usedPercent >= 85 ? "warning" : "success"}
-            sub={summary.budget.overrunCount > 0 ? `${summary.budget.overrunCount} בחריגה` : undefined}
-          />
-        )}
-        {summary.creditTotal > 0 && <SummaryCard label="הוצאות אשראי" value={formatCurrency(summary.creditTotal)} />}
-        {summary.savingsMonthly > 0 && (
-          <SummaryCard label="חיסכון חודשי" value={formatCurrency(summary.savingsMonthly)} tone="success" />
-        )}
-        {summary.loans.count > 0 && (
-          <>
-            <SummaryCard label="החזרי הלוואות" value={formatCurrency(summary.loans.monthlyPayment)} />
-            <SummaryCard
-              label="ריבית חודשית"
-              value={formatCurrency(summary.loans.monthlyInterest)}
-              tone={summary.loans.monthlyInterest > 0 ? "warning" : "default"}
-            />
-            <SummaryCard
-              label="יתרת הלוואות"
-              value={formatCurrency(summary.loans.totalBalance)}
-              sub={`${summary.loans.count} פעילות`}
-            />
-          </>
-        )}
+      <div className="dash-duo">
+        <AsyncSection
+          resource={achievementsRes}
+          errorTitle="לא הצלחנו לטעון את ההישגים"
+          skeleton={<SkeletonChart height={200} label="טוען הישגים" />}
+        >
+          {(data) => <AchievementsPanel data={data} />}
+        </AsyncSection>
+        <AsyncSection
+          resource={upcomingRes}
+          errorTitle="לא הצלחנו לטעון את התשלומים הקרובים"
+          skeleton={<SkeletonChart height={200} label="טוען תשלומים קרובים" />}
+        >
+          {(data) => <UpcomingPanel data={data} />}
+        </AsyncSection>
       </div>
 
+      {/* Charts (§3.2) — loan split and credit-by-category moved to /accounts. */}
       <div className="charts-grid">
         <Card title="הכנסות מול הוצאות — 6 חודשים">
-          {charts && charts.trend.some((t) => t.income > 0 || t.expense > 0) ? (
-            <MonthlyTrendChart data={charts.trend} />
-          ) : (
-            <EmptyState icon="📈" title="אין עדיין נתונים" hint="הוסיפי הכנסות והוצאות כדי לראות מגמה" />
-          )}
+          <AsyncSection
+            resource={chartsRes}
+            errorTitle="לא הצלחנו לטעון את המגמה"
+            skeleton={<SkeletonChart />}
+            isEmpty={(data) => !data.trend.some((t) => t.income > 0 || t.expense > 0)}
+            emptyState={
+              <EmptyState
+                icon="📈"
+                title="אין עדיין נתונים למגמה"
+                hint="כדי לראות מגמה צריך לפחות חודשיים של נתונים"
+              />
+            }
+          >
+            {(data) => <MonthlyTrendChart data={data.trend} />}
+          </AsyncSection>
         </Card>
+
         <Card title="הוצאות לפי קטגוריה">
-          {charts && charts.byCategory.length > 0 ? (
-            <CategoryBarChart data={charts.byCategory} />
-          ) : (
-            <EmptyState icon="🥧" title="אין הוצאות החודש" />
-          )}
+          <AsyncSection
+            resource={chartsRes}
+            errorTitle="לא הצלחנו לטעון את פילוח הקטגוריות"
+            skeleton={<SkeletonChart />}
+            isEmpty={(data) => data.byCategory.length === 0}
+            emptyState={
+              <EmptyState icon="🥧" title="אין הוצאות בחודש הזה" hint="הוסיפי הוצאה או ייבאי דוח אשראי" />
+            }
+          >
+            {(data) => <CategoryBarChart data={data.byCategory} />}
+          </AsyncSection>
         </Card>
-        {charts && charts.loanSplit.length > 0 && (
-          <Card title="הלוואות — ריבית מול קרן (חודשי)">
-            <LoanSplitChart data={charts.loanSplit} />
-          </Card>
-        )}
-        {charts && charts.creditByCategory.length > 0 && (
-          <Card title="אשראי לפי קטגוריה">
-            <CategoryBarChart data={charts.creditByCategory} />
-          </Card>
-        )}
       </div>
 
+      {/* Recent activity. The single unified feed of §3.4 waits for the merged
+          transactions endpoint (§9.3 / stage ד') — until then the three source
+          lists stay, but each with its own empty and error state. */}
       <div className="recent-grid">
         <Card
           title="הוצאות אחרונות"
@@ -182,52 +348,90 @@ export default function DashboardPage() {
             </Button>
           }
         >
-          {recent && recent.expenses.length > 0 ? (
-            <ul className="recent-list">
-              {recent.expenses.map((expense) => (
-                <li key={expense.id}>
-                  <span className="recent-icon">{expense.category?.icon ?? "🧾"}</span>
-                  <span className="recent-name">{expense.businessName || expense.description || expense.category?.name || "הוצאה"}</span>
-                  <span className="recent-date">{formatDate(expense.expenseDate)}</span>
-                  <span className="recent-amount mono text-danger">{formatCurrency(Number(expense.amount))}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <EmptyState icon="🧾" title="אין הוצאות עדיין" />
-          )}
+          <AsyncSection
+            resource={recentRes}
+            errorTitle="לא הצלחנו לטעון את ההוצאות האחרונות"
+            skeleton={<SkeletonRows />}
+            isEmpty={(data) => data.expenses.length === 0}
+            emptyState={
+              <EmptyState
+                icon="🧾"
+                title="אין עדיין הוצאות"
+                hint="הוסיפי הוצאה, או ייבאי קובץ אקסל מהבנק / חברת האשראי"
+                action={
+                  <Button
+                    size="sm"
+                    onClick={() => navigate("/transactions?tab=expenses", { state: { openForm: true } })}
+                  >
+                    + הוספת הוצאה
+                  </Button>
+                }
+              />
+            }
+          >
+            {(data) => (
+              <ul className="recent-list">
+                {data.expenses.map((expense) => (
+                  <li key={expense.id}>
+                    <span className="recent-icon">{expense.category?.icon ?? "🧾"}</span>
+                    <span className="recent-name">
+                      {expense.businessName || expense.description || expense.category?.name || "הוצאה"}
+                    </span>
+                    <span className="recent-date">{formatDate(expense.expenseDate)}</span>
+                    <span className="recent-amount mono text-danger">{formatCurrency(Number(expense.amount))}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </AsyncSection>
         </Card>
+
         <Card title="הכנסות אחרונות">
-          {recent && recent.incomes.length > 0 ? (
-            <ul className="recent-list">
-              {recent.incomes.map((income) => (
-                <li key={income.id}>
-                  <span className="recent-icon">💰</span>
-                  <span className="recent-name">{income.description || income.type}</span>
-                  <span className="recent-date">{formatDate(income.incomeDate)}</span>
-                  <span className="recent-amount mono text-success">{formatCurrency(Number(income.amount))}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <EmptyState icon="💰" title="אין הכנסות עדיין" />
-          )}
+          <AsyncSection
+            resource={recentRes}
+            errorTitle="לא הצלחנו לטעון את ההכנסות האחרונות"
+            skeleton={<SkeletonRows />}
+            isEmpty={(data) => data.incomes.length === 0}
+            emptyState={<EmptyState icon="💰" title="אין עדיין הכנסות" hint="הוסיפי משכורת או כל הכנסה אחרת" />}
+          >
+            {(data) => (
+              <ul className="recent-list">
+                {data.incomes.map((income) => (
+                  <li key={income.id}>
+                    <span className="recent-icon">💰</span>
+                    <span className="recent-name">{income.description || income.type}</span>
+                    <span className="recent-date">{formatDate(income.incomeDate)}</span>
+                    <span className="recent-amount mono text-success">{formatCurrency(Number(income.amount))}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </AsyncSection>
         </Card>
+
         <Card title="עסקאות אשראי אחרונות">
-          {recent && recent.credit.length > 0 ? (
-            <ul className="recent-list">
-              {recent.credit.map((tx) => (
-                <li key={tx.id}>
-                  <span className="recent-icon">{tx.category?.icon ?? "💳"}</span>
-                  <span className="recent-name">{tx.businessName}</span>
-                  <span className="recent-date">{formatDate(tx.transactionDate)}</span>
-                  <span className="recent-amount mono">{formatCurrency(Number(tx.amount))}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <EmptyState icon="💳" title="אין עסקאות אשראי" hint="ייבאי קובץ אקסל בעמוד האשראי" />
-          )}
+          <AsyncSection
+            resource={recentRes}
+            errorTitle="לא הצלחנו לטעון את עסקאות האשראי"
+            skeleton={<SkeletonRows />}
+            isEmpty={(data) => data.credit.length === 0}
+            emptyState={
+              <EmptyState icon="💳" title="אין עסקאות אשראי" hint="ייבאי קובץ אקסל בטאב חשבונות ← אשראי" />
+            }
+          >
+            {(data) => (
+              <ul className="recent-list">
+                {data.credit.map((tx) => (
+                  <li key={tx.id}>
+                    <span className="recent-icon">{tx.category?.icon ?? "💳"}</span>
+                    <span className="recent-name">{tx.businessName}</span>
+                    <span className="recent-date">{formatDate(tx.transactionDate)}</span>
+                    <span className="recent-amount mono">{formatCurrency(Number(tx.amount))}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </AsyncSection>
         </Card>
       </div>
 
@@ -236,7 +440,7 @@ export default function DashboardPage() {
         onClose={() => setReminderOpen(false)}
         onSaved={() => {
           setTickerKey((k) => k + 1);
-          load();
+          reloadAll();
         }}
       />
     </>

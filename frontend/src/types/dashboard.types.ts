@@ -4,6 +4,11 @@ export interface DashboardSummary {
   balance: number;
   creditTotal: number;
   savingsMonthly: number;
+  /** Imported bank rows held out of the totals until the user names them. */
+  bankReview: {
+    pendingCount: number;
+    pendingPrincipal: number;
+  };
   budget: {
     total: number;
     used: number;

@@ -16,7 +16,15 @@ export function UpdatesTicker() {
   const [duration, setDuration] = useState(30);
 
   useEffect(() => {
-    getTicker().then(setItems).catch(() => {});
+    getTicker()
+      .then(setItems)
+      .catch(() => {
+        // The ticker is an ambient nice-to-have above the real dashboard. It has
+        // no state of its own to show, and a failure here is already surfaced by
+        // the global toast in `api.ts`; adding a second error strip on top of
+        // every page would be noise, so it simply stays hidden.
+        setItems([]);
+      });
   }, []);
 
   useEffect(() => {

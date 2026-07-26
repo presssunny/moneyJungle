@@ -85,11 +85,23 @@ export const dashboardService = {
       loanTotalBalance += decimalToNumber(loan.currentBalance);
     }
 
+    // Money that reached the app but no figure yet — surfaced so the totals are
+    // never mistaken for the whole story.
+    const pendingBank = await dashboardRepository.pendingBankRows(userId);
+    const pendingCount = pendingBank.reduce((n, g) => n + g._count._all, 0);
+    const pendingPrincipal = pendingBank
+      .filter((g) => g.lineKind === "loan_principal" || g.lineKind === "loan_mixed")
+      .reduce((sum, g) => sum + decimalToNumber(g._sum.amount), 0);
+
     return {
       incomeTotal: totals.incomeTotal,
       expenseTotal: totals.expenseTotal,
       balance: round2(totals.incomeTotal - totals.expenseTotal),
       creditTotal: totals.creditTotal,
+      bankReview: {
+        pendingCount,
+        pendingPrincipal: round2(pendingPrincipal),
+      },
       savingsMonthly: round2(savingsMonthly),
       budget: {
         total: round2(budgetTotal),
