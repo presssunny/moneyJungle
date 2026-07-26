@@ -131,6 +131,115 @@ export async function importBankStatement(accountId: number, file: File): Promis
   return data;
 }
 
+// ---------- Bank reconciliation ----------
+
+export interface ReconcileRow {
+  id: number;
+  date: string;
+  description: string;
+  amount: number;
+  type: string;
+  lineKind: string;
+  loanRef: string | null;
+  reconcileStatus: string;
+  linkedIncomeId: number | null;
+  linkedLoanId: number | null;
+  linkedExpenseId: number | null;
+  suggestedIncomeType?: string;
+  suggestedIncomeLabel?: string;
+}
+
+export interface ReconcileLoanGroup {
+  loanRef: string | null;
+  label: string;
+  principalTotal: number;
+  interestTotal: number;
+  mixedTotal: number;
+  count: number;
+  rows: ReconcileRow[];
+}
+
+export interface ReconciliationView {
+  summary: {
+    total: number;
+    pending: number;
+    done: number;
+    excluded: number;
+    pendingIncome: number;
+    pendingLoan: number;
+    pendingSpend: number;
+  };
+  incomeCandidates: ReconcileRow[];
+  loanGroups: ReconcileLoanGroup[];
+  standardSpend: ReconcileRow[];
+  financingLines: ReconcileRow[];
+  creditCardPayments: ReconcileRow[];
+  done: ReconcileRow[];
+}
+
+export async function getReconciliation(): Promise<ReconciliationView> {
+  const { data } = await api.get("/bank/reconciliation");
+  return data;
+}
+
+/** What one auto-reconcile pass promoted, and what it held back and why. */
+export interface AutoReconcileResult {
+  incomeCount: number;
+  incomeTotal: number;
+  spendCount: number;
+  spendTotal: number;
+  financingCount: number;
+  financingTotal: number;
+  heldPrincipalCount: number;
+  heldPrincipalTotal: number;
+  heldMixedCount: number;
+  heldMixedTotal: number;
+  heldRoundTripCount: number;
+  heldRoundTripTotal: number;
+  heldInterestCreditCount: number;
+  heldInterestCreditTotal: number;
+  heldAtypicalCount: number;
+  heldAtypicalTotal: number;
+}
+
+export async function reconcileAuto(): Promise<AutoReconcileResult> {
+  const { data } = await api.post("/bank/reconciliation/auto");
+  return data;
+}
+
+export async function reconcileIncome(id: number, input: { type: string; description?: string | null }): Promise<void> {
+  await api.post(`/bank/reconciliation/${id}/income`, input);
+}
+
+export async function reconcileExpense(id: number, input: { categoryId?: number | null }): Promise<void> {
+  await api.post(`/bank/reconciliation/${id}/expense`, input);
+}
+
+export interface ReconcileLoanInput {
+  loanId?: number;
+  transactionIds: number[];
+  loanName?: string;
+  loanType?: string;
+  lenderName?: string | null;
+  originalAmount?: number;
+  currentBalance?: number;
+  annualInterestRate?: number;
+  monthlyPayment?: number;
+  startDate?: string;
+}
+
+export async function reconcileLoan(input: ReconcileLoanInput): Promise<void> {
+  await api.post("/bank/reconciliation/loan", input);
+}
+
+export async function reconcileExclude(id: number): Promise<void> {
+  await api.post(`/bank/reconciliation/${id}/exclude`);
+}
+
+export async function reconcileReset(id: number): Promise<void> {
+  await api.post(`/bank/reconciliation/${id}/reset`);
+}
+
 // ---------- Recurring payments ----------
 
 export interface RecurringInput {

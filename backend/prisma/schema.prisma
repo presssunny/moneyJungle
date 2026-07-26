@@ -223,6 +223,9 @@ model CreditImport {
   totalTransactions Int          @default(0) @map("total_transactions")
   totalAmount       Decimal      @default(0) @map("total_amount") @db.Decimal(12, 2)
   status            ImportStatus @default(pending)
+  /// SHA-256 of the uploaded bytes — identifies the very same file re-uploaded
+  /// under any name. Null for imports created before hashing existed.
+  fileHash          String?      @map("file_hash") @db.VarChar(64)
   createdAt         DateTime     @default(now()) @map("created_at")
   updatedAt         DateTime     @updatedAt @map("updated_at")
 
@@ -230,6 +233,7 @@ model CreditImport {
   transactions CreditTransaction[]
 
   @@index([userId, importYear, importMonth])
+  @@index([userId, fileHash])
   @@map("credit_imports")
 }
 
@@ -292,6 +296,16 @@ model BankTransaction {
   amount          Decimal  @db.Decimal(12, 2)
   type            String   @db.VarChar(30) // deposit | withdrawal | transfer | fee | other
   categoryId      Int?     @map("category_id")
+  // Parser classification, persisted so the reconciliation flow (and every read)
+  // knows *what kind* of money each row is — not just its direction. Written on
+  // import and back-filled from the description for pre-existing rows.
+  lineKind        String   @default("standard") @map("line_kind") @db.VarChar(30) // standard | loan_principal | loan_interest | overdraft_interest | loan_mixed | credit_card_payment | interest_credit
+  loanRef         String?  @map("loan_ref") @db.VarChar(20)
+  // Reconciliation: has this bank row been surfaced into the right tab yet?
+  reconcileStatus String   @default("pending") @map("reconcile_status") @db.VarChar(20) // pending | done | excluded
+  linkedIncomeId  Int?     @map("linked_income_id")
+  linkedLoanId    Int?     @map("linked_loan_id")
+  linkedExpenseId Int?     @map("linked_expense_id")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
@@ -301,6 +315,7 @@ model BankTransaction {
 
   @@index([userId, transactionDate])
   @@index([bankAccountId])
+  @@index([userId, reconcileStatus])
   @@map("bank_transactions")
 }
 

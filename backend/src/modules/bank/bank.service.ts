@@ -4,7 +4,9 @@ import { ApiError } from "../../utils/ApiError";
 import { round2 } from "../../utils/money.utils";
 import { buildRuleCategorizer } from "../categories/categorization.service";
 import {
+  classifyBankLine,
   describeIngestionReport,
+  describeMonthlyConditions,
   parseBankStatement,
   parseBankStatementPdf,
 } from "./bankParser.service";
@@ -13,6 +15,7 @@ import {
   CreateBankTransactionBody,
   UpdateBankAccountBody,
 } from "./bank.validation";
+import { reconciliationService } from "./reconciliation.service";
 
 /** Deposits raise the balance; every other transaction type lowers it. */
 function signedAmount(type: string, amount: number): number {
@@ -122,6 +125,18 @@ export const bankService = {
           `צפוי ${mismatch.expected}, מודפס ${mismatch.printed}, פער ${mismatch.diff}`
       );
     }
+    for (const pair of report.roundTrips) {
+      console.warn(
+        `[קליטת דוח בנק] סבב כספים אפשרי: ${pair.amount} יצא ב-${pair.withdrawalDate} (${pair.withdrawalDescription}) ` +
+          `וחזר ב-${pair.depositDate} (${pair.depositDescription}), הפרש ${pair.daysApart} ימים — מוחרג מההכנסה עד אישור ידני`
+      );
+    }
+    for (const candidate of report.salaryCandidates) {
+      console.log(`[קליטת דוח בנק] תקבול לאישור: ${candidate.line} — ${candidate.reason}`);
+    }
+    for (const line of describeMonthlyConditions(report)) {
+      console.log(`[קליטת דוח בנק] תנאי הפקדת שכר ${line}`);
+    }
     const categorize = await buildRuleCategorizer(userId);
 
     // Build a dedup key set from existing transactions in the file's date range.
@@ -155,6 +170,10 @@ export const bankService = {
             balanceDelta += signedAmount(r.type, r.amount);
             if (r.type === "deposit") deposits += 1;
             else withdrawals += 1;
+            // Persist the classification so the reconciliation flow knows *what
+            // kind* of money each row is — not just its direction. Credit-card
+            // settlements are auto-excluded (already itemized in credit).
+            const { lineKind, loanRef } = classifyBankLine(r.description, r.type);
             return {
               userId,
               bankAccountId: accountId,
@@ -163,6 +182,9 @@ export const bankService = {
               amount: r.amount,
               type: r.type,
               categoryId: r.type === "withdrawal" ? categorize(r.description) : null,
+              lineKind,
+              loanRef,
+              reconcileStatus: lineKind === "credit_card_payment" ? "excluded" : "pending",
             };
           }),
         }),
@@ -173,6 +195,11 @@ export const bankService = {
       ]);
     }
 
+    // Promote the unambiguous rows straight away: an imported statement that
+    // sits in `pending` is invisible to every figure in the app, which reads as
+    // "the import did nothing". Ambiguous rows are still held for review.
+    const autoReconciled = fresh.length > 0 ? await reconciliationService.autoReconcile(userId) : null;
+
     return {
       parsed: rows.length,
       imported: fresh.length,
@@ -180,6 +207,7 @@ export const bankService = {
       deposits,
       withdrawals,
       report,
+      autoReconciled,
     };
   },
 

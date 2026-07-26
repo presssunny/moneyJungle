@@ -1,14 +1,18 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
+import { AsyncSection } from "../components/common/AsyncSection";
 import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
 import { DropZone } from "../components/common/DropZone";
 import { EmptyState } from "../components/common/EmptyState";
 import { ErrorMessage } from "../components/common/ErrorMessage";
 import { Input } from "../components/common/Input";
-import { Loading } from "../components/common/Loading";
 import { Modal } from "../components/common/Modal";
 import { Select } from "../components/common/Select";
+import { SkeletonCard, SkeletonRows } from "../components/common/Skeleton";
 import { Table, type Column } from "../components/common/Table";
+import { SummaryCard } from "../components/dashboard/SummaryCard";
+import { useMonth } from "../context/MonthContext";
+import { useAsync } from "../hooks/useAsync";
 import { useLookups } from "../hooks/useLookups";
 import { apiErrorMessage } from "../services/api";
 import {
@@ -21,7 +25,7 @@ import {
   listBankTransactions,
 } from "../services/planning.service";
 import type { BankAccount, BankTransaction } from "../types/models";
-import { formatCurrency, formatDate } from "../utils/format";
+import { formatCurrency, formatDate, formatMonthKey } from "../utils/format";
 
 const TX_TYPES = [
   { value: "deposit", label: "הפקדה" },
@@ -31,11 +35,15 @@ const TX_TYPES = [
   { value: "other", label: "אחר" },
 ];
 
+/**
+ * טאב־משנה "בנק" (IA §6.3). The KPI row describes the selected account inside
+ * the globally selected month; the balance-trend line chart is listed as
+ * optional in §6.3 and is deferred rather than blocking this stage.
+ */
 export default function BankPage() {
+  const { monthKey } = useMonth();
   const { expenseCategories } = useLookups();
-  const [accounts, setAccounts] = useState<BankAccount[] | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [transactions, setTransactions] = useState<BankTransaction[] | null>(null);
   const [accountOpen, setAccountOpen] = useState(false);
   const [accountForm, setAccountForm] = useState({ bankName: "", accountName: "", initialBalance: 0 });
   const [txOpen, setTxOpen] = useState(false);
@@ -50,26 +58,48 @@ export default function BankPage() {
   const [uploading, setUploading] = useState(false);
   const [importMsg, setImportMsg] = useState("");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [txSearch, setTxSearch] = useState("");
+  const [txTypeFilter, setTxTypeFilter] = useState("");
 
-  const load = useCallback(() => {
-    listBankAccounts()
-      .then((data) => {
-        setAccounts(data);
-        if (data.length > 0 && selectedId === null) setSelectedId(data[0].id);
-      })
-      .catch(() => setAccounts([]));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId]);
+  const [reloadKey, setReloadKey] = useState(0);
+  const load = () => setReloadKey((k) => k + 1);
 
-  useEffect(load, [load]);
+  const accountsRes = useAsync(
+    async () => {
+      const data = await listBankAccounts();
+      // Preselect the first account so the page is never an empty shell.
+      setSelectedId((current) => (current === null && data.length > 0 ? data[0].id : current));
+      return data;
+    },
+    [reloadKey],
+    "לא הצלחנו לטעון את חשבונות הבנק"
+  );
+  const accounts = accountsRes.data;
 
-  useEffect(() => {
-    if (selectedId === null) {
-      setTransactions(null);
-      return;
+  const txRes = useAsync(
+    () => (selectedId === null ? Promise.resolve<BankTransaction[]>([]) : listBankTransactions(selectedId)),
+    [selectedId, reloadKey],
+    "לא הצלחנו לטעון את התנועות"
+  );
+
+  // Deposits / withdrawals inside the globally selected month. The bank endpoint
+  // has no month parameter (IA §9.2), so the window is applied here on rows the
+  // server already returned — no server-side figure is recomputed.
+  const monthStats = useMemo(() => {
+    const rows = (txRes.data ?? []).filter((tx) => tx.transactionDate.slice(0, 7) === monthKey);
+    let deposits = 0;
+    let withdrawals = 0;
+    for (const tx of rows) {
+      if (tx.type === "deposit") deposits += Number(tx.amount);
+      else withdrawals += Number(tx.amount);
     }
-    listBankTransactions(selectedId).then(setTransactions).catch(() => setTransactions([]));
-  }, [selectedId, accounts]);
+    return {
+      rows,
+      deposits,
+      withdrawals,
+      uncategorized: rows.filter((tx) => tx.categoryId === null && tx.type !== "deposit").length,
+    };
+  }, [txRes.data, monthKey]);
 
   async function submitAccount(e: FormEvent) {
     e.preventDefault();
@@ -117,8 +147,7 @@ export default function BankPage() {
       }
       if (result.skippedDuplicates > 0) parts.push(`· ${result.skippedDuplicates} כפילויות דולגו`);
       setImportMsg(parts.join(" "));
-      listBankTransactions(accountId).then(setTransactions).catch(() => {});
-      load(); // balance changed
+      load(); // reloads both the balances and the transaction list
     } catch (err) {
       setError(apiErrorMessage(err));
     } finally {
@@ -153,8 +182,6 @@ export default function BankPage() {
     load();
   }
 
-  if (!accounts) return <Loading />;
-
   const txColumns: Column<BankTransaction>[] = [
     { key: "date", header: "תאריך", render: (row) => formatDate(row.transactionDate) },
     { key: "desc", header: "תיאור", render: (row) => row.description || "—" },
@@ -173,17 +200,72 @@ export default function BankPage() {
       key: "actions",
       header: "",
       align: "left",
-      render: (row) => <Button size="sm" variant="ghost" onClick={() => removeTx(row)}>🗑️</Button>,
+      render: (row) => (
+        <Button size="sm" variant="ghost" onClick={() => removeTx(row)} aria-label="מחיקה">
+          🗑️
+        </Button>
+      ),
     },
   ];
 
-  const selected = accounts.find((a) => a.id === selectedId) ?? null;
+  const selected = (accounts ?? []).find((a) => a.id === selectedId) ?? null;
+
+  const searchLower = txSearch.trim().toLowerCase();
+  const visibleTx = monthStats.rows.filter((tx) => {
+    if (txTypeFilter && tx.type !== txTypeFilter) return false;
+    if (searchLower && !(tx.description ?? "").toLowerCase().includes(searchLower)) return false;
+    return true;
+  });
+  const txFiltersActive = txSearch.trim() !== "" || txTypeFilter !== "";
 
   return (
     <>
       <div className="page-toolbar">
         <Button onClick={() => setAccountOpen(true)}>+ חשבון בנק</Button>
         {selected && <Button variant="outline" onClick={() => setTxOpen(true)}>+ תנועה</Button>}
+      </div>
+
+      {/* KPI (§6.3) — the selected account, inside the selected month. */}
+      <div className="kpi-row">
+        <AsyncSection
+          resource={accountsRes}
+          errorTitle="לא הצלחנו לטעון את חשבונות הבנק"
+          skeleton={<SkeletonCard />}
+        >
+          {() => (
+            <SummaryCard
+              label="יתרה בחשבון הנבחר"
+              value={selected ? formatCurrency(Number(selected.currentBalance)) : "—"}
+              certainty={selected ? "measured" : "unknown"}
+              tone={selected && Number(selected.currentBalance) < 0 ? "danger" : "success"}
+              sub={selected ? `${selected.bankName} · ${selected.accountName}` : "לא נבחר חשבון"}
+            />
+          )}
+        </AsyncSection>
+        <AsyncSection resource={txRes} errorTitle="לא הצלחנו לטעון את התנועות" skeleton={<SkeletonCard />}>
+          {() => (
+            <>
+              <SummaryCard
+                label="הפקדות בחודש"
+                value={formatCurrency(monthStats.deposits)}
+                tone="success"
+                sub={formatMonthKey(monthKey)}
+              />
+              <SummaryCard
+                label="משיכות בחודש"
+                value={formatCurrency(monthStats.withdrawals)}
+                tone="danger"
+                sub={formatMonthKey(monthKey)}
+              />
+              <SummaryCard
+                label="תנועות לא מסווגות"
+                value={String(monthStats.uncategorized)}
+                tone={monthStats.uncategorized > 0 ? "warning" : "success"}
+                sub={monthStats.uncategorized > 0 ? "מתוך משיכות החודש" : "הכול מסווג ✓"}
+              />
+            </>
+          )}
+        </AsyncSection>
       </div>
 
       <Card title={selected ? `ייבוא דף חשבון — ${selected.accountName}` : "ייבוא דף חשבון (עו״ש)"}>
@@ -203,13 +285,24 @@ export default function BankPage() {
         {importMsg && <div className="info-banner" style={{ marginTop: 12 }}>{importMsg}</div>}
       </Card>
 
-      {accounts.length === 0 ? (
-        <Card>
-          <EmptyState icon="🏦" title="אין חשבונות בנק" hint="הוסיפי חשבון כדי לעקוב אחרי היתרה והתנועות" />
-        </Card>
-      ) : (
-        <div className="bank-accounts-row">
-          {accounts.map((account) => (
+      <AsyncSection
+        resource={accountsRes}
+        errorTitle="לא הצלחנו לטעון את חשבונות הבנק"
+        skeleton={<SkeletonRows rows={2} />}
+        isEmpty={(data) => data.length === 0}
+        emptyState={
+          <Card>
+            <EmptyState
+              icon="🏦"
+              title="אין חשבונות בנק"
+              hint="גררי דף חשבון (עו״ש) — Excel או PDF — ונפתח חשבון אוטומטית"
+            />
+          </Card>
+        }
+      >
+        {(accountList) => (
+          <div className="bank-accounts-row">
+            {accountList.map((account) => (
             <button
               key={account.id}
               type="button"
@@ -232,20 +325,80 @@ export default function BankPage() {
                 onKeyDown={(e) => e.key === "Enter" && removeAccount(account)}
               >
                 ✕
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </AsyncSection>
 
-      {selected && transactions && (
-        <Card title={`תנועות — ${selected.accountName}`}>
-          <Table
-            columns={txColumns}
-            rows={transactions}
-            rowKey={(row) => row.id}
-            emptyState={<EmptyState icon="🧾" title="אין תנועות בחשבון" />}
-          />
+      {selected && (
+        <Card title={`תנועות — ${selected.accountName} · ${formatMonthKey(monthKey)}`}>
+          <div className="filter-bar">
+            <Input
+              placeholder="חיפוש בתיאור…"
+              value={txSearch}
+              onChange={(e) => setTxSearch(e.target.value)}
+              aria-label="חיפוש בתנועות"
+            />
+            <Select
+              options={[{ value: "", label: "כל סוגי התנועות" }, ...TX_TYPES]}
+              value={txTypeFilter}
+              onChange={(e) => setTxTypeFilter(e.target.value)}
+              aria-label="סינון לפי סוג תנועה"
+            />
+            {txFiltersActive && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setTxSearch("");
+                  setTxTypeFilter("");
+                }}
+              >
+                ניקוי סינון ✕
+              </Button>
+            )}
+          </div>
+          <AsyncSection
+            resource={txRes}
+            errorTitle="לא הצלחנו לטעון את התנועות"
+            skeleton={<SkeletonRows rows={5} />}
+          >
+            {() => (
+              <Table
+                columns={txColumns}
+                rows={visibleTx}
+                rowKey={(row) => row.id}
+                emptyState={
+                  monthStats.rows.length > 0 ? (
+                    <EmptyState
+                      icon="🔍"
+                      title="אין תוצאות למסננים הנוכחיים"
+                      action={
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setTxSearch("");
+                            setTxTypeFilter("");
+                          }}
+                        >
+                          ניקוי מסננים
+                        </Button>
+                      }
+                    />
+                  ) : (
+                    <EmptyState
+                      icon="🧾"
+                      title={`אין תנועות ב${formatMonthKey(monthKey)}`}
+                      hint="בחרי חודש אחר, או ייבאי דף חשבון"
+                    />
+                  )
+                }
+              />
+            )}
+          </AsyncSection>
         </Card>
       )}
 
