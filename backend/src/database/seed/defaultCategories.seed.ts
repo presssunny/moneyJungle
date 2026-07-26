@@ -31,6 +31,12 @@ export const defaultCategories: DefaultCategory[] = [
   { name: "חיסכון", type: "expense", icon: "🐷", color: "#2EC4B6" },
   { name: "העברות בנקאיות", type: "expense", icon: "🔄", color: "#6C757D" },
   { name: "משיכות מזומן", type: "expense", icon: "🏧", color: "#7C8794" },
+  // Money that left by cheque: the statement names no business, so the category
+  // says what the payment WAS instead of leaving the row uncategorized.
+  { name: "שיקים והמחאות", type: "expense", icon: "🧾", color: "#8D99AE" },
+  // A card bill with no itemized statement behind it. Coarse on purpose, and
+  // named so it can never be mistaken for detailed spending.
+  { name: "חיוב אשראי ללא פירוט", type: "expense", icon: "💳", color: "#B5838D" },
   { name: "מתנות", type: "expense", icon: "🎁", color: "#FF4D6D" },
   { name: "בעלי חיים", type: "expense", icon: "🐾", color: "#A98467" },
   { name: "לימודים", type: "expense", icon: "📚", color: "#3A86FF" },
