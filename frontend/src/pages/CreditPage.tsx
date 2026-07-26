@@ -92,6 +92,17 @@ export default function CreditPage() {
     try {
       const detail = await uploadCreditImport(file, monthKey);
       setMonthFilter(null);
+      // Nothing new in the file: no import was created, so there is nothing to
+      // select or approve — say so instead of showing an empty import.
+      if (detail.alreadyImported) {
+        setMessage(
+          detail.previousImport
+            ? `⚠️ הדוח הזה כבר הועלה (${detail.previousImport.fileName}) — לא נוספה אף עסקה`
+            : `⚠️ כל ${detail.parsedRows} העסקאות בקובץ כבר קיימות — לא נוסף כלום`
+        );
+        load();
+        return;
+      }
       setSelected(detail);
       const months = detail.monthlyBreakdown?.length ?? 1;
       const base =
@@ -99,8 +110,8 @@ export default function CreditPage() {
           ? `נקלטו ${detail.totalTransactions} עסקאות ופוצלו ל־${months} חודשי חיוב — בדקי סיווג ואשרי`
           : `נקלטו ${detail.totalTransactions} עסקאות — בדקי סיווג ואשרי`;
       setMessage(
-        detail.possibleDuplicate
-          ? `⚠️ נראה שהקובץ הזה כבר יובא בעבר — ייתכן כפילות. ${base}`
+        detail.skippedDuplicates > 0
+          ? `${base} · ${detail.skippedDuplicates} עסקאות דולגו (כבר היו קיימות)`
           : base
       );
       load();

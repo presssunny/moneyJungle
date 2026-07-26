@@ -13,6 +13,7 @@ import type {
   MonthlyReport,
   TrendRow,
 } from "../types/models";
+import type { StatementLoanActivity } from "./planning.service";
 import { api } from "./api";
 
 function monthParams(monthKey: string) {
@@ -83,6 +84,33 @@ export interface QuickAddResult {
 /** Free-text quick add: send raw Hebrew text, server parses amount + business + category. */
 export async function quickAddExpense(text: string): Promise<QuickAddResult> {
   const { data } = await api.post("/expenses/quick-add", { text });
+  return data;
+}
+
+/** Outcome of a smart import: what the file was, and what actually went in. */
+export interface SmartImportResult {
+  kind: "bank" | "credit" | "unknown";
+  detectionReason: string;
+  matchedSignals: string[];
+  fileName: string;
+  parsedRows: number;
+  importedRows: number;
+  skippedDuplicates: number;
+  alreadyImported: boolean;
+  message: string;
+  creditImportId?: number;
+  bankAccountId?: number;
+}
+
+/**
+ * Upload a statement without saying what it is. `kind` is sent only when the
+ * user overrides a detection she disagrees with.
+ */
+export async function smartImportFile(file: File, kind?: "bank" | "credit"): Promise<SmartImportResult> {
+  const form = new FormData();
+  form.append("file", file);
+  if (kind) form.append("kind", kind);
+  const { data } = await api.post("/imports/smart", form);
   return data;
 }
 
@@ -164,7 +192,12 @@ export interface LoanInput {
   status?: string;
 }
 
-export async function listLoans(): Promise<{ loans: Loan[]; totals: LoanTotals }> {
+export async function listLoans(): Promise<{
+  loans: Loan[];
+  totals: LoanTotals;
+  /** Loan activity read straight off the bank statement — see StatementLoanActivity. */
+  fromStatement: StatementLoanActivity;
+}> {
   const { data } = await api.get("/loans");
   return data;
 }
@@ -195,7 +228,21 @@ export async function listCreditImports(): Promise<CreditImport[]> {
   return data;
 }
 
-export async function uploadCreditImport(file: File, monthKey?: string): Promise<CreditImportDetail> {
+/**
+ * A credit upload either creates an import, or finds every row already stored
+ * and creates nothing. The two outcomes are different shapes, discriminated by
+ * `alreadyImported`, so a caller cannot read a transaction count that isn't there.
+ */
+export type CreditUploadResult =
+  | ({ alreadyImported: false; skippedDuplicates: number; parsedRows: number } & CreditImportDetail)
+  | {
+      alreadyImported: true;
+      skippedDuplicates: number;
+      parsedRows: number;
+      previousImport: { id: number; fileName: string; createdAt: string } | null;
+    };
+
+export async function uploadCreditImport(file: File, monthKey?: string): Promise<CreditUploadResult> {
   const form = new FormData();
   form.append("file", file);
   if (monthKey) {
