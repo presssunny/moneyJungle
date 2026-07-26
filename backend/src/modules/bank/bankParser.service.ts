@@ -32,14 +32,50 @@ export interface ParsedBankRow {
   type: BankTransactionKind;
   /** Secondary (text-based) classification — never decides deposit/withdrawal. */
   lineKind: BankLineKind;
-  /** Loan/facility number carried by the description (03757, 00965, 108…). */
+  /** Loan/facility number carried by the description (00965, 01015, 108…). */
   loanRef: string | null;
+  /**
+   * An interest credit belongs to the ACCOUNT, not to a single loan: the number
+   * printed on such a line is the account reference, not a loan number. Netting
+   * interest is therefore allowed at account+month level only — never per loan.
+   */
+  accountLevelCredit: boolean;
+  /** Debit/credit pair of the same amount a few days apart — money that may
+   *  have only left and come back. Held out of income until a human confirms. */
+  possibleRoundTrip: boolean;
+  /** Credit that looks like a salary/employer payment. Never auto-confirmed. */
+  salaryCandidate: boolean;
+  /** Set by the user, not by the parser — a candidate stays unconfirmed here. */
+  salaryConfirmed: boolean;
+  /** Salary candidate far out of line with the other ones — needs approval. */
+  atypicalAmount: boolean;
+  /** Factual note for the review UI. Never a hypothesis about bank policy. */
+  note: string | null;
   /** Running balance printed on the row, when the file shows one. */
   balance: number | null;
   /** 0..1 — how sure we are of this row (column distance × balance check). */
   confidence: number;
   balanceCheck: BankBalanceCheck;
   raw: Record<string, unknown>;
+}
+
+/** Fields every parser path fills; the analysis flags are added afterwards. */
+type ParsedBankRowCore = Omit<
+  ParsedBankRow,
+  "accountLevelCredit" | "possibleRoundTrip" | "salaryCandidate" | "salaryConfirmed" | "atypicalAmount" | "note"
+>;
+
+/** Build a row with neutral analysis flags — set later, in one place. */
+function toRow(core: ParsedBankRowCore): ParsedBankRow {
+  return {
+    ...core,
+    accountLevelCredit: false,
+    possibleRoundTrip: false,
+    salaryCandidate: false,
+    salaryConfirmed: false,
+    atypicalAmount: false,
+    note: null,
+  };
 }
 
 /** A row we could not turn into a transaction, or one that needs a human look. */
@@ -58,6 +94,86 @@ export interface BankBalanceMismatch {
   diff: number;
 }
 
+/**
+ * The money in a statement, split into buckets that must never be merged.
+ *
+ * Financing is reported three ways on purpose: gross charged, credited back,
+ * and the derived net — so a netted figure can never be mistaken for the real
+ * cost of credit. Loan principal (debt reduction) and a combined repayment line
+ * with no breakdown (`loan_mixed`) each get their own bucket too: adding them
+ * together would report money as "principal" that the statement never called
+ * principal.
+ */
+export interface BankMoneySummary {
+  /** Raw column sums. For auditing the balance replay only — not for reporting. */
+  depositsRaw: number;
+  withdrawalsRaw: number;
+  /** Income = credit column minus interest credits (financing, not income). */
+  income: number;
+  /** Income once pending round-trips are set aside, awaiting manual approval. */
+  incomeConfirmed: number;
+  /** Ordinary spending: debit rows whose lineKind is "standard" — nothing else. */
+  currentSpend: number;
+  /** …after setting aside the outgoing leg of a pending round-trip. */
+  currentSpendConfirmed: number;
+  /** Interest charged, gross. This is the cost of credit. */
+  financingCharged: number;
+  /** Interest credited back by the bank (account level). */
+  financingRefunded: number;
+  /** Derived: charged − refunded. Always presented as "מקוזז". */
+  financingNet: number;
+  /** Loan principal repaid — debt reduction, not spending. */
+  principal: number;
+  /** Combined loan payments with no principal/interest split in the statement. */
+  mixed: number;
+  /** Money that left and came back within days, pending manual approval. */
+  roundTripPending: number;
+}
+
+/** Per-loan financing. Gross only — interest is never netted at loan level. */
+export interface BankLoanFinancing {
+  loanRef: string;
+  interestChargedGross: number;
+  lines: number;
+}
+
+/** Account-level interest netting, per calendar month. The only legal netting. */
+export interface BankMonthFinancing {
+  month: string; // YYYY-MM
+  charged: number;
+  refunded: number;
+  net: number;
+}
+
+/** A debit/credit pair of the same amount, days apart — possibly the same money. */
+export interface BankRoundTrip {
+  amount: number;
+  withdrawalDate: string;
+  withdrawalDescription: string;
+  depositDate: string;
+  depositDescription: string;
+  daysApart: number;
+}
+
+export type BankConditionState = "met" | "not_met" | "unknown";
+
+/**
+ * Monthly salary-deposit condition. A calendar month that the file does not
+ * cover end-to-end is "unknown" — including the last one: a cumulative monthly
+ * rule cannot be decided before the month is over. We never answer "not_met"
+ * on a partial month, and the state is derived from salary deposits alone.
+ */
+export interface BankMonthlyCondition {
+  month: string; // YYYY-MM
+  fullyCovered: boolean;
+  state: BankConditionState;
+  salaryTotal: number;
+  threshold: number;
+  /** The deciding deposit is a candidate the user has not confirmed yet. */
+  awaitingConfirmation: boolean;
+  reason: string;
+}
+
 /** Everything the import flow needs to explain what happened, in Hebrew. */
 export interface BankIngestionReport {
   parser: "excel" | "pdf-columns" | "pdf-text";
@@ -70,10 +186,29 @@ export interface BankIngestionReport {
   balanceMismatches: BankBalanceMismatch[];
   openingBalance: number | null;
   closingBalance: number | null;
-  totalDeposits: number;
-  totalWithdrawals: number;
+  /** File coverage (first/last transaction date) — drives month completeness. */
+  coverageFrom: string | null;
+  coverageTo: string | null;
+  money: BankMoneySummary;
+  loanFinancing: BankLoanFinancing[];
+  monthFinancing: BankMonthFinancing[];
+  roundTrips: BankRoundTrip[];
+  salaryCandidates: BankRowIssue[];
+  monthlyConditions: BankMonthlyCondition[];
   byLineKind: Record<BankLineKind, number>;
 }
+
+/** Hebrew labels — one wording for every screen, so buckets can't blur. */
+export const BANK_MONEY_LABELS = {
+  income: "הכנסות",
+  incomeConfirmed: "הכנסות (בניכוי סבב כספים בהמתנה לאישור)",
+  currentSpend: "הוצאה שוטפת",
+  financingCharged: "הוצאה מימונית — חיוב ריבית (ברוטו)",
+  financingRefunded: "זיכוי ריבית",
+  financingNet: "הוצאה מימונית — מקוזז",
+  principal: "החזר קרן — הקטנת חוב",
+  mixed: "תשלום הלוואה — ללא פירוט קרן/ריבית",
+} as const;
 
 export interface ParsedBankStatement {
   rows: ParsedBankRow[];
@@ -198,15 +333,23 @@ function parseSignedAmount(value: Cell): number | null {
  * the deposit/withdrawal decision, which comes from the physical column only.
  *
  *   הלוואה - תשלום קרן            → principal (debt reduction, not spending)
- *   הלוואה - תשלום ריבית 03757    → interest  (financing expense)
+ *   הלוואה - תשלום ריבית 00965    → interest  (financing expense)
  *   ריבית על הלוואה 00990 28/05   → interest  (financing expense)
  *   ריבית על מסגרת ראשית 13.00%   → overdraft interest (financing expense)
+ *   זיכוי בגין הטבה זמנית בריבית משיכת יתר
+ *                                 → overdraft interest, credit direction: a
+ *                                   rebate on facility interest, i.e. negative
+ *                                   financing expense — never income.
  *   הלואה-תשלום 108               → combined repayment, no breakdown available
  */
 const LINE_KIND_PATTERNS: Array<{ kind: BankLineKind; pattern: RegExp }> = [
   { kind: "loan_principal", pattern: /הלוו?אה\s*-?\s*תשלום\s*קרן/ },
   { kind: "loan_interest", pattern: /הלוו?אה\s*-?\s*תשלום\s*ריבית/ },
   { kind: "loan_interest", pattern: /ריבית\s*על\s*הלוו?אה/ },
+  // Rebates/refunds on facility (overdraft) interest, in either word order.
+  // Must be matched before the row can fall through to "standard".
+  { kind: "overdraft_interest", pattern: /(זיכוי|החזר|הטבה).{0,30}ריבית.{0,20}(משיכת\s*יתר|מסגרת)/ },
+  { kind: "overdraft_interest", pattern: /ריבית.{0,20}(משיכת\s*יתר|מסגרת).{0,30}(זיכוי|החזר|הטבה)/ },
   { kind: "overdraft_interest", pattern: /ריבית\s*על\s*מסגרת/ },
   { kind: "loan_mixed", pattern: /הלוו?אה\s*-?\s*תשלום\s*\d{2,6}(?:\s|$)/ },
 ];
@@ -218,14 +361,331 @@ function extractLoanRef(description: string): string | null {
   return match ? match[1] : null;
 }
 
+/** Only loan lines carry a loan number; a facility (מסגרת) belongs to the account. */
+const KINDS_WITH_LOAN_REF: ReadonlySet<BankLineKind> = new Set<BankLineKind>(["loan_interest", "loan_mixed"]);
+
 function classifyLineKind(description: string): { lineKind: BankLineKind; loanRef: string | null } {
   const text = description.replace(/\s+/g, " ").trim();
   for (const { kind, pattern } of LINE_KIND_PATTERNS) {
     if (pattern.test(text)) {
-      return { lineKind: kind, loanRef: kind === "loan_principal" ? null : extractLoanRef(text) };
+      return { lineKind: kind, loanRef: KINDS_WITH_LOAN_REF.has(kind) ? extractLoanRef(text) : null };
     }
   }
   return { lineKind: "standard", loanRef: null };
+}
+
+// ---------------------------------------------------------------------------
+// Post-processing: account-level credits, round-trips, salary candidates
+//
+// Everything here runs AFTER the direction of each row is already fixed by its
+// physical column. Nothing in this block may change `type` — lineKind, text and
+// flags describe *what* the money is, never *which way* it moved.
+// ---------------------------------------------------------------------------
+
+const INTEREST_KINDS: ReadonlySet<BankLineKind> = new Set<BankLineKind>([
+  "loan_interest",
+  "overdraft_interest",
+]);
+
+function isInterestRow(row: ParsedBankRow): boolean {
+  return INTEREST_KINDS.has(row.lineKind);
+}
+
+/**
+ * Reconciliation-level classification, derived from the description + physical
+ * direction. Extends the parser's lineKind with two buckets the reconciliation
+ * flow needs, keeping every Israeli-bank text pattern in this one file:
+ *   - credit_card_payment: a credit-card bill settled FROM the account. Already
+ *     itemized in the credit module, so it MUST be excluded from spend to avoid
+ *     double-counting (CLAUDE.md §4).
+ *   - interest_credit: an interest line printed in the credit column — an
+ *     account-level interest rebate, never income.
+ */
+export type ReconcileLineKind = BankLineKind | "credit_card_payment" | "interest_credit";
+
+// Credit-card bill settlements drawn from the current account: the generic
+// "כרטיסי אשראי" wording, direct-debit ("עפ״י הרשאה") and the card issuers.
+const CREDIT_CARD_PAYMENT_PATTERN =
+  /כרטיס(?:י)?\s*אשראי|עפ["״'`]?י\s*הרשאה|הרשאה\s*לחיוב|\bכאל\b|ויזה|ישראכרט|מאסטרקארד|לאומי\s*קארד|\bמקס\b|אמריקן\s*אקספרס|דיינרס/;
+
+export function classifyBankLine(
+  description: string | null,
+  type: BankTransactionKind
+): { lineKind: ReconcileLineKind; loanRef: string | null } {
+  const text = (description ?? "").replace(/\s+/g, " ").trim();
+  const base = classifyLineKind(text);
+  // Interest in the credit column is an account-level rebate, not income.
+  if (INTEREST_KINDS.has(base.lineKind) && type === "deposit") {
+    return { lineKind: "interest_credit", loanRef: null };
+  }
+  // Credit-card settlements only matter on the way OUT (already in credit module).
+  if (type === "withdrawal" && base.lineKind === "standard" && CREDIT_CARD_PAYMENT_PATTERN.test(text)) {
+    return { lineKind: "credit_card_payment", loanRef: null };
+  }
+  return base;
+}
+
+/** Interest credited back. Stated as fact only — the statement gives no reason. */
+const INTEREST_CREDIT_NOTE = "זיכוי ריבית — הוצאה מימונית שלילית, לא הכנסה";
+const INTEREST_OFFSET_NOTE = "זיכוי ריבית שקוזז מול חיוב זהה באותו יום — סיבה לא ידועה מהדוח";
+
+function dayKey(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+function monthKey(date: Date): string {
+  return date.toISOString().slice(0, 7);
+}
+
+/**
+ * Interest credits are account-level. The number printed on such a line is the
+ * account reference (34-375700 → "03757"), not a loan number, so keeping it as
+ * `loanRef` would silently net interest against an unrelated loan. We clear it
+ * and mark the row instead: netting is then only possible per account+month.
+ */
+function annotateAccountLevelCredits(rows: ParsedBankRow[]): void {
+  const sameDayDebits = new Map<string, number>();
+  for (const row of rows) {
+    if (row.type !== "withdrawal" || !isInterestRow(row)) continue;
+    const key = `${dayKey(row.date)}|${row.amount.toFixed(2)}`;
+    sameDayDebits.set(key, (sameDayDebits.get(key) ?? 0) + 1);
+  }
+  for (const row of rows) {
+    if (row.type !== "deposit" || !isInterestRow(row)) continue;
+    row.accountLevelCredit = true;
+    row.loanRef = null;
+    const key = `${dayKey(row.date)}|${row.amount.toFixed(2)}`;
+    row.note = (sameDayDebits.get(key) ?? 0) > 0 ? INTEREST_OFFSET_NOTE : INTEREST_CREDIT_NOTE;
+  }
+}
+
+/** A debit and a credit of the same amount this close together may be one move. */
+const ROUND_TRIP_MAX_DAYS = 7;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Flag money that left the account and came back (or the reverse) within a few
+ * days for the same amount — a transfer to another account, a cancelled payment.
+ * Counting the incoming leg as income would invent money, so both legs are held
+ * out of the "confirmed" figures until the user says what it was. Only ordinary
+ * rows are paired: financing credits are already handled as financing.
+ */
+function annotateRoundTrips(rows: ParsedBankRow[]): BankRoundTrip[] {
+  const pairs: BankRoundTrip[] = [];
+  const takenDeposits = new Set<number>();
+  rows.forEach((withdrawal, wi) => {
+    if (withdrawal.type !== "withdrawal" || withdrawal.lineKind !== "standard") return;
+    let matchIndex = -1;
+    let bestGap = Number.POSITIVE_INFINITY;
+    rows.forEach((deposit, di) => {
+      if (di === wi || takenDeposits.has(di)) return;
+      if (deposit.type !== "deposit" || deposit.lineKind !== "standard") return;
+      if (Math.abs(deposit.amount - withdrawal.amount) > 0.005) return;
+      const gap = Math.abs(deposit.date.getTime() - withdrawal.date.getTime()) / DAY_MS;
+      if (gap > ROUND_TRIP_MAX_DAYS || gap >= bestGap) return;
+      bestGap = gap;
+      matchIndex = di;
+    });
+    if (matchIndex === -1) return;
+    const deposit = rows[matchIndex]!;
+    takenDeposits.add(matchIndex);
+    withdrawal.possibleRoundTrip = true;
+    deposit.possibleRoundTrip = true;
+    const note = `סבב כספים אפשרי: ${withdrawal.amount.toFixed(2)} יצא ב-${dayKey(
+      withdrawal.date
+    )} וחזר ב-${dayKey(deposit.date)} — מוחרג מההכנסה עד אישור ידני`;
+    withdrawal.note = note;
+    deposit.note = note;
+    pairs.push({
+      amount: withdrawal.amount,
+      withdrawalDate: dayKey(withdrawal.date),
+      withdrawalDescription: withdrawal.description,
+      depositDate: dayKey(deposit.date),
+      depositDescription: deposit.description,
+      daysApart: Math.round(bestGap),
+    });
+  });
+  return pairs;
+}
+
+/**
+ * Salary candidates. A credit only qualifies when the statement names a payer:
+ * generic bank wording (זיכוי / העברה) says nothing, and allowances are income
+ * but not salary. A candidate is never confirmed here — the user confirms.
+ */
+const GENERIC_CREDIT = /^(זיכוי|העברה|הפקדה|הפקדת|משיכה|ריבית|החזר|פדיון|שיק|המחאה|כספומט|בנקט)/;
+const BENEFIT_CREDIT = /(קצבת|קיצבת|ביטוח לאומי|בטוח לאומי|מזונות|מלגה|מענק)/;
+/** A candidate this many times the others is flagged, not silently trusted. */
+const SALARY_ATYPICAL_RATIO = 10;
+
+function annotateSalaryCandidates(rows: ParsedBankRow[]): ParsedBankRow[] {
+  const candidates = rows.filter((row) => {
+    if (row.type !== "deposit" || row.lineKind !== "standard" || row.possibleRoundTrip) return false;
+    const text = row.description.trim();
+    return !GENERIC_CREDIT.test(text) && !BENEFIT_CREDIT.test(text);
+  });
+  for (const row of candidates) {
+    row.salaryCandidate = true;
+    row.salaryConfirmed = false;
+    const others = candidates.filter((o) => o !== row).map((o) => o.amount);
+    if (others.length > 0) {
+      const median = [...others].sort((a, b) => a - b)[Math.floor(others.length / 2)]!;
+      row.atypicalAmount = median > 0 && row.amount / median >= SALARY_ATYPICAL_RATIO;
+    }
+    row.note = row.atypicalAmount
+      ? "תקבול חריג בגודלו מול שאר התקבולים המזוהים — ממתין לאישור המשתמשת"
+      : "תקבול שכר אפשרי — ממתין לאישור המשתמשת";
+  }
+  return candidates;
+}
+
+/**
+ * Monthly salary-deposit condition (cumulative salary credits ≥ threshold).
+ * Decided from salary deposits alone. A month the file does not cover from its
+ * first to its last day is "unknown" — the first one and the last one included:
+ * a cumulative monthly rule cannot be settled while the month is still running.
+ */
+const SALARY_CONDITION_THRESHOLD = 7000;
+
+function evaluateMonthlyConditions(
+  rows: ParsedBankRow[],
+  coverageFrom: Date | null,
+  coverageTo: Date | null
+): BankMonthlyCondition[] {
+  if (rows.length === 0 || coverageFrom === null || coverageTo === null) return [];
+
+  const salaryByMonth = new Map<string, { total: number; unconfirmed: boolean }>();
+  for (const row of rows) {
+    if (!row.salaryCandidate) continue;
+    const key = monthKey(row.date);
+    const bucket = salaryByMonth.get(key) ?? { total: 0, unconfirmed: false };
+    bucket.total = round2(bucket.total + row.amount);
+    if (!row.salaryConfirmed) bucket.unconfirmed = true;
+    salaryByMonth.set(key, bucket);
+  }
+
+  const conditions: BankMonthlyCondition[] = [];
+  const cursor = new Date(Date.UTC(coverageFrom.getUTCFullYear(), coverageFrom.getUTCMonth(), 1));
+  const last = new Date(Date.UTC(coverageTo.getUTCFullYear(), coverageTo.getUTCMonth(), 1));
+  const coverage = `${dayKey(coverageFrom)}–${dayKey(coverageTo)}`;
+  while (cursor.getTime() <= last.getTime()) {
+    const monthStart = new Date(cursor.getTime());
+    const monthEnd = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 0));
+    const fullyCovered =
+      coverageFrom.getTime() <= monthStart.getTime() && coverageTo.getTime() >= monthEnd.getTime();
+    const month = monthKey(monthStart);
+    const bucket = salaryByMonth.get(month) ?? { total: 0, unconfirmed: false };
+
+    let state: BankConditionState;
+    let reason: string;
+    if (!fullyCovered) {
+      state = "unknown";
+      reason =
+        `החודש אינו מכוסה במלואו בקובץ (טווח ${coverage}) — כלל מצטבר-חודשי ` +
+        `אינו ניתן להכרעה לפני סוף החודש`;
+    } else if (bucket.total >= SALARY_CONDITION_THRESHOLD) {
+      state = "met";
+      reason =
+        `הפקדות שכר מזוהות ${bucket.total.toFixed(2)} ≥ סף ${SALARY_CONDITION_THRESHOLD}` +
+        (bucket.unconfirmed ? " — מבוסס על תקבול שטרם אושר ידנית" : "");
+    } else {
+      state = "not_met";
+      reason = `הפקדות שכר מזוהות ${bucket.total.toFixed(2)} < סף ${SALARY_CONDITION_THRESHOLD}`;
+    }
+
+    conditions.push({
+      month,
+      fullyCovered,
+      state,
+      salaryTotal: bucket.total,
+      threshold: SALARY_CONDITION_THRESHOLD,
+      awaitingConfirmation: state === "met" && bucket.unconfirmed,
+      reason,
+    });
+    cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+  }
+  return conditions;
+}
+
+/** Split the statement into the buckets of §BankMoneySummary. */
+function summarizeMoney(rows: ParsedBankRow[]): BankMoneySummary {
+  let depositsRaw = 0;
+  let withdrawalsRaw = 0;
+  let income = 0;
+  let currentSpend = 0;
+  let financingCharged = 0;
+  let financingRefunded = 0;
+  let principal = 0;
+  let mixed = 0;
+  let roundTripPending = 0;
+
+  for (const row of rows) {
+    const isIn = row.type === "deposit"; // physical column — the only direction source
+    if (isIn) depositsRaw += row.amount;
+    else withdrawalsRaw += row.amount;
+
+    if (isInterestRow(row)) {
+      if (isIn) financingRefunded += row.amount;
+      else financingCharged += row.amount;
+      continue; // interest is financing on both sides — never income, never spending
+    }
+    if (row.lineKind === "loan_principal") {
+      if (!isIn) principal += row.amount;
+      continue;
+    }
+    if (row.lineKind === "loan_mixed") {
+      if (!isIn) mixed += row.amount;
+      continue;
+    }
+    if (isIn) income += row.amount;
+    else currentSpend += row.amount;
+    // Both legs of a round-trip carry the same amount, so counting the incoming
+    // leg once gives the sum to hold back from income and from spending alike.
+    if (row.possibleRoundTrip && isIn) roundTripPending += row.amount;
+  }
+
+  return {
+    depositsRaw: round2(depositsRaw),
+    withdrawalsRaw: round2(withdrawalsRaw),
+    income: round2(income),
+    incomeConfirmed: round2(income - roundTripPending),
+    currentSpend: round2(currentSpend),
+    currentSpendConfirmed: round2(currentSpend - roundTripPending),
+    financingCharged: round2(financingCharged),
+    financingRefunded: round2(financingRefunded),
+    financingNet: round2(financingCharged - financingRefunded),
+    principal: round2(principal),
+    mixed: round2(mixed),
+    roundTripPending: round2(roundTripPending),
+  };
+}
+
+/** Interest per loan — gross. Credits never reach here: they are account-level. */
+function summarizeLoanFinancing(rows: ParsedBankRow[]): BankLoanFinancing[] {
+  const byLoan = new Map<string, BankLoanFinancing>();
+  for (const row of rows) {
+    if (row.lineKind !== "loan_interest" || row.type !== "withdrawal" || row.loanRef === null) continue;
+    const entry = byLoan.get(row.loanRef) ?? { loanRef: row.loanRef, interestChargedGross: 0, lines: 0 };
+    entry.interestChargedGross = round2(entry.interestChargedGross + row.amount);
+    entry.lines += 1;
+    byLoan.set(row.loanRef, entry);
+  }
+  return [...byLoan.values()].sort((a, b) => a.loanRef.localeCompare(b.loanRef));
+}
+
+/** The one place netting is allowed: same account, same calendar month. */
+function summarizeMonthFinancing(rows: ParsedBankRow[]): BankMonthFinancing[] {
+  const byMonth = new Map<string, BankMonthFinancing>();
+  for (const row of rows) {
+    if (!isInterestRow(row)) continue;
+    const key = monthKey(row.date);
+    const entry = byMonth.get(key) ?? { month: key, charged: 0, refunded: 0, net: 0 };
+    if (row.type === "withdrawal") entry.charged = round2(entry.charged + row.amount);
+    else entry.refunded = round2(entry.refunded + row.amount);
+    entry.net = round2(entry.charged - entry.refunded);
+    byMonth.set(key, entry);
+  }
+  return [...byMonth.values()].sort((a, b) => a.month.localeCompare(b.month));
 }
 
 // ---------------------------------------------------------------------------
@@ -334,6 +794,17 @@ function buildStatement(
 ): ParsedBankStatement {
   const { openingBalance, closingBalance, mismatches } = verifyRollingBalance(rows);
 
+  // Analysis order matters: account-level credits first (they clear a loanRef),
+  // then round-trips (they disqualify a credit from being a salary candidate),
+  // then salary candidates (they decide the monthly condition).
+  annotateAccountLevelCredits(rows);
+  const roundTrips = annotateRoundTrips(rows);
+  const candidates = annotateSalaryCandidates(rows);
+
+  const dates = rows.map((r) => r.date.getTime());
+  const coverageFrom = dates.length > 0 ? new Date(Math.min(...dates)) : null;
+  const coverageTo = dates.length > 0 ? new Date(Math.max(...dates)) : null;
+
   const byLineKind: Record<BankLineKind, number> = {
     standard: 0,
     loan_principal: 0,
@@ -342,13 +813,18 @@ function buildStatement(
     loan_mixed: 0,
   };
   const review: BankRowIssue[] = [];
-  let totalDeposits = 0;
-  let totalWithdrawals = 0;
 
   for (const row of rows) {
     byLineKind[row.lineKind] += 1;
-    if (row.type === "deposit") totalDeposits += row.amount;
-    else totalWithdrawals += row.amount;
+    // A loan payment arriving as a credit is a drawdown, not a repayment — the
+    // buckets below only count the debit direction, so surface it for a human.
+    if (row.type === "deposit" && (row.lineKind === "loan_principal" || row.lineKind === "loan_mixed")) {
+      review.push({
+        page: typeof row.raw.page === "number" ? row.raw.page : null,
+        line: `${dayKey(row.date)} ${row.description} ${row.amount}`,
+        reason: "שורת קרן/תשלום הלוואה בכיוון זכות — לא נספרה כהחזר, דורשת בדיקה ידנית",
+      });
+    }
     if (row.confidence < REVIEW_THRESHOLD) {
       const page = typeof row.raw.page === "number" ? row.raw.page : null;
       const reasonHint = typeof row.raw.columnHint === "string" ? row.raw.columnHint : null;
@@ -378,8 +854,18 @@ function buildStatement(
       balanceMismatches: mismatches,
       openingBalance,
       closingBalance,
-      totalDeposits: round2(totalDeposits),
-      totalWithdrawals: round2(totalWithdrawals),
+      coverageFrom: coverageFrom === null ? null : dayKey(coverageFrom),
+      coverageTo: coverageTo === null ? null : dayKey(coverageTo),
+      money: summarizeMoney(rows),
+      loanFinancing: summarizeLoanFinancing(rows),
+      monthFinancing: summarizeMonthFinancing(rows),
+      roundTrips,
+      salaryCandidates: candidates.map((row) => ({
+        page: typeof row.raw.page === "number" ? row.raw.page : null,
+        line: `${dayKey(row.date)} ${row.description} ${row.amount.toFixed(2)}`,
+        reason: row.note ?? "תקבול שכר אפשרי — ממתין לאישור המשתמשת",
+      })),
+      monthlyConditions: evaluateMonthlyConditions(rows, coverageFrom, coverageTo),
       byLineKind,
     },
   };
@@ -460,18 +946,22 @@ export function parseBankStatement(buffer: Buffer): ParsedBankStatement {
 
       const balance = cols.balance !== undefined ? parseSignedAmount(row[cols.balance]) : null;
       const { lineKind, loanRef } = classifyLineKind(description);
-      parsed.push({
-        date,
-        description,
-        amount,
-        type,
-        lineKind,
-        loanRef,
-        balance,
-        confidence,
-        balanceCheck: "unverified",
-        raw: Object.fromEntries(row.map((cell, c) => [String(c), cell instanceof Date ? cell.toISOString() : cell])),
-      });
+      parsed.push(
+        toRow({
+          date,
+          description,
+          amount,
+          type,
+          lineKind,
+          loanRef,
+          balance,
+          confidence,
+          balanceCheck: "unverified",
+          raw: Object.fromEntries(
+            row.map((cell, c) => [String(c), cell instanceof Date ? cell.toISOString() : cell])
+          ),
+        })
+      );
     }
   }
 
@@ -632,18 +1122,20 @@ async function parseBankStatementPdfByText(buffer: Buffer): Promise<ParsedBankSt
       continue;
     }
     const { lineKind, loanRef } = classifyLineKind(c.description);
-    parsed.push({
-      date: c.date,
-      description: c.description,
-      amount: round2(amount),
-      type,
-      lineKind,
-      loanRef,
-      balance,
-      confidence,
-      balanceCheck: "unverified",
-      raw: { line: c.description, numbers: c.numbers, columnHint },
-    });
+    parsed.push(
+      toRow({
+        date: c.date,
+        description: c.description,
+        amount: round2(amount),
+        type,
+        lineKind,
+        loanRef,
+        balance,
+        confidence,
+        balanceCheck: "unverified",
+        raw: { line: c.description, numbers: c.numbers, columnHint },
+      })
+    );
   }
 
   return buildStatement("pdf-text", "קורא PDF טקסטואלי (מסלול גיבוי)", parsed, rejected);
@@ -887,7 +1379,7 @@ function parseBankStatementPdfByColumns(items: TextItem[]): ParsedBankStatement 
         .replace(/\s+/g, " ")
         .trim() || "תנועה בחשבון";
     const { lineKind, loanRef } = classifyLineKind(description);
-    return {
+    return toRow({
       date: a.date,
       description,
       amount: round2(a.amount),
@@ -905,7 +1397,7 @@ function parseBankStatementPdfByColumns(items: TextItem[]): ParsedBankStatement 
         description,
         columnHint: a.columnHint,
       },
-    };
+    });
   });
 
   return buildStatement("pdf-columns", "קורא PDF עמודתי (מיקום זכות/חובה)", rows, rejected);
@@ -936,12 +1428,19 @@ export async function parseBankStatementPdf(buffer: Buffer): Promise<ParsedBankS
   );
 }
 
+const CONDITION_LABEL: Record<BankConditionState, string> = {
+  met: "התקיים",
+  not_met: "לא התקיים",
+  unknown: "לא ידוע",
+};
+
 /** One-line Hebrew summary of an ingestion report, for the server log. */
 export function describeIngestionReport(report: BankIngestionReport): string {
   const kinds = Object.entries(report.byLineKind)
     .filter(([, count]) => count > 0)
     .map(([kind, count]) => `${kind}=${count}`)
     .join(", ");
+  const m = report.money;
   return [
     `פרסר: ${report.parserLabel}`,
     `זוהו ${report.rowsDetected} תנועות`,
@@ -949,9 +1448,22 @@ export function describeIngestionReport(report: BankIngestionReport): string {
     `לבדיקה ${report.review.length}`,
     `אי-התאמות יתרה ${report.balanceMismatches.length}`,
     `יתרה סופית ${report.closingBalance ?? "לא ידועה"}`,
-    `זכות ${report.totalDeposits} / חובה ${report.totalWithdrawals}`,
+    `${BANK_MONEY_LABELS.income} ${m.income.toFixed(2)}`,
+    `${BANK_MONEY_LABELS.currentSpend} ${m.currentSpend.toFixed(2)}`,
+    `${BANK_MONEY_LABELS.financingCharged} ${m.financingCharged.toFixed(2)}`,
+    `${BANK_MONEY_LABELS.financingRefunded} ${m.financingRefunded.toFixed(2)}`,
+    `${BANK_MONEY_LABELS.financingNet} ${m.financingNet.toFixed(2)}`,
+    `${BANK_MONEY_LABELS.principal} ${m.principal.toFixed(2)}`,
+    `${BANK_MONEY_LABELS.mixed} ${m.mixed.toFixed(2)}`,
     kinds ? `סוגי שורות: ${kinds}` : "",
   ]
     .filter(Boolean)
     .join(" · ");
+}
+
+/** Hebrew lines describing the monthly salary-deposit condition, for the log. */
+export function describeMonthlyConditions(report: BankIngestionReport): string[] {
+  return report.monthlyConditions.map(
+    (c) => `${c.month}: ${CONDITION_LABEL[c.state]}${c.awaitingConfirmation ? " (ממתין לאישור)" : ""} — ${c.reason}`
+  );
 }
