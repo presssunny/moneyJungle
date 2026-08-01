@@ -20,8 +20,8 @@ api.interceptors.response.use(
     const url: string = error.config?.url ?? "";
     if (status === 401 && !url.includes("/gate/login")) {
       localStorage.removeItem(TOKEN_KEY);
-      if (window.location.pathname !== "/gate") {
-        window.location.href = "/gate";
+      if (window.location.pathname !== "/login") {
+        window.location.href = "/login";
       }
     }
     // Surface the failures pages otherwise swallow (a page shows an empty list on

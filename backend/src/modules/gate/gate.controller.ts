@@ -6,8 +6,8 @@ import { LoginBody } from "./gate.validation";
 
 export const gateController = {
   login: asyncHandler(async (req: Request, res: Response) => {
-    const { password } = req.validated?.body as LoginBody;
-    const result = await gateService.login(password);
+    const { username, password } = req.validated?.body as LoginBody;
+    const result = await gateService.login(username, password);
     res.json(result);
   }),
 
@@ -17,8 +17,10 @@ export const gateController = {
     res.json({ ok: true });
   }),
 
-  // Reached only when gateAuth passed, so the session is valid.
+  // Reached only when gateAuth passed, so the session is valid. `user` is added
+  // for the UI to greet by name; `authenticated` is kept so older clients that
+  // only look at that field keep working.
   session: asyncHandler(async (_req: Request, res: Response) => {
-    res.json({ authenticated: true });
+    res.json({ authenticated: true, user: gateService.identity() });
   }),
 };
