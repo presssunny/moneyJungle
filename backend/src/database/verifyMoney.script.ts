@@ -28,6 +28,8 @@ interface Check {
 }
 
 const checks: Check[] = [];
+/** Things worth saying out loud that are not, on their own, a broken invariant. */
+const warnings: string[] = [];
 const add = (name: string, ok: boolean, detail: string) => checks.push({ name, ok, detail });
 const near = (a: number, b: number) => Math.abs(a - b) < 0.005;
 
@@ -111,14 +113,31 @@ async function verifyUser(userId: number) {
       : `רשומה מיותרת ב-${strayRecord.map((r) => r.id).join(", ")}`
   );
 
-  // 4. The tables the tabs read must equal the buckets.
+  // 4. The records the resolver owns must equal the buckets.
+  //
+  // Only LINKED records are compared. The tables also hold rows the user entered
+  // by hand — `incomes` has no source column at all — and demanding that the
+  // whole table equal the bank buckets would call every manual entry a defect.
+  // What the resolver is answerable for is the rows it created and links to.
+  const linkedIncomeIds = shaped.map((r) => r.linkedIncomeId).filter((id): id is number => id !== null);
+  const linkedExpenseIds = shaped.map((r) => r.linkedExpenseId).filter((id): id is number => id !== null);
+
   const incomeBucket = sum((r) => r.resolution === "income");
-  const incomesTable = round2(
+  const linkedIncomes = round2(
     decimalToNumber(
-      (await prisma.income.aggregate({ where: { userId }, _sum: { amount: true } }))._sum.amount
+      (
+        await prisma.income.aggregate({
+          where: { userId, id: { in: linkedIncomeIds } },
+          _sum: { amount: true },
+        })
+      )._sum.amount
     )
   );
-  add("טבלת ההכנסות = סכום הסיווג 'הכנסה'", near(incomeBucket, incomesTable), `${incomeBucket} = ${incomesTable}`);
+  add(
+    "הכנסות המקושרות לשורות בנק = סכום הסיווג 'הכנסה'",
+    near(incomeBucket, linkedIncomes),
+    `${incomeBucket} = ${linkedIncomes}`
+  );
 
   const expenseBuckets = round2(
     sum((r) => r.resolution === "expense") +
@@ -126,21 +145,39 @@ async function verifyUser(userId: number) {
       sum((r) => r.resolution === "financing_credit") +
       sum((r) => r.resolution === "credit_card_unitemized")
   );
-  const bankExpenses = round2(
+  const linkedExpenses = round2(
     decimalToNumber(
       (
         await prisma.expense.aggregate({
-          where: { userId, source: "bank_import" },
+          where: { userId, id: { in: linkedExpenseIds } },
           _sum: { amount: true },
         })
       )._sum.amount
     )
   );
   add(
-    "הוצאות ממקור בנק = סכום סיווגי ההוצאה (זיכוי ריבית בסימן שלילי)",
-    near(expenseBuckets, bankExpenses),
-    `${expenseBuckets} = ${bankExpenses}`
+    "הוצאות המקושרות לשורות בנק = סכום סיווגי ההוצאה (זיכוי ריבית בסימן שלילי)",
+    near(expenseBuckets, linkedExpenses),
+    `${expenseBuckets} = ${linkedExpenses}`
   );
+
+  // Records marked as coming from a bank import but backed by no bank row. Not
+  // an assertion: it is also what a hand-inserted row with source=bank_import
+  // looks like. Reported with the amount, because if they ARE leftovers of
+  // deleted transactions they inflate every expense figure silently.
+  const orphanExpenses = await prisma.expense.findMany({
+    where: { userId, source: "bank_import", id: { notIn: linkedExpenseIds } },
+    select: { id: true, amount: true, expenseDate: true, description: true },
+  });
+  if (orphanExpenses.length > 0) {
+    const total = round2(orphanExpenses.reduce((s, e) => s + decimalToNumber(e.amount), 0));
+    warnings.push(
+      `${orphanExpenses.length} הוצאות מסומנות כ-bank_import ללא שורת בנק מאחוריהן (${total}) — ` +
+        `או שהוזנו ידנית עם המקור הזה, או ששרדו מחיקה של תנועה. מזהים: ${orphanExpenses
+          .map((e) => e.id)
+          .join(", ")}`
+    );
+  }
 
   // 5. bank ↔ credit: a card counted as spend must not also be itemized.
   const settledCards = shaped.filter((r) => r.resolution === "credit_card_settled").length;
@@ -163,6 +200,9 @@ async function main() {
   }
   for (const check of checks) {
     console.log(`${check.ok ? "✓" : "✗"} ${check.name} — ${check.detail}`);
+  }
+  for (const warning of warnings) {
+    console.log(`⚠ ${warning}`);
   }
   const failed = checks.filter((c) => !c.ok).length;
   console.log(failed === 0 ? "\nכל בדיקות התקינות עברו ✔" : `\n${failed} בדיקות נכשלו ✖`);
