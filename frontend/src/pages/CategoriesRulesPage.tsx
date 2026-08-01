@@ -1,13 +1,16 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
+import { AsyncSection } from "../components/common/AsyncSection";
 import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
+import { useConfirm } from "../components/common/ConfirmDialog";
 import { EmptyState } from "../components/common/EmptyState";
 import { ErrorMessage } from "../components/common/ErrorMessage";
 import { Input } from "../components/common/Input";
-import { Loading } from "../components/common/Loading";
 import { Modal } from "../components/common/Modal";
 import { Select } from "../components/common/Select";
+import { SkeletonRows } from "../components/common/Skeleton";
 import { Table, type Column } from "../components/common/Table";
+import { useAsync } from "../hooks/useAsync";
 import { apiErrorMessage } from "../services/api";
 import {
   createCategory,
@@ -17,23 +20,25 @@ import {
   listCategories,
   listRules,
 } from "../services/planning.service";
+import { toast } from "../services/toast";
 import type { Category, CategoryRule } from "../types/models";
 
 export default function CategoriesRulesPage() {
-  const [categories, setCategories] = useState<Category[] | null>(null);
-  const [rules, setRules] = useState<CategoryRule[] | null>(null);
+  // Categories and rules load independently: a rules failure must not hide the
+  // categories the user can still work with (IA §1.3).
+  const categoriesRes = useAsync(() => listCategories(), [], "לא הצלחנו לטעון את הקטגוריות");
+  const rulesRes = useAsync(() => listRules(), [], "לא הצלחנו לטעון את חוקי הסיווג");
+  const confirm = useConfirm();
   const [catOpen, setCatOpen] = useState(false);
   const [ruleOpen, setRuleOpen] = useState(false);
   const [catForm, setCatForm] = useState({ name: "", type: "expense", icon: "🏷️", color: "#5B8DEF" });
   const [ruleForm, setRuleForm] = useState({ keyword: "", categoryId: "" as number | "" });
   const [error, setError] = useState("");
 
-  const load = useCallback(() => {
-    listCategories().then(setCategories).catch(() => setCategories([]));
-    listRules().then(setRules).catch(() => setRules([]));
-  }, []);
-
-  useEffect(load, [load]);
+  function load() {
+    categoriesRes.reload();
+    rulesRes.reload();
+  }
 
   async function submitCategory(e: FormEvent) {
     e.preventDefault();
@@ -62,29 +67,59 @@ export default function CategoriesRulesPage() {
     }
   }
 
-  async function removeCategory(category: Category) {
-    if (!window.confirm(`למחוק את הקטגוריה "${category.name}"?`)) return;
-    try {
-      await deleteCategory(category.id);
-      load();
-    } catch (err) {
-      window.alert(apiErrorMessage(err));
-    }
+  function askRemoveCategory(category: Category) {
+    confirm.ask(
+      {
+        title: "מחיקת קטגוריה",
+        message: (
+          <>
+            הקטגוריה <strong>{category.icon} {category.name}</strong> תימחק.
+            <span className="confirm-consequence">
+              תנועות שסווגו אליה יישארו — הן פשוט יחזרו להיות ללא קטגוריה.
+            </span>
+          </>
+        ),
+        confirmLabel: "מחיקה",
+        tone: "danger",
+      },
+      async () => {
+        try {
+          await deleteCategory(category.id);
+          load();
+        } catch (err) {
+          toast.error(apiErrorMessage(err));
+        }
+      }
+    );
   }
 
-  async function removeRule(rule: CategoryRule) {
-    if (!window.confirm(`למחוק את החוק "${rule.keyword}"?`)) return;
-    try {
-      await deleteRule(rule.id);
-      load();
-    } catch (err) {
-      window.alert(apiErrorMessage(err));
-    }
+  function askRemoveRule(rule: CategoryRule) {
+    confirm.ask(
+      {
+        title: "מחיקת חוק סיווג",
+        message: (
+          <>
+            החוק על <strong>{rule.keyword}</strong> יימחק.
+            <span className="confirm-consequence">
+              עסקאות שכבר סווגו לפיו שומרות על הקטגוריה שלהן; רק סיווג עתידי ייפסק.
+            </span>
+          </>
+        ),
+        confirmLabel: "מחיקה",
+        tone: "danger",
+      },
+      async () => {
+        try {
+          await deleteRule(rule.id);
+          load();
+        } catch (err) {
+          toast.error(apiErrorMessage(err));
+        }
+      }
+    );
   }
 
-  if (!categories || !rules) return <Loading />;
-
-  const categoryById = new Map(categories.map((c) => [c.id, c]));
+  const categoryById = new Map((categoriesRes.data ?? []).map((c) => [c.id, c]));
 
   const ruleColumns: Column<CategoryRule>[] = [
     { key: "keyword", header: "מילת מפתח", render: (row) => <strong>{row.keyword}</strong> },
@@ -102,7 +137,11 @@ export default function CategoriesRulesPage() {
       header: "",
       align: "left",
       render: (row) =>
-        row.userId !== null ? <Button size="sm" variant="ghost" onClick={() => removeRule(row)}>🗑️</Button> : null,
+        row.userId !== null ? (
+          <Button size="sm" variant="ghost" onClick={() => askRemoveRule(row)} aria-label={`מחיקת החוק ${row.keyword}`}>
+            🗑️
+          </Button>
+        ) : null,
     },
   ];
 
@@ -115,27 +154,51 @@ export default function CategoriesRulesPage() {
       </div>
 
       <Card title="קטגוריות">
-        <div className="category-grid">
-          {categories.map((category) => (
-            <div key={category.id} className="category-chip" style={{ borderColor: category.color ?? undefined }}>
-              <span className="category-chip-icon">{category.icon}</span>
-              <span className="category-chip-name">{category.name}</span>
-              {category.type === "income" && <span className="text-success">הכנסה</span>}
-              {category.userId !== null && (
-                <button className="category-chip-delete" onClick={() => removeCategory(category)} title="מחיקה">✕</button>
-              )}
+        <AsyncSection
+          resource={categoriesRes}
+          errorTitle="לא הצלחנו לטעון את הקטגוריות"
+          skeleton={<SkeletonRows rows={3} label="טוען קטגוריות" />}
+          isEmpty={(rows) => rows.length === 0}
+          emptyState={<EmptyState icon="🏷️" title="אין קטגוריות" hint="הוסיפי קטגוריה כדי לסווג הוצאות והכנסות" />}
+        >
+          {(rows) => (
+            <div className="category-grid">
+              {rows.map((category) => (
+                <div key={category.id} className="category-chip" style={{ borderColor: category.color ?? undefined }}>
+                  <span className="category-chip-icon">{category.icon}</span>
+                  <span className="category-chip-name">{category.name}</span>
+                  {category.type === "income" && <span className="text-success">הכנסה</span>}
+                  {category.userId !== null && (
+                    <button
+                      className="category-chip-delete"
+                      onClick={() => askRemoveCategory(category)}
+                      aria-label={`מחיקת הקטגוריה ${category.name}`}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          )}
+        </AsyncSection>
       </Card>
 
       <Card title="חוקי סיווג אוטומטי">
-        <Table
-          columns={ruleColumns}
-          rows={rules}
-          rowKey={(row) => row.id}
-          emptyState={<EmptyState icon="🪄" title="אין חוקים" hint="הוסיפי חוק — למשל: כל עסקה עם 'שופרסל' תסווג לאוכל בסופר" />}
-        />
+        <AsyncSection
+          resource={rulesRes}
+          errorTitle="לא הצלחנו לטעון את חוקי הסיווג"
+          skeleton={<SkeletonRows rows={4} label="טוען חוקים" />}
+        >
+          {(rows) => (
+            <Table
+              columns={ruleColumns}
+              rows={rows}
+              rowKey={(row) => row.id}
+              emptyState={<EmptyState icon="🪄" title="אין חוקים" hint="הוסיפי חוק — למשל: כל עסקה עם 'שופרסל' תסווג לאוכל בסופר" />}
+            />
+          )}
+        </AsyncSection>
       </Card>
 
       <Modal title="קטגוריה חדשה" open={catOpen} onClose={() => setCatOpen(false)}>
@@ -178,7 +241,9 @@ export default function CategoriesRulesPage() {
           />
           <Select
             label="קטגוריה"
-            options={categories.filter((c) => c.type === "expense").map((c) => ({ value: c.id, label: `${c.icon ?? ""} ${c.name}` }))}
+            options={(categoriesRes.data ?? [])
+              .filter((c) => c.type === "expense")
+              .map((c) => ({ value: c.id, label: `${c.icon ?? ""} ${c.name}` }))}
             placeholder="בחרי קטגוריה"
             required
             value={ruleForm.categoryId}
@@ -190,6 +255,8 @@ export default function CategoriesRulesPage() {
           </div>
         </form>
       </Modal>
+
+      {confirm.dialog}
     </>
   );
 }

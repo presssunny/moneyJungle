@@ -50,7 +50,11 @@ export function Table<T>({ columns, rows, rowKey, emptyState, pageSize = 15 }: T
             {visibleRows.map((row) => (
               <tr key={rowKey(row)}>
                 {columns.map((col) => (
-                  <td key={col.key} style={{ textAlign: col.align ?? "right" }}>
+                  // `data-label` carries the column header down to narrow
+                  // screens, where CSS turns each row into a card and shows the
+                  // header beside its value (IA §8.2 — no horizontal scrolling
+                  // on mobile). One attribute here fixes every table in the app.
+                  <td key={col.key} data-label={col.header} style={{ textAlign: col.align ?? "right" }}>
                     {col.render(row)}
                   </td>
                 ))}

@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
+import { AsyncSection } from "../components/common/AsyncSection";
 import { Card } from "../components/common/Card";
-import { Loading } from "../components/common/Loading";
+import { EmptyState } from "../components/common/EmptyState";
+import { SkeletonChart } from "../components/common/Skeleton";
 import { useMonth } from "../context/MonthContext";
+import { useAsync } from "../hooks/useAsync";
 import { listReminders } from "../services/reminders.service";
 import { listRecurring, listSubscriptions } from "../services/planning.service";
-import type { Reminder } from "../types/dashboard.types";
-import type { RecurringPayment, Subscription } from "../types/models";
 import { formatCurrency } from "../utils/format";
 
 interface CalendarEvent {
@@ -21,15 +22,25 @@ const WEEKDAYS = ["א", "ב", "ג", "ד", "ה", "ו", "ש"];
 
 export default function CalendarPage() {
   const { year, month } = useMonth();
-  const [reminders, setReminders] = useState<Reminder[] | null>(null);
-  const [recurring, setRecurring] = useState<RecurringPayment[] | null>(null);
-  const [subscriptions, setSubscriptions] = useState<Subscription[] | null>(null);
 
-  useEffect(() => {
-    listReminders().then(setReminders).catch(() => setReminders([]));
-    listRecurring().then((d) => setRecurring(d.items)).catch(() => setRecurring([]));
-    listSubscriptions().then((d) => setSubscriptions(d.items)).catch(() => setSubscriptions([]));
-  }, []);
+  // One resource for the whole calendar: a month drawn from two of the three
+  // sources would be silently wrong ("nothing scheduled" when in fact a request
+  // failed), so the grid is shown only when all three arrived.
+  const schedule = useAsync(
+    async () => {
+      const [reminders, recurring, subscriptions] = await Promise.all([
+        listReminders(),
+        listRecurring(),
+        listSubscriptions(),
+      ]);
+      return { reminders, recurring: recurring.items, subscriptions: subscriptions.items };
+    },
+    [],
+    "לא הצלחנו לטעון את אירועי החודש"
+  );
+  const reminders = schedule.data?.reminders;
+  const recurring = schedule.data?.recurring;
+  const subscriptions = schedule.data?.subscriptions;
 
   const daysInMonth = new Date(year, month, 0).getDate();
   const firstWeekday = new Date(year, month - 1, 1).getDay(); // 0 = Sunday
@@ -93,8 +104,6 @@ export default function CalendarPage() {
     return map;
   }, [reminders, recurring, subscriptions, year, month, daysInMonth]);
 
-  if (!reminders || !recurring || !subscriptions) return <Loading />;
-
   const today = new Date();
   const isCurrentMonth = today.getFullYear() === year && today.getMonth() + 1 === month;
   const monthTotal = [...eventsByDay.values()].flat().reduce((sum, e) => sum + (e.amount ?? 0), 0);
@@ -113,32 +122,48 @@ export default function CalendarPage() {
       </div>
 
       <Card>
-        <div className="calendar-grid">
-          {WEEKDAYS.map((weekday) => (
-            <div key={weekday} className="calendar-weekday">{weekday}</div>
-          ))}
-          {cells.map((cell, index) =>
-            cell.day === null ? (
-              <div key={`empty-${index}`} className="calendar-cell calendar-cell-empty" />
-            ) : (
-              <div
-                key={cell.day}
-                className={`calendar-cell ${isCurrentMonth && cell.day === today.getDate() ? "calendar-cell-today" : ""}`}
-              >
-                <span className="calendar-day-number">{cell.day}</span>
-                <div className="calendar-events">
-                  {(eventsByDay.get(cell.day) ?? []).map((event) => (
-                    <div key={event.key} className={`calendar-event calendar-event-${event.kind}`} title={event.title}>
-                      <span>{event.icon}</span>
-                      <span className="calendar-event-title">{event.title}</span>
-                      {event.amount !== null && <span className="mono calendar-event-amount">{formatCurrency(event.amount)}</span>}
+        <AsyncSection
+          resource={schedule}
+          errorTitle="לא הצלחנו לטעון את אירועי החודש"
+          skeleton={<SkeletonChart height={320} label="טוען את לוח החודש" />}
+          isEmpty={() => eventsByDay.size === 0}
+          emptyState={
+            <EmptyState
+              icon="📅"
+              title="אין אירועים בחודש הזה"
+              hint="תשלומים קבועים, מנויים ותזכורות שתגדירי יופיעו כאן לפי התאריך שלהם"
+            />
+          }
+        >
+          {() => (
+            <div className="calendar-grid">
+              {WEEKDAYS.map((weekday) => (
+                <div key={weekday} className="calendar-weekday">{weekday}</div>
+              ))}
+              {cells.map((cell, index) =>
+                cell.day === null ? (
+                  <div key={`empty-${index}`} className="calendar-cell calendar-cell-empty" />
+                ) : (
+                  <div
+                    key={cell.day}
+                    className={`calendar-cell ${isCurrentMonth && cell.day === today.getDate() ? "calendar-cell-today" : ""}`}
+                  >
+                    <span className="calendar-day-number">{cell.day}</span>
+                    <div className="calendar-events">
+                      {(eventsByDay.get(cell.day) ?? []).map((event) => (
+                        <div key={event.key} className={`calendar-event calendar-event-${event.kind}`} title={event.title}>
+                          <span>{event.icon}</span>
+                          <span className="calendar-event-title">{event.title}</span>
+                          {event.amount !== null && <span className="mono calendar-event-amount">{formatCurrency(event.amount)}</span>}
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              </div>
-            )
+                  </div>
+                )
+              )}
+            </div>
           )}
-        </div>
+        </AsyncSection>
       </Card>
 
       <div className="calendar-legend">

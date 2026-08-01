@@ -1,12 +1,15 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
+import { AsyncSection } from "../components/common/AsyncSection";
 import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
+import { useConfirm } from "../components/common/ConfirmDialog";
 import { EmptyState } from "../components/common/EmptyState";
 import { ErrorMessage } from "../components/common/ErrorMessage";
 import { Input } from "../components/common/Input";
-import { Loading } from "../components/common/Loading";
 import { Modal } from "../components/common/Modal";
+import { SkeletonRows } from "../components/common/Skeleton";
 import { Table, type Column } from "../components/common/Table";
+import { useAsync } from "../hooks/useAsync";
 import { apiErrorMessage } from "../services/api";
 import {
   createFamilyMember,
@@ -14,21 +17,27 @@ import {
   listFamily,
   updateFamilyMember,
 } from "../services/planning.service";
+import { toast } from "../services/toast";
 import type { FamilyMember } from "../types/models";
 import { formatDate } from "../utils/format";
 
+/** What a member is linked to — used to say what a deletion would take with it. */
+function linkedSummary(member: FamilyMember): string | null {
+  if (!member._count) return null;
+  const parts: string[] = [];
+  if (member._count.expenses) parts.push(`${member._count.expenses} הוצאות`);
+  if (member._count.incomes) parts.push(`${member._count.incomes} הכנסות`);
+  if (member._count.loans) parts.push(`${member._count.loans} הלוואות`);
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
 export default function FamilyPage() {
-  const [members, setMembers] = useState<FamilyMember[] | null>(null);
+  const members = useAsync(() => listFamily(), [], "לא הצלחנו לטעון את בני המשפחה");
+  const confirm = useConfirm();
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<FamilyMember | null>(null);
   const [name, setName] = useState("");
   const [error, setError] = useState("");
-
-  const load = useCallback(() => {
-    listFamily().then(setMembers).catch(() => setMembers([]));
-  }, []);
-
-  useEffect(load, [load]);
 
   function openCreate() {
     setEditing(null);
@@ -51,37 +60,49 @@ export default function FamilyPage() {
       if (editing) await updateFamilyMember(editing.id, name);
       else await createFamilyMember(name);
       setFormOpen(false);
-      load();
+      members.reload();
     } catch (err) {
       setError(apiErrorMessage(err));
     }
   }
 
-  async function remove(member: FamilyMember) {
-    if (!window.confirm(`למחוק את "${member.name}"? כל הנתונים המשויכים יימחקו!`)) return;
-    try {
-      await deleteFamilyMember(member.id);
-      load();
-    } catch (err) {
-      window.alert(apiErrorMessage(err));
-    }
+  function askRemove(member: FamilyMember) {
+    const linked = linkedSummary(member);
+    confirm.ask(
+      {
+        title: `מחיקת ${member.name}`,
+        // Say what is actually about to be lost — "are you sure?" alone gives the
+        // user nothing to decide with.
+        message: (
+          <>
+            <strong>{member.name}</strong> יימחק מהמערכת.
+            <span className="confirm-consequence">
+              {linked
+                ? `יימחקו יחד איתו גם: ${linked}. הפעולה אינה הפיכה.`
+                : "לא משויכים אליו נתונים כספיים. הפעולה אינה הפיכה."}
+            </span>
+          </>
+        ),
+        confirmLabel: "מחיקה",
+        tone: "danger",
+      },
+      async () => {
+        try {
+          await deleteFamilyMember(member.id);
+          members.reload();
+        } catch (err) {
+          toast.error(apiErrorMessage(err));
+        }
+      }
+    );
   }
-
-  if (!members) return <Loading />;
 
   const columns: Column<FamilyMember>[] = [
     { key: "name", header: "שם", render: (row) => <strong>👤 {row.name}</strong> },
     {
       key: "activity",
       header: "פעילות",
-      render: (row) =>
-        row._count ? (
-          <span className="text-muted">
-            {row._count.expenses} הוצאות · {row._count.incomes} הכנסות · {row._count.loans} הלוואות
-          </span>
-        ) : (
-          "—"
-        ),
+      render: (row) => <span className="text-muted">{linkedSummary(row) ?? "—"}</span>,
     },
     { key: "since", header: "נוצר", render: (row) => formatDate(row.createdAt) },
     {
@@ -90,8 +111,12 @@ export default function FamilyPage() {
       align: "left",
       render: (row) => (
         <span className="row-actions">
-          <Button size="sm" variant="ghost" onClick={() => openEdit(row)}>✏️</Button>
-          <Button size="sm" variant="ghost" onClick={() => remove(row)}>🗑️</Button>
+          <Button size="sm" variant="ghost" onClick={() => openEdit(row)} aria-label={`עריכת ${row.name}`}>
+            ✏️
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => askRemove(row)} aria-label={`מחיקת ${row.name}`}>
+            🗑️
+          </Button>
         </span>
       ),
     },
@@ -104,12 +129,26 @@ export default function FamilyPage() {
       </div>
 
       <Card>
-        <Table
-          columns={columns}
-          rows={members}
-          rowKey={(row) => row.id}
-          emptyState={<EmptyState icon="👨‍👩‍👧" title="אין בני משפחה" />}
-        />
+        <AsyncSection
+          resource={members}
+          errorTitle="לא הצלחנו לטעון את בני המשפחה"
+          skeleton={<SkeletonRows rows={3} />}
+        >
+          {(rows) => (
+            <Table
+              columns={columns}
+              rows={rows}
+              rowKey={(row) => row.id}
+              emptyState={
+                <EmptyState
+                  icon="👨‍👩‍👧"
+                  title="אין בני משפחה"
+                  hint="הוסיפי בן משפחה כדי לשייך אליו הכנסות, הוצאות והלוואות"
+                />
+              }
+            />
+          )}
+        </AsyncSection>
       </Card>
 
       <Modal title={editing ? "עריכת שם" : "בן משפחה חדש"} open={formOpen} onClose={() => setFormOpen(false)}>
@@ -118,10 +157,14 @@ export default function FamilyPage() {
           <Input label="שם" required value={name} onChange={(e) => setName(e.target.value)} />
           <div className="modal-actions">
             <Button type="submit">{editing ? "עדכון" : "הוספה"}</Button>
-            <Button type="button" variant="ghost" onClick={() => setFormOpen(false)}>ביטול</Button>
+            <Button type="button" variant="ghost" onClick={() => setFormOpen(false)}>
+              ביטול
+            </Button>
           </div>
         </form>
       </Modal>
+
+      {confirm.dialog}
     </>
   );
 }

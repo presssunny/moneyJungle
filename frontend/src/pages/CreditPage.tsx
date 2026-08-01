@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { AsyncSection } from "../components/common/AsyncSection";
 import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
+import { useConfirm } from "../components/common/ConfirmDialog";
 import { EmptyState } from "../components/common/EmptyState";
 import { Input } from "../components/common/Input";
 import { Modal } from "../components/common/Modal";
@@ -40,6 +41,7 @@ import { currentMonthKey, formatCurrency, formatDate, formatMonthKey } from "../
  * every expense total; without the note the number looks like a missing expense.
  */
 export default function CreditPage() {
+  const confirmDialog = useConfirm();
   const { monthKey, setMonthKey } = useMonth();
   const navigate = useNavigate();
   const { expenseCategories } = useLookups();
@@ -134,11 +136,28 @@ export default function CreditPage() {
     load();
   }
 
-  async function removeImport(imp: CreditImport) {
-    if (!window.confirm(`למחוק את הייבוא "${imp.fileName}" על כל העסקאות שבו?`)) return;
-    await deleteCreditImport(imp.id);
-    if (selected?.id === imp.id) setSelected(null);
-    load();
+  function removeImport(imp: CreditImport) {
+    confirmDialog.ask(
+      {
+        title: "מחיקת ייבוא אשראי",
+        message: (
+          <>
+            הייבוא <strong>{imp.fileName}</strong> יימחק על כל {imp.totalTransactions} העסקאות שבו.
+            <span className="confirm-consequence">
+              אם הייבוא אושר, הסכומים שלו ייגרעו מהדשבורד ומההוצאות. שורות הבנק ייבדקו מחדש
+              כדי שחיוב הכרטיס לא ייעלם מהחישוב.
+            </span>
+          </>
+        ),
+        confirmLabel: "מחיקת הייבוא",
+        tone: "danger",
+      },
+      async () => {
+        await deleteCreditImport(imp.id);
+        if (selected?.id === imp.id) setSelected(null);
+        load();
+      }
+    );
   }
 
   async function setTransactionCategory(tx: CreditTransaction, categoryId: number | null) {
@@ -549,6 +568,8 @@ export default function CreditPage() {
           </>
         )}
       </Modal>
+
+      {confirmDialog.dialog}
     </>
   );
 }

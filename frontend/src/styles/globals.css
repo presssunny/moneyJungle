@@ -50,59 +50,107 @@ textarea {
   color: var(--primary-contrast);
 }
 
-/* ---------- Gate screen ---------- */
+/* ---------- Login screen ----------
+   Every colour is a theme token, so the screen follows all 8 themes (light and
+   dark) without a single hard-coded value. */
 
 .gate-page {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
   background:
-    radial-gradient(ellipse 60% 40% at 50% 0%, color-mix(in srgb, var(--primary) 8%, transparent), transparent),
+    radial-gradient(ellipse 70% 50% at 50% -10%, color-mix(in srgb, var(--primary) 14%, transparent), transparent),
+    radial-gradient(ellipse 50% 40% at 90% 110%, color-mix(in srgb, var(--secondary) 10%, transparent), transparent),
     var(--bg);
-  padding: 16px;
+  padding: 24px 16px;
 }
 
 .gate-card {
   width: 100%;
-  max-width: 400px;
-  background: var(--bg-card);
+  max-width: 420px;
+  background: color-mix(in srgb, var(--bg-card) 92%, transparent);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 40px 32px;
+  border-radius: 16px;
+  padding: 40px 32px 32px;
   text-align: center;
+  box-shadow: 0 18px 50px -20px rgba(0, 0, 0, 0.55);
+  animation: gate-rise 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes gate-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.98);
+  }
+}
+
+.gate-mark {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 16px;
+  display: grid;
+  place-items: center;
+  font-size: 28px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--primary) 35%, transparent);
 }
 
 .gate-logo {
   font-family: "JetBrains Mono", monospace;
-  font-size: 14px;
+  font-size: 13px;
   letter-spacing: 3px;
   color: var(--primary);
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .gate-title {
-  font-size: 22px;
+  font-size: 21px;
   font-weight: 600;
-  margin-bottom: 28px;
+  margin-bottom: 4px;
+}
+
+.gate-sub {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-bottom: 26px;
 }
 
 .gate-form {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  text-align: right;
+}
+
+.gate-field-label {
+  display: block;
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+/* Wrapper so the show/hide button can sit inside the field. */
+.gate-field-control {
+  position: relative;
+  display: flex;
 }
 
 .gate-input {
+  flex: 1;
+  width: 100%;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 10px;
   color: var(--text);
-  padding: 12px 14px;
-  font-size: 16px;
+  padding: 13px 14px;
+  font-size: 16px; /* 16px keeps iOS from zooming on focus */
   outline: none;
-  transition: border-color 0.15s;
-  text-align: center;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
 }
 
 .gate-input:focus {
@@ -110,19 +158,52 @@ textarea {
   box-shadow: var(--glow);
 }
 
+.gate-input-with-toggle {
+  padding-left: 46px; /* room for the reveal button on the RTL "end" side */
+}
+
+.gate-reveal {
+  position: absolute;
+  inset-inline-end: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  min-width: 36px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 8px;
+  font-size: 16px;
+  display: grid;
+  place-items: center;
+}
+
+.gate-reveal:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+
 .gate-button {
   background: var(--primary);
   color: var(--primary-contrast);
   border: none;
-  border-radius: 6px;
-  padding: 12px;
+  border-radius: 10px;
+  padding: 13px;
   font-size: 16px;
   font-weight: 600;
-  transition: opacity 0.15s;
+  margin-top: 4px;
+  transition:
+    opacity 0.15s,
+    transform 0.12s;
 }
 
-.gate-button:hover {
-  opacity: 0.9;
+.gate-button:hover:not(:disabled) {
+  opacity: 0.92;
+  transform: translateY(-1px);
+}
+
+.gate-button:active:not(:disabled) {
+  transform: translateY(0);
 }
 
 .gate-button:disabled {
@@ -130,10 +211,44 @@ textarea {
   cursor: not-allowed;
 }
 
+/* Reserves its own height so the card does not jump when a message appears. */
 .gate-error {
   color: var(--danger);
   font-size: 14px;
   min-height: 20px;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.gate-error:not(:empty) {
+  animation: gate-shake 0.3s ease-in-out;
+}
+
+@keyframes gate-shake {
+  25% {
+    transform: translateX(-5px);
+  }
+  75% {
+    transform: translateX(5px);
+  }
+}
+
+.gate-foot {
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+@media (max-width: 420px) {
+  .gate-card {
+    padding: 32px 20px 24px;
+    border-radius: 14px;
+  }
 }
 
 /* ---------- Accessibility: keyboard focus, motion, touch targets ---------- */
@@ -168,14 +283,33 @@ textarea:focus-visible,
   }
 }
 
-/* Comfortable minimum tap targets on touch devices */
+/* Comfortable minimum tap targets on touch devices.
+   `min-width` matters as much as `min-height` here: the row-action buttons are
+   single emoji (✏️ / 🗑️), so without it they stay ~24px wide and miss the 44px
+   target even once they are tall enough. */
 @media (pointer: coarse) {
   .btn,
   .month-select,
   .month-today,
   .header-logout,
-  .sidebar-item {
+  .header-icon-btn,
+  .sidebar-item,
+  .pagination-btn,
+  .gate-reveal,
+  .row-actions .btn {
     min-height: 44px;
+  }
+
+  .btn-sm,
+  .header-icon-btn,
+  .gate-reveal,
+  .row-actions .btn {
+    min-width: 44px;
+  }
+
+  .row-actions {
+    display: inline-flex;
+    gap: 4px;
   }
 }
 

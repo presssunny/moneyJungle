@@ -3,6 +3,7 @@ import { useLocation, useSearchParams } from "react-router-dom";
 import { AsyncSection } from "../components/common/AsyncSection";
 import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
+import { useConfirm } from "../components/common/ConfirmDialog";
 import { EmptyState } from "../components/common/EmptyState";
 import { ErrorMessage } from "../components/common/ErrorMessage";
 import { Input } from "../components/common/Input";
@@ -43,6 +44,7 @@ const emptyForm = (monthKey: string): ExpenseInput => ({
  * What stays here is the table plus its local filters.
  */
 export default function ExpensesPage() {
+  const confirm = useConfirm();
   const { monthKey } = useMonth();
   const location = useLocation();
   const [params, setParams] = useSearchParams();
@@ -150,10 +152,25 @@ export default function ExpensesPage() {
     }
   }
 
-  async function remove(expense: Expense) {
-    if (!window.confirm(`למחוק את ההוצאה "${expense.businessName || expense.description || ""}"?`)) return;
-    await deleteExpense(expense.id);
-    load();
+  function remove(expense: Expense) {
+    const label = expense.businessName || expense.description || "ההוצאה";
+    confirm.ask(
+      {
+        title: "מחיקת הוצאה",
+        message: (
+          <>
+            <strong>{label}</strong> תימחק.
+            <span className="confirm-consequence">סכומי החודש והתקציב יתעדכנו בהתאם.</span>
+          </>
+        ),
+        confirmLabel: "מחיקה",
+        tone: "danger",
+      },
+      async () => {
+        await deleteExpense(expense.id);
+        load();
+      }
+    );
   }
 
   async function onImportFile(file: File) {
@@ -377,6 +394,8 @@ export default function ExpensesPage() {
           </div>
         </form>
       </Modal>
+
+      {confirm.dialog}
     </>
   );
 }

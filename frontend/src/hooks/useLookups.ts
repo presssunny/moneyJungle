@@ -1,21 +1,43 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { listCategories, listPaymentMethods } from "../services/planning.service";
 import type { Category, PaymentMethod } from "../types/models";
 
-/** Categories + payment methods, loaded once per page. */
+/**
+ * Categories + payment methods, loaded once per page.
+ *
+ * A failure here used to be swallowed entirely, which produced the worst
+ * possible outcome: a form that looks perfectly fine with a silently empty
+ * dropdown, and no way for the user to tell whether there really are no
+ * categories or whether the request failed. It still does not take the page
+ * down — these only fill `<select>` options — but it now *says so* through
+ * `failed`, and can be retried.
+ */
 export function useLookups() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    // Deliberately silent: these only populate <select> options. A failure leaves
-    // the dropdowns empty and is already reported by the global toast in api.ts;
-    // an error panel per dropdown would drown the widget errors that matter.
-    listCategories().then(setCategories).catch(() => {});
-    listPaymentMethods().then(setPaymentMethods).catch(() => {});
-  }, []);
+    let alive = true;
+    setFailed(false);
+    Promise.all([listCategories(), listPaymentMethods()])
+      .then(([cats, methods]) => {
+        if (!alive) return;
+        setCategories(cats);
+        setPaymentMethods(methods);
+      })
+      .catch(() => {
+        if (alive) setFailed(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [attempt]);
+
+  const reload = useCallback(() => setAttempt((n) => n + 1), []);
 
   const expenseCategories = categories.filter((c) => c.type === "expense");
 
-  return { categories, expenseCategories, paymentMethods };
+  return { categories, expenseCategories, paymentMethods, failed, reload };
 }
