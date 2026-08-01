@@ -120,4 +120,12 @@ cd frontend && npm run dev     # http://localhost:5173
 | `npm run build` | קומפילציה ל־dist |
 | `npm run prisma:migrate` | יצירת/הרצת מיגרציות |
 | `npm run seed` | זריעת נתוני ברירת מחדל |
+| `npm test` | כל הבדיקות (vitest) |
+| `npm run test:watch` | בדיקות במצב watch |
+| `npm run typecheck` / `typecheck:test` | בדיקת טיפוסים לקוד המוצר / לקוד הבדיקות |
+| `npm run test:fixtures` | אילו קובצי בדיקה אמיתיים קיימים |
+| `npm run test:golden:record` | ⚠️ רישום מחדש של ה־golden — רק בשינוי מכוון ומאומת |
+
+בדיקות הפרסרים רצות מול **דפי חשבון אמיתיים** שאינם ב־git (`backend/tests/fixtures/`,
+ראה ה־README שם). בלעדיהם הן מדלגות — ריצה ירוקה בלי fixtures אינה מוכיחה שהפרסרים עובדים.
 >>>>>>> f515797 (Initial commit)
