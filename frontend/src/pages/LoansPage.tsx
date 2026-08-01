@@ -3,25 +3,35 @@ import { AsyncSection } from "../components/common/AsyncSection";
 import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
 import { useConfirm } from "../components/common/ConfirmDialog";
+import { DropZone } from "../components/common/DropZone";
 import { EmptyState } from "../components/common/EmptyState";
 import { ErrorMessage } from "../components/common/ErrorMessage";
 import { Input } from "../components/common/Input";
 import { Modal } from "../components/common/Modal";
 import { Select } from "../components/common/Select";
-import { SkeletonRows } from "../components/common/Skeleton";
+import { SkeletonKpiRow, SkeletonRows } from "../components/common/Skeleton";
 import { Table, type Column } from "../components/common/Table";
+import { UncertaintyBadge } from "../components/common/UncertaintyBadge";
+import { SummaryCard } from "../components/dashboard/SummaryCard";
+import { CloseLoanDialog } from "../components/loans/CloseLoanDialog";
+import { EarlyRepaymentDialog } from "../components/loans/EarlyRepaymentDialog";
+import { LoanCard, type LoanActions } from "../components/loans/LoanCard";
+import { LoanCelebration } from "../components/loans/LoanCelebration";
+import { LoanScheduleDrawer } from "../components/loans/LoanScheduleDrawer";
 import { useAsync } from "../hooks/useAsync";
 import { apiErrorMessage } from "../services/api";
 import {
   createLoan,
   deleteLoan,
-  getLoanSchedule,
+  importLoanSchedule,
   listLoans,
   updateLoan,
   type LoanInput,
+  type ScheduleImportResult,
 } from "../services/finance.service";
 import type { StatementLoanGroup } from "../services/planning.service";
-import type { Loan, LoanScheduleRow } from "../types/models";
+import { toast } from "../services/toast";
+import type { Loan, LoanEvent } from "../types/models";
 import { formatCurrency } from "../utils/format";
 
 const LOAN_TYPES = [
@@ -33,7 +43,11 @@ const LOAN_TYPES = [
   { value: "other", label: "אחר" },
 ];
 
-const STATUS_LABELS: Record<string, string> = { active: "פעילה", finished: "הסתיימה", overdue: "בפיגור" };
+const STATUS_LABELS: Record<string, string> = {
+  active: "פעילה",
+  finished: "נסגרה",
+  overdue: "בפיגור",
+};
 
 const emptyForm: LoanInput = {
   loanName: "",
@@ -46,18 +60,40 @@ const emptyForm: LoanInput = {
   startDate: new Date().toISOString().slice(0, 10),
 };
 
+/**
+ * Loan management, not a list of loans: summary → upload → active → closed →
+ * what the statement itself reports. The 60-row amortisation table lives in a
+ * drawer so the screen reads the same with two loans or twenty.
+ *
+ * Every number is computed by `loans.service` and only rendered here
+ * (CLAUDE.md §4), including the freed-up repayment that closed loans exist for.
+ */
 export default function LoansPage() {
   const loansRes = useAsync(() => listLoans(), [], "לא הצלחנו לטעון את ההלוואות");
   const confirm = useConfirm();
+
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Loan | null>(null);
   const [form, setForm] = useState<LoanInput>(emptyForm);
   const [error, setError] = useState("");
-  const [schedule, setSchedule] = useState<{ loan: Loan; rows: LoanScheduleRow[] } | null>(null);
 
-  const load = loansRes.reload;
-  const totals = loansRes.data?.totals ?? null;
-  const fromStatement = loansRes.data?.fromStatement ?? null;
+  const [scheduleFor, setScheduleFor] = useState<Loan | null>(null);
+  const [quoteFor, setQuoteFor] = useState<Loan | null>(null);
+  const [closingLoan, setClosingLoan] = useState<Loan | null>(null);
+  const [celebrating, setCelebrating] = useState<LoanEvent | null>(null);
+
+  const [showClosed, setShowClosed] = useState(false);
+  const [uploadBusy, setUploadBusy] = useState(false);
+  const [uploadResult, setUploadResult] = useState<ScheduleImportResult | null>(null);
+  const [uploadTarget, setUploadTarget] = useState<Loan | null>(null);
+
+  const data = loansRes.data;
+  const active = data?.loans.filter((l) => l.status !== "finished") ?? [];
+  const closed = data?.loans.filter((l) => l.status === "finished") ?? [];
+
+  // A closure the server detected while loading. Celebrated once, then cleared
+  // from the loaded data so a re-render does not throw the confetti again.
+  const shownEvent = celebrating ?? data?.events?.[0] ?? null;
 
   function openCreate() {
     setEditing(null);
@@ -92,99 +128,63 @@ export default function LoansPage() {
       if (editing) await updateLoan(editing.id, payload);
       else await createLoan(payload);
       setFormOpen(false);
-      load();
+      loansRes.reload();
     } catch (err) {
       setError(apiErrorMessage(err));
     }
   }
 
-  function remove(loan: Loan) {
-    confirm.ask(
-      {
-        title: "מחיקת הלוואה",
-        message: (
-          <>
-            ההלוואה <strong>{loan.loanName}</strong> תימחק.
-            <span className="confirm-consequence">
-              היתרה, ההחזר החודשי והריבית שלה ייעלמו מהדשבורד, מהתובנות ומתחזית התזרים.
-              תשלומים שכבר מופיעים בדוח הבנק יישארו — הם נלקחים משם, לא מכאן.
-            </span>
-          </>
-        ),
-        confirmLabel: "מחיקה",
-        tone: "danger",
-      },
-      async () => {
-        await deleteLoan(loan.id);
-        load();
-      }
-    );
+  async function onScheduleFile(file: File) {
+    setUploadBusy(true);
+    setUploadResult(null);
+    try {
+      const result = await importLoanSchedule(file, uploadTarget?.id);
+      setUploadResult(result);
+      setUploadTarget(null);
+      loansRes.reload();
+    } catch (err) {
+      toast.error(apiErrorMessage(err));
+    } finally {
+      setUploadBusy(false);
+    }
   }
 
-  async function showSchedule(loan: Loan) {
-    const rows = await getLoanSchedule(loan.id);
-    setSchedule({ loan, rows });
-  }
-
-  const columns: Column<Loan>[] = [
-    {
-      key: "name",
-      header: "הלוואה",
-      render: (row) => (
-        <span>
-          {row.computed.isExpensive && <span title="ריבית גבוהה">🔥 </span>}
-          <strong>{row.loanName}</strong>
-          {row.lenderName && <span className="text-muted"> · {row.lenderName}</span>}
-        </span>
+  const actions: LoanActions = {
+    onSchedule: setScheduleFor,
+    onEdit: openEdit,
+    onClose: setClosingLoan,
+    onEarlyRepayment: setQuoteFor,
+    onUploadSchedule: (loan) => {
+      setUploadTarget(loan);
+      setUploadResult(null);
+      document.getElementById("loan-schedule-upload")?.scrollIntoView({ behavior: "smooth" });
+    },
+    onDelete: (loan) =>
+      confirm.ask(
+        {
+          title: "מחיקת הלוואה",
+          message: (
+            <>
+              ההלוואה <strong>{loan.loanName}</strong> תימחק.
+              <span className="confirm-consequence">
+                היתרה, ההחזר החודשי והריבית שלה ייעלמו מהדשבורד, מהתובנות ומתחזית התזרים. אם
+                ההלוואה נפרעה — עדיף לסגור אותה, כדי לשמור את ההישג ואת החיסכון בהחזר.
+              </span>
+            </>
+          ),
+          confirmLabel: "מחיקה",
+          tone: "danger",
+        },
+        async () => {
+          try {
+            await deleteLoan(loan.id);
+            loansRes.reload();
+          } catch (err) {
+            toast.error(apiErrorMessage(err));
+          }
+        }
       ),
-    },
-    { key: "type", header: "סוג", render: (row) => LOAN_TYPES.find((t) => t.value === row.loanType)?.label ?? row.loanType },
-    {
-      key: "balance",
-      header: "יתרה",
-      align: "left",
-      render: (row) => <span className="mono">{formatCurrency(row.currentBalance)}</span>,
-    },
-    {
-      key: "payment",
-      header: "החזר חודשי",
-      align: "left",
-      render: (row) => <span className="mono">{formatCurrency(row.monthlyPayment)}</span>,
-    },
-    {
-      key: "rate",
-      header: "ריבית שנתית",
-      align: "left",
-      render: (row) => (
-        <span className={`mono ${row.computed.isExpensive ? "text-danger" : ""}`}>{row.annualInterestRate}%</span>
-      ),
-    },
-    {
-      key: "interest",
-      header: "ריבית חודשית",
-      align: "left",
-      render: (row) => <span className="mono text-warning">{formatCurrency(row.computed.monthlyInterestPayment)}</span>,
-    },
-    {
-      key: "months",
-      header: "חודשים שנותרו",
-      align: "center",
-      render: (row) => (row.computed.remainingMonths !== null ? row.computed.remainingMonths : <span className="text-danger" title="ההחזר לא מכסה את הריבית">∞</span>),
-    },
-    { key: "status", header: "סטטוס", render: (row) => STATUS_LABELS[row.status] ?? row.status },
-    {
-      key: "actions",
-      header: "",
-      align: "left",
-      render: (row) => (
-        <span className="row-actions">
-          <Button size="sm" variant="ghost" onClick={() => showSchedule(row)} title="לוח סילוקין">📋</Button>
-          <Button size="sm" variant="ghost" onClick={() => openEdit(row)}>✏️</Button>
-          <Button size="sm" variant="ghost" onClick={() => remove(row)}>🗑️</Button>
-        </span>
-      ),
-    },
-  ];
+  };
 
   // Loan activity straight from the statement. Deliberately no "balance" column:
   // the statement says what was paid, never how much is left, and printing a
@@ -212,9 +212,7 @@ export default function LoansPage() {
       key: "interest",
       header: "ריבית ששולמה",
       align: "left",
-      render: (row) => (
-        <span className="mono text-warning">{formatCurrency(row.interestPaid)}</span>
-      ),
+      render: (row) => <span className="mono text-warning">{formatCurrency(row.interestPaid)}</span>,
     },
     {
       key: "unsplit",
@@ -246,33 +244,171 @@ export default function LoansPage() {
     <>
       <div className="page-toolbar">
         <Button onClick={openCreate}>+ הוספת הלוואה</Button>
-        {totals && totals.activeCount > 0 && (
-          <div className="toolbar-total">
-            יתרה כוללת <strong className="mono">{formatCurrency(totals.totalBalance)}</strong> · החזר חודשי{" "}
-            <strong className="mono">{formatCurrency(totals.monthlyPayment)}</strong> · ריבית חודשית{" "}
-            <strong className="mono text-warning">{formatCurrency(totals.monthlyInterest)}</strong>
-          </div>
+        {closed.length > 0 && (
+          <Button variant="ghost" onClick={() => setShowClosed((v) => !v)}>
+            {showClosed ? "הסתרת" : "הצגת"} הלוואות שנסגרו ({closed.length})
+          </Button>
         )}
       </div>
 
-      <Card>
-        <AsyncSection
-          resource={loansRes}
-          errorTitle="לא הצלחנו לטעון את ההלוואות"
-          skeleton={<SkeletonRows rows={3} label="טוען הלוואות" />}
-        >
-          {(data) => (
-            <Table
-              columns={columns}
-              rows={data.loans}
-              rowKey={(row) => row.id}
-              emptyState={<EmptyState icon="📉" title="אין הלוואות" hint="הוסיפי הלוואה כדי לעקוב אחרי ריביות והחזרים" />}
+      {/* ---------- Summary ---------- */}
+      <AsyncSection
+        resource={loansRes}
+        errorTitle="לא הצלחנו לטעון את סיכום ההלוואות"
+        skeleton={<SkeletonKpiRow count={6} label="טוען סיכום הלוואות" />}
+      >
+        {({ summary }) => (
+          <div className="kpi-row loans-kpi-row">
+            <SummaryCard label="הלוואות פעילות" value={String(summary.activeCount)} icon="🟢" />
+            <SummaryCard label="נסגרו" value={String(summary.closedCount)} icon="⚫" />
+            <SummaryCard
+              label="יתרת הקרן"
+              value={formatCurrency(summary.totalBalance)}
+              icon="📉"
+              tone={summary.totalBalance > 0 ? "danger" : "success"}
             />
+            <SummaryCard label="החזר חודשי" value={formatCurrency(summary.monthlyPayment)} icon="📅" />
+            <SummaryCard
+              label="ריבית חודשית"
+              value={formatCurrency(summary.monthlyInterest)}
+              icon="💸"
+              tone="warning"
+              sub={`${formatCurrency(summary.annualInterest)} בשנה`}
+            />
+            <SummaryCard
+              label="נחסך בהחזרים"
+              value={formatCurrency(summary.freedMonthlyPayment)}
+              icon="💚"
+              tone="success"
+              accent={summary.freedMonthlyPayment > 0}
+              sub={
+                summary.freedMonthlyPayment > 0
+                  ? summary.closureCosts > 0
+                    ? `לחודש · עלות סגירה ${formatCurrency(summary.closureCosts)}`
+                    : "לחודש, אחרי סגירת הלוואות"
+                  : "עוד לא נסגרו הלוואות"
+              }
+            />
+          </div>
+        )}
+      </AsyncSection>
+
+      {/* ---------- Schedule upload ---------- */}
+      <Card title={uploadTarget ? `העלאת לוח סילוקין — ${uploadTarget.loanName}` : "העלאת לוח סילוקין מהבנק"}>
+        <div id="loan-schedule-upload">
+          <p className="settings-hint">
+            הלוח של הבנק הוא מקור האמת של ההלוואה: היתרה, הריבית, ההחזר, מספר התשלומים ותאריך
+            הסיום נקראים ממנו — בלי להזין כלום ידנית. העלאה חוזרת של אותה הלוואה{" "}
+            <strong>מעדכנת</strong> אותה ולא יוצרת כפילות.
+            {uploadTarget && (
+              <>
+                {" "}
+                <Button size="sm" variant="ghost" onClick={() => setUploadTarget(null)}>
+                  ביטול השיוך להלוואה זו
+                </Button>
+              </>
+            )}
+          </p>
+          <DropZone
+            onFile={onScheduleFile}
+            busy={uploadBusy}
+            accept=".xlsx,.xls"
+            icon="🏦"
+            title={uploadBusy ? "קורא את הלוח..." : "גררי לכאן את קובץ לוח הסילוקין, או לחצי לבחירה"}
+            hint="הקובץ שהבנק מייצא, עם עמודות מספר תשלום קרן · תאריך · קרן · ריבית · יתרה"
+          />
+
+          {uploadResult && (
+            <div className="info-banner">
+              <div>
+                <span aria-hidden>✅</span> {uploadResult.message}
+              </div>
+              <div className="text-muted">נשמרו {uploadResult.rowsStored} שורות תשלום.</div>
+              {/* Where the file could not answer, the app asks instead of guessing. */}
+              {uploadResult.questions.map((question) => (
+                <div key={question.code} className="loan-question">
+                  <span aria-hidden>❓</span> {question.text}
+                  {question.code === "original_amount" && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        const loan = data?.loans.find((l) => l.id === uploadResult.loanId);
+                        if (loan) openEdit(loan);
+                      }}
+                    >
+                      הזנת הסכום המקורי
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
           )}
-        </AsyncSection>
+        </div>
       </Card>
 
-      {fromStatement && fromStatement.groups.length > 0 && (
+      {/* ---------- Active loans ---------- */}
+      <AsyncSection
+        resource={loansRes}
+        errorTitle="לא הצלחנו לטעון את ההלוואות"
+        skeleton={<SkeletonRows rows={2} label="טוען הלוואות" />}
+        isEmpty={() => active.length === 0}
+        emptyState={
+          <Card>
+            <EmptyState
+              icon={closed.length > 0 ? "🎉" : "📉"}
+              title={closed.length > 0 ? "אין הלוואות פעילות" : "אין הלוואות"}
+              hint={
+                closed.length > 0
+                  ? "כל ההלוואות שלך נסגרו. אפשר לראות אותן בכפתור שלמעלה."
+                  : "העלי לוח סילוקין מהבנק, או הוסיפי הלוואה ידנית"
+              }
+            />
+          </Card>
+        }
+      >
+        {({ summary }) => (
+          <section aria-label="הלוואות פעילות">
+            {summary.endingSoonCount > 0 && (
+              <div className="info-banner">
+                <span aria-hidden>🟠</span> {summary.endingSoonCount} הלוואות לקראת סיום — בקרוב
+                יתפנה לך ההחזר החודשי שלהן.
+              </div>
+            )}
+            {summary.hasScenarioProgress && (
+              <div className="info-banner state-scenario">
+                <span aria-hidden>≈</span> אחוזי הפירעון מסומנים כ־<UncertaintyBadge level="scenario" />{" "}
+                כי לוח הסילוקין מתחיל באמצע, והסכום המקורי חושב לאחור. הזנת הסכום מהחוזה תהפוך
+                אותם למדויקים.
+              </div>
+            )}
+            <div className="loan-list">
+              {active.map((loan) => (
+                <LoanCard key={loan.id} loan={loan} actions={actions} />
+              ))}
+            </div>
+          </section>
+        )}
+      </AsyncSection>
+
+      {/* ---------- Closed loans ---------- */}
+      {closed.length > 0 && showClosed && (
+        <section aria-label="הלוואות שנסגרו">
+          <Card title={`🔒 הלוואות שנסגרו (${closed.length})`}>
+            <p className="settings-hint">
+              הלוואה שנסגרה לא נמחקת — היא מראה מה כבר נפרע וכמה כסף התפנה בכל חודש.
+            </p>
+            <div className="loan-list">
+              {closed.map((loan) => (
+                <LoanCard key={loan.id} loan={loan} actions={actions} />
+              ))}
+            </div>
+          </Card>
+        </section>
+      )}
+
+      {/* ---------- What the statement itself says ---------- */}
+      {data?.fromStatement && data.fromStatement.groups.length > 0 && (
         <Card title="תשלומי הלוואות לפי הדוח הבנקאי">
           <p className="text-muted">
             הסכומים כאן הם השורות של הבנק עצמו, לא תחזית: קרן שכבר שולמה (הקטנת חוב — לא הוצאה),
@@ -280,37 +416,139 @@ export default function LoansPage() {
             למעלה עדיין מופיעה כאן, כדי שהתשלומים שלה לא ייעלמו.
           </p>
           <div className="toolbar-total">
-            קרן ששולמה <strong className="mono">{formatCurrency(fromStatement.totals.principalPaid)}</strong> · ריבית{" "}
-            <strong className="mono text-warning">{formatCurrency(fromStatement.totals.interestPaid)}</strong> · ללא
-            פירוט <strong className="mono">{formatCurrency(fromStatement.totals.unsplitPaid)}</strong> · סה״כ הקטנת חוב{" "}
-            <strong className="mono text-success">{formatCurrency(fromStatement.totals.debtReduction)}</strong>
+            קרן ששולמה{" "}
+            <strong className="mono">{formatCurrency(data.fromStatement.totals.principalPaid)}</strong> ·
+            ריבית{" "}
+            <strong className="mono text-warning">
+              {formatCurrency(data.fromStatement.totals.interestPaid)}
+            </strong>{" "}
+            · ללא פירוט{" "}
+            <strong className="mono">{formatCurrency(data.fromStatement.totals.unsplitPaid)}</strong> ·
+            סה״כ הקטנת חוב{" "}
+            <strong className="mono text-success">
+              {formatCurrency(data.fromStatement.totals.debtReduction)}
+            </strong>
           </div>
           <Table
             columns={statementColumns}
-            rows={fromStatement.groups}
+            rows={data.fromStatement.groups}
             rowKey={(row) => row.loanRef ?? row.label}
           />
         </Card>
       )}
 
-      <Modal title={editing ? "עריכת הלוואה" : "הוספת הלוואה"} open={formOpen} onClose={() => setFormOpen(false)}>
+      {/* ---------- Overlays ---------- */}
+      {scheduleFor && <LoanScheduleDrawer loan={scheduleFor} onClose={() => setScheduleFor(null)} />}
+      {quoteFor && (
+        <EarlyRepaymentDialog
+          loan={quoteFor}
+          onClose={() => setQuoteFor(null)}
+          onConfirmClose={setClosingLoan}
+        />
+      )}
+      {closingLoan && (
+        <CloseLoanDialog
+          loan={closingLoan}
+          onCancel={() => setClosingLoan(null)}
+          onClosed={(event) => {
+            setClosingLoan(null);
+            setCelebrating(event);
+            loansRes.reload();
+          }}
+        />
+      )}
+      {shownEvent && (
+        <LoanCelebration
+          event={shownEvent}
+          remainingActive={active.length}
+          onClose={() => {
+            setCelebrating(null);
+            loansRes.setData((current) => (current ? { ...current, events: [] } : current));
+          }}
+        />
+      )}
+
+      <Modal
+        title={editing ? "עריכת הלוואה" : "הוספת הלוואה"}
+        open={formOpen}
+        onClose={() => setFormOpen(false)}
+      >
         <form onSubmit={submit}>
           {error && <ErrorMessage message={error} />}
+          {editing?.originalAmountSource === "reconstructed" && (
+            <p className="settings-hint">
+              הסכום המקורי כרגע משוחזר מלוח הסילוקין. הזנת הסכום מהחוזה תהפוך את אחוז הפירעון
+              ממשוער למדויק.
+            </p>
+          )}
           <div className="form-row">
-            <Input label="שם ההלוואה" required value={form.loanName} onChange={(e) => setForm({ ...form, loanName: e.target.value })} />
-            <Select label="סוג" options={LOAN_TYPES} value={form.loanType} onChange={(e) => setForm({ ...form, loanType: e.target.value })} />
+            <Input
+              label="שם ההלוואה"
+              required
+              value={form.loanName}
+              onChange={(e) => setForm({ ...form, loanName: e.target.value })}
+            />
+            <Select
+              label="סוג"
+              options={LOAN_TYPES}
+              value={form.loanType}
+              onChange={(e) => setForm({ ...form, loanType: e.target.value })}
+            />
           </div>
           <div className="form-row">
-            <Input label="גוף מלווה" value={form.lenderName ?? ""} onChange={(e) => setForm({ ...form, lenderName: e.target.value })} />
-            <Input label="תאריך התחלה" type="date" required value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} />
+            <Input
+              label="גוף מלווה"
+              value={form.lenderName ?? ""}
+              onChange={(e) => setForm({ ...form, lenderName: e.target.value })}
+            />
+            <Input
+              label="תאריך התחלה"
+              type="date"
+              required
+              value={form.startDate}
+              onChange={(e) => setForm({ ...form, startDate: e.target.value })}
+            />
           </div>
           <div className="form-row">
-            <Input label="סכום מקורי (₪)" type="number" step="0.01" min="1" required value={form.originalAmount || ""} onChange={(e) => setForm({ ...form, originalAmount: Number(e.target.value) })} />
-            <Input label="יתרה נוכחית (₪)" type="number" step="0.01" min="0" required value={form.currentBalance || ""} onChange={(e) => setForm({ ...form, currentBalance: Number(e.target.value) })} />
+            <Input
+              label="סכום מקורי (₪)"
+              type="number"
+              step="0.01"
+              min="1"
+              required
+              value={form.originalAmount || ""}
+              onChange={(e) => setForm({ ...form, originalAmount: Number(e.target.value) })}
+            />
+            <Input
+              label="יתרה נוכחית (₪)"
+              type="number"
+              step="0.01"
+              min="0"
+              required
+              value={form.currentBalance || ""}
+              onChange={(e) => setForm({ ...form, currentBalance: Number(e.target.value) })}
+            />
           </div>
           <div className="form-row">
-            <Input label="ריבית שנתית (%)" type="number" step="0.01" min="0" max="100" required value={form.annualInterestRate || ""} onChange={(e) => setForm({ ...form, annualInterestRate: Number(e.target.value) })} />
-            <Input label="החזר חודשי (₪)" type="number" step="0.01" min="1" required value={form.monthlyPayment || ""} onChange={(e) => setForm({ ...form, monthlyPayment: Number(e.target.value) })} />
+            <Input
+              label="ריבית שנתית (%)"
+              type="number"
+              step="0.01"
+              min="0"
+              max="100"
+              required
+              value={form.annualInterestRate || ""}
+              onChange={(e) => setForm({ ...form, annualInterestRate: Number(e.target.value) })}
+            />
+            <Input
+              label="החזר חודשי (₪)"
+              type="number"
+              step="0.01"
+              min="1"
+              required
+              value={form.monthlyPayment || ""}
+              onChange={(e) => setForm({ ...form, monthlyPayment: Number(e.target.value) })}
+            />
           </div>
           {editing && (
             <Select
@@ -322,28 +560,11 @@ export default function LoansPage() {
           )}
           <div className="modal-actions">
             <Button type="submit">{editing ? "עדכון" : "הוספה"}</Button>
-            <Button type="button" variant="ghost" onClick={() => setFormOpen(false)}>ביטול</Button>
+            <Button type="button" variant="ghost" onClick={() => setFormOpen(false)}>
+              ביטול
+            </Button>
           </div>
         </form>
-      </Modal>
-
-      <Modal
-        title={schedule ? `לוח סילוקין — ${schedule.loan.loanName}` : ""}
-        open={schedule !== null}
-        onClose={() => setSchedule(null)}
-      >
-        {schedule && (
-          <Table
-            columns={[
-              { key: "n", header: "חודש", render: (r: LoanScheduleRow) => r.month },
-              { key: "interest", header: "ריבית", align: "left", render: (r: LoanScheduleRow) => <span className="mono text-warning">{formatCurrency(r.interest)}</span> },
-              { key: "principal", header: "קרן", align: "left", render: (r: LoanScheduleRow) => <span className="mono">{formatCurrency(r.principal)}</span> },
-              { key: "balance", header: "יתרה", align: "left", render: (r: LoanScheduleRow) => <span className="mono">{formatCurrency(r.balance)}</span> },
-            ]}
-            rows={schedule.rows}
-            rowKey={(r) => r.month}
-          />
-        )}
       </Modal>
 
       {confirm.dialog}

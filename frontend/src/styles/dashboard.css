@@ -1002,3 +1002,569 @@
   font-size: 12.5px;
   color: var(--text-muted);
 }
+
+/* ==========================================================================
+   Loans screen
+   Every colour is a theme token, so the screen follows all 8 themes in light
+   and dark without a single hard-coded value.
+   ========================================================================== */
+
+.loans-kpi-row {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.loan-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+/* ---------- Card ---------- */
+
+.loan-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px 18px;
+  transition:
+    border-color 0.15s,
+    transform 0.15s;
+}
+
+.loan-card:hover {
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+}
+
+/* A closed loan recedes: it is history, not something to act on. */
+.loan-card-closed {
+  opacity: 0.82;
+  border-style: dashed;
+}
+
+.loan-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.loan-card-name {
+  font-size: 17px;
+  font-weight: 600;
+  margin: 6px 0 2px;
+}
+
+.loan-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.loan-card-meta > span:not(:last-child)::after {
+  content: " ·";
+}
+
+.loan-card-source {
+  color: var(--success);
+}
+
+/* ---------- Status badge ---------- */
+
+.loan-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid;
+}
+
+.loan-badge-success {
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 45%, transparent);
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+}
+
+.loan-badge-warning {
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 45%, transparent);
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+}
+
+.loan-badge-danger {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+
+.loan-badge-muted {
+  color: var(--text-muted);
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--text-muted) 10%, transparent);
+}
+
+.loan-badge-date {
+  font-weight: 400;
+  opacity: 0.85;
+}
+
+/* ---------- Progress ---------- */
+
+.loan-progress {
+  margin: 14px 0 12px;
+}
+
+.loan-progress-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+
+.loan-progress-pct {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.loan-progress-track {
+  height: 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-muted) 22%, transparent);
+  overflow: hidden;
+}
+
+.loan-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--success);
+  transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.loan-progress-fill-ending_soon {
+  background: var(--warning);
+}
+
+.loan-progress-fill-overdue {
+  background: var(--danger);
+}
+
+.loan-progress-fill-closed {
+  background: linear-gradient(90deg, var(--success), var(--secondary));
+}
+
+/* An uncertain bar is drawn hatched, so it never reads as a measured value. */
+.loan-progress-track.state-scenario .loan-progress-fill {
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent 0 5px,
+    color-mix(in srgb, var(--bg-card) 55%, transparent) 5px 10px
+  );
+}
+
+/* ---------- Facts ---------- */
+
+.loan-card-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px 16px;
+  padding-top: 12px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+}
+
+.loan-fact {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.loan-fact-label {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.loan-fact-value {
+  font-size: 14.5px;
+  font-weight: 600;
+}
+
+.loan-card-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+}
+
+/* ---------- Actions menu ---------- */
+
+.loan-menu {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.loan-menu-trigger {
+  min-width: 34px;
+  min-height: 34px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 20px;
+  line-height: 1;
+}
+
+.loan-menu-trigger:hover {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
+}
+
+.loan-menu-list {
+  position: absolute;
+  inset-inline-end: 0;
+  top: calc(100% + 6px);
+  z-index: 30;
+  min-width: 200px;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  box-shadow: 0 14px 34px -12px rgba(0, 0, 0, 0.5);
+  animation: loan-menu-in 0.14s ease-out;
+}
+
+@keyframes loan-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+.loan-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-size: 14px;
+  text-align: right;
+}
+
+.loan-menu-item:hover {
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+}
+
+.loan-menu-item-danger {
+  color: var(--danger);
+}
+
+.loan-question {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+}
+
+/* ---------- Schedule drawer ---------- */
+
+.drawer-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  justify-content: flex-start;
+}
+
+.drawer {
+  width: min(720px, 100%);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-card);
+  border-inline-end: 1px solid var(--border);
+  animation: drawer-in 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes drawer-in {
+  from {
+    transform: translateX(-100%);
+  }
+}
+
+.drawer-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 20px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.drawer-title {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.drawer-sub {
+  font-size: 13px;
+  margin-top: 2px;
+}
+
+.drawer-source {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 20px;
+  font-size: 13px;
+  background: color-mix(in srgb, var(--primary) 7%, transparent);
+  border-bottom: 1px solid var(--border);
+}
+
+.drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 20px;
+}
+
+.drawer-table {
+  font-size: 13px;
+}
+
+.schedule-row-paid td {
+  color: var(--text-muted);
+}
+
+.schedule-row-next {
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  font-weight: 600;
+}
+
+.schedule-next {
+  margin-inline-start: 6px;
+  font-size: 10.5px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: var(--primary-contrast);
+}
+
+.schedule-paid {
+  margin-inline-start: 6px;
+  color: var(--success);
+}
+
+.drawer-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+}
+
+.drawer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ---------- Early-repayment quote ---------- */
+
+.quote-grid,
+.quote-gain {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+
+.quote-gain {
+  background: color-mix(in srgb, var(--success) 8%, transparent);
+}
+
+.quote-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 0;
+  font-size: 14px;
+}
+
+.quote-row-total {
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+  padding-top: 9px;
+  font-size: 15.5px;
+}
+
+/* ---------- Celebration ---------- */
+
+.celebrate-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  overflow: hidden;
+}
+
+.celebrate-card {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  max-width: 440px;
+  text-align: center;
+  padding: 30px 26px 26px;
+  border-radius: 18px;
+  background: var(--bg-card);
+  border: 1px solid color-mix(in srgb, var(--success) 40%, var(--border));
+  box-shadow: 0 24px 60px -22px rgba(0, 0, 0, 0.6);
+  animation: celebrate-pop 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes celebrate-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.9) translateY(12px);
+  }
+}
+
+.celebrate-icon {
+  font-size: 46px;
+  line-height: 1;
+}
+
+.celebrate-title {
+  font-size: 21px;
+  font-weight: 700;
+  margin: 10px 0 2px;
+}
+
+.celebrate-name {
+  color: var(--text-muted);
+  font-size: 14px;
+  margin-bottom: 18px;
+}
+
+.celebrate-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.celebrate-stat {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.celebrate-stat-hero {
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+}
+
+.celebrate-stat-hero .celebrate-stat-value {
+  font-size: 24px;
+  color: var(--success);
+}
+
+.celebrate-stat-value {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.celebrate-stat-label {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.celebrate-next {
+  font-size: 14px;
+  margin-bottom: 18px;
+}
+
+.confetti {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.confetti-piece {
+  position: absolute;
+  top: -20px;
+  border-radius: 2px;
+  animation-name: confetti-fall;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+@keyframes confetti-fall {
+  to {
+    transform: translateY(105vh) rotate(720deg);
+    opacity: 0;
+  }
+}
+
+/* ---------- Responsive ---------- */
+
+@media (max-width: 1200px) {
+  .loans-kpi-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .loans-kpi-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .loan-card {
+    padding: 14px;
+  }
+
+  .loan-card-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .drawer {
+    width: 100%;
+  }
+
+  .drawer-foot,
+  .drawer-actions {
+    justify-content: stretch;
+  }
+
+  .drawer-actions .btn {
+    flex: 1;
+  }
+}

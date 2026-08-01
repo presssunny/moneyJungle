@@ -7,8 +7,12 @@ import type {
   Expense,
   Income,
   ImportExpensesResult,
+  EarlyRepaymentQuote,
   Loan,
-  LoanScheduleRow,
+  LoanEvent,
+  LoanGroup,
+  LoanSchedule,
+  LoanSummary,
   LoanTotals,
   MonthlyReport,
   TrendRow,
@@ -194,9 +198,13 @@ export interface LoanInput {
 
 export async function listLoans(): Promise<{
   loans: Loan[];
-  totals: LoanTotals;
+  summary: LoanSummary;
+  groups: LoanGroup[];
+  /** Closures detected during this call — the UI celebrates these once. */
+  events: LoanEvent[];
   /** Loan activity read straight off the bank statement — see StatementLoanActivity. */
   fromStatement: StatementLoanActivity;
+  totals: LoanTotals;
 }> {
   const { data } = await api.get("/loans");
   return data;
@@ -216,8 +224,48 @@ export async function deleteLoan(id: number): Promise<void> {
   await api.delete(`/loans/${id}`);
 }
 
-export async function getLoanSchedule(id: number): Promise<LoanScheduleRow[]> {
+export async function getLoanSchedule(id: number): Promise<LoanSchedule> {
   const { data } = await api.get(`/loans/${id}/schedule`);
+  return data;
+}
+
+/** What the bank's amortisation file said, and what changed because of it. */
+export interface ScheduleImportResult {
+  loanId: number;
+  created: boolean;
+  loanName: string;
+  loanNumber: string | null;
+  trackNumber: string | null;
+  rowsStored: number;
+  message: string;
+  /** What the app could not decide alone and needs the user to answer. */
+  questions: Array<{ code: string; text: string }>;
+}
+
+/**
+ * Upload a לוח סילוקין. The file becomes the loan's source of truth: balance,
+ * rate, payment, counts and dates are all read from it, so nothing is typed in.
+ * Re-uploading for the same loan updates it instead of creating a second one.
+ */
+export async function importLoanSchedule(file: File, loanId?: number): Promise<ScheduleImportResult> {
+  const form = new FormData();
+  form.append("file", file);
+  if (loanId !== undefined) form.append("loanId", String(loanId));
+  const { data } = await api.post("/loans/schedule/import", form);
+  return data;
+}
+
+export async function closeLoan(
+  id: number,
+  input: { closedAt: string; reason: string; closureCost?: number | null }
+): Promise<{ event: LoanEvent; loan: Loan | null }> {
+  const { data } = await api.post(`/loans/${id}/close`, input);
+  return data;
+}
+
+/** Read-only: what paying this loan off today would cost and save. */
+export async function getEarlyRepaymentQuote(id: number): Promise<EarlyRepaymentQuote> {
+  const { data } = await api.get(`/loans/${id}/early-repayment`);
   return data;
 }
 
