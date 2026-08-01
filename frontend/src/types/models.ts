@@ -81,6 +81,20 @@ export interface LoanComputed {
   isExpensive: boolean;
 }
 
+/** Where a loan stands in its life. Derived on the server, never stored. */
+export type LoanLifecycle = "active" | "ending_soon" | "closed" | "overdue";
+
+export interface LoanProgress {
+  lifecycle: LoanLifecycle;
+  principalRepaid: number;
+  progressPercent: number;
+  paymentsMade: number | null;
+  paymentsRemaining: number | null;
+  totalPayments: number | null;
+  /** "scenario" while the opening amount is reconstructed rather than stated. */
+  certainty: "measured" | "scenario";
+}
+
 export interface Loan {
   id: number;
   loanName: string;
@@ -95,7 +109,58 @@ export interface Loan {
   isIndexLinked: boolean;
   earlyRepaymentFee: number | null;
   status: "active" | "finished" | "overdue";
+  /** Bank identity: loan 108 can hold several tracks (432 / 562). */
+  loanNumber: string | null;
+  trackNumber: string | null;
+  trackName: string | null;
+  closedAt: string | null;
+  closureReason: string | null;
+  closureCost: number | null;
+  totalPayments: number | null;
+  paymentsMade: number | null;
+  scheduleSource: "bank_file" | "computed";
+  originalAmountSource: "contract" | "reconstructed" | "manual";
+  scheduleImportedAt: string | null;
   computed: LoanComputed;
+  progress: LoanProgress;
+}
+
+/** The six summary cards, computed server-side so the UI never derives money. */
+export interface LoanSummary {
+  activeCount: number;
+  closedCount: number;
+  totalBalance: number;
+  monthlyPayment: number;
+  monthlyInterest: number;
+  annualInterest: number;
+  /** Monthly repayment that closing loans has freed up. */
+  freedMonthlyPayment: number;
+  closureCosts: number;
+  endingSoonCount: number;
+  hasScenarioProgress: boolean;
+}
+
+/** Tracks of one bank loan number, grouped for display only. */
+export interface LoanGroup {
+  loanNumber: string;
+  trackIds: number[];
+  totalBalance: number;
+  activeTracks: number;
+  closedTracks: number;
+}
+
+/** A closure the server detected from the statement — celebrated once. */
+export interface LoanEvent {
+  type: "loan_closed" | "payments_advanced";
+  loanId: number;
+  loanName: string;
+  loanNumber: string | null;
+  trackNumber: string | null;
+  date: string;
+  freedMonthlyPayment: number;
+  savedInterest: number;
+  closureCost: number;
+  message: string;
 }
 
 export interface LoanTotals {
@@ -107,10 +172,32 @@ export interface LoanTotals {
 }
 
 export interface LoanScheduleRow {
-  month: number;
-  interest: number;
+  paymentNumber: number;
+  date: string;
   principal: number;
-  balance: number;
+  interest: number;
+  total: number;
+  balanceAfter: number;
+  status: "paid" | "next" | "future";
+}
+
+export interface LoanSchedule {
+  /** "bank_file" = the bank's own table; "computed" = a simulation. */
+  source: "bank_file" | "computed";
+  certainty: "measured" | "scenario";
+  rows: LoanScheduleRow[];
+  totals: { principal: number; interest: number };
+}
+
+export interface EarlyRepaymentQuote {
+  currentBalance: number;
+  estimatedFee: number;
+  payoffToday: number;
+  savedInterest: number;
+  netSaving: number;
+  remainingPayments: number;
+  remainingTotal: number;
+  hasSchedule: boolean;
 }
 
 export interface CreditImport {

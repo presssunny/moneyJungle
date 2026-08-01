@@ -2173,3 +2173,40 @@
   padding-top: 10px;
   border-top: 1px dashed var(--border);
 }
+
+/* ---------- PageShell ----------
+   One rhythm for every screen. Sections carry the vertical spacing so a page
+   never has to set its own margins, which is how the old screens drifted apart. */
+
+.page-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.page-shell > section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* The toolbar sits tighter to the content it acts on. */
+.page-shell-toolbar {
+  margin-bottom: -4px;
+}
+
+/* Secondary/bulk actions read as a footer, not as another block of content. */
+.page-shell-actions {
+  padding-top: 6px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (max-width: 700px) {
+  .page-shell {
+    gap: 14px;
+  }
+}
