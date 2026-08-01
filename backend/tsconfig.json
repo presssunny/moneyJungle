@@ -12,5 +12,7 @@
     "resolveJsonModule": true
   },
   "include": ["src", "generated"],
-  "exclude": ["node_modules", "dist"]
+  // Test code never ships: it would drag vitest/supertest into dist and put the
+  // fixture paths in the build. `npm run typecheck:test` covers it instead.
+  "exclude": ["node_modules", "dist", "src/**/*.test.ts", "src/testing"]
 }
