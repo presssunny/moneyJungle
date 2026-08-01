@@ -40,20 +40,13 @@ function OverviewChip({ label, amount, tone = "default", loading }: ChipProps) {
 }
 
 /**
- * טאב "חשבונות וחובות" (IA §6): "how much do I have, how much do I owe, and
- * what does it cost me?".
+ * Accounts and debts hub (IA §6). The three-chip strip is the only figure that
+ * crosses the sub-tabs, and is kept lighter than a `SummaryCard` so it does not
+ * compete with each sub-tab's own KPI row.
  *
- * The three-chip strip is the only figure that crosses the sub-tabs — it is what
- * justifies the hub existing at all. It is deliberately lighter than a
- * `SummaryCard` so it does not compete with each sub-tab's own KPI row (§6.1).
- *
- * NOTE for `architect` (§9.4): assets/debts are composed here from three
- * existing endpoints. Every number used is one the backend already computed
- * (`LoanTotals.totalBalance`, `BankAccount.currentBalance`,
- * `SavingsGoal.currentAmount`) — no financial rule is re-implemented. Once
- * `GET /accounts/overview` exists this component should consume it instead.
- * The loans sub-tab dashboard (§6.5) is blocked on the §9.1 data model and is
- * intentionally untouched here.
+ * Composed from three existing endpoints, reusing figures the backend already
+ * computed — no financial rule is re-implemented here. Should consume
+ * `GET /accounts/overview` once that exists (§9.4).
  */
 export default function AccountsPage() {
   const banksRes = useAsync(() => listBankAccounts(), [], "לא הצלחנו לטעון את חשבונות הבנק");

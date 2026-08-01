@@ -1,17 +1,7 @@
 /**
- * Three-level certainty language (IA §1.2), from the explicit product rule:
- * **"שום מספר לא מוצג כוודאי אם הוא נשען על הנחה."**
- *
- * | level      | when                                          | display                       |
- * |------------|-----------------------------------------------|-------------------------------|
- * | `measured` | came from a bank/credit report or a saved row | plain number, no marking      |
- * | `scenario` | derived from a forecast / amortisation table  | number in brackets + "תרחיש"  |
- * | `unknown`  | data missing, or the condition isn't resolved | "—" + "לא ידוע · דורש בדיקה" |
- *
- * Hard rules enforced here so no caller can break them:
- *  - `unknown` NEVER renders as 0 — it renders as an em dash.
- *  - `unknown` NEVER gets a good/bad colour; it is neither, it is absent.
- *  - the marking is TEXT, not only an icon or a colour (colour-blindness + SR).
+ * Three-level certainty language (IA §1.2): `measured` renders plain, `scenario`
+ * is bracketed and labelled, `unknown` is an em dash — never 0, never a good/bad
+ * colour, and always marked in text rather than by colour alone.
  */
 
 export type Certainty = "measured" | "scenario" | "unknown";

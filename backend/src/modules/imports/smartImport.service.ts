@@ -5,13 +5,9 @@ import { creditService } from "../credit/credit.service";
 import { detectStatement, type StatementKind } from "./statementDetector.service";
 
 /**
- * One upload point for statements.
- *
- * The user has a file, not a category — asking her to pick "bank" or "credit"
- * before the app has even looked at it puts the burden of classification on the
- * person who has the least information. This service reads the file, decides
- * what it is, sends it to the matching importer, and reports back in one shape:
- * what it detected, what went in, and what was already there.
+ * One upload point for statements: reads the file, decides whether it is a bank
+ * or a card statement, routes it to the matching importer and reports what it
+ * detected and what went in. The user has a file, not a category.
  *
  * Nothing is imported when detection is unsure — a bank statement parsed as a
  * card statement produces silent nonsense, which is worse than a question.

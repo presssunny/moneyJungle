@@ -3,15 +3,12 @@ import { Button } from "./Button";
 import { Modal } from "./Modal";
 
 /**
- * Replacement for `window.confirm` / `window.alert`.
+ * Replacement for `window.confirm`, which cannot be styled, ignores the themes,
+ * uses the browser locale and has no room to say what is about to be lost. A
+ * destructive action states its consequence instead (IA §7).
  *
- * The native dialogs cannot be styled, ignore the 8 themes, land in the browser
- * locale rather than Hebrew, and — worst of all — say only "are you sure?" with
- * no room to explain *what* is about to be lost. A destructive action deserves
- * to state its consequence (IA §7): "3 הוצאות ו־2 הכנסות יימחקו יחד איתו".
- *
- * Built on the existing `Modal`, so it inherits the focus trap, Escape handling,
- * scroll lock and focus restoration rather than re-implementing them.
+ * Built on `Modal`, so it inherits the focus trap, Escape handling and scroll
+ * lock rather than re-implementing them.
  */
 
 export interface ConfirmRequest {
@@ -69,16 +66,14 @@ interface PendingConfirm extends ConfirmRequest {
 }
 
 /**
- * Ask, then act — without every page hand-rolling its own dialog state.
+ * Ask, then act, without every page hand-rolling its own dialog state:
  *
  *   const confirm = useConfirm();
  *   confirm.ask({ title, message, tone: "danger" }, () => remove(id));
- *   ...
  *   {confirm.dialog}
  *
- * A failure inside `action` still closes the dialog: the page's own error state
- * reports it, and leaving a modal stuck open on top of the message would hide
- * the very thing the user needs to read.
+ * A failure inside `action` still closes the dialog — a modal stuck open on top
+ * of the error would hide the thing the user needs to read.
  */
 export function useConfirm() {
   const [pending, setPending] = useState<PendingConfirm | null>(null);

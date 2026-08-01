@@ -4,19 +4,13 @@ import { decimalToNumber, round2 } from "../../utils/money.utils";
 import { parseLoanSchedule, ScheduleParseError, type ParsedSchedule } from "./loanSchedule.parser";
 
 /**
- * Turning the bank's amortisation file into the loan itself.
+ * Turns the bank's amortisation file into the loan itself, so the user never
+ * types a balance, rate, payment count or end date the bank already stated.
  *
- * Everything the loan screen shows about a loan's terms comes from here, so the
- * user never types a balance, a rate, a payment count or an end date that the
- * bank already stated. Two rules keep it honest:
- *
- *  - **Same loan, not a new one.** A loan is identified by `loanNumber` +
- *    `trackNumber` (108 / 432). Re-uploading a newer export — after a few months
- *    or after an early repayment — updates that loan in place and replaces its
- *    schedule rows. Nothing is duplicated.
- *  - **The file wins over a simulation, never over reality.** The schedule states
- *    the plan; the bank statement states what happened. When a loan has already
- *    been closed, an older schedule cannot re-open it.
+ * A loan is identified by `loanNumber` + `trackNumber`, so re-uploading a newer
+ * export updates it in place rather than duplicating it. The file wins over a
+ * simulation but never over reality: an older schedule cannot re-open a loan the
+ * statement already closed.
  */
 
 export interface ScheduleImportResult {

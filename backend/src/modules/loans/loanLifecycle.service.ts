@@ -2,18 +2,13 @@ import { prisma } from "../../config/database";
 import { decimalToNumber, round2 } from "../../utils/money.utils";
 
 /**
- * Reads the bank statement and moves loans through their life on its own.
+ * Moves loans through their life from the statement. The schedule says what was
+ * planned; only the statement says what happened, so a loan paid off early still
+ * shows future payments until a posted principal row clears its balance — then
+ * it is marked finished with the date, reason, fees and what the closure saved.
  *
- * The schedule says what was *planned*; only the statement says what *happened*.
- * A loan paid off early still shows dozens of future payments in its schedule —
- * the file cannot know. This service closes that gap: it looks at the principal
- * rows the bank actually posted and, when one of them clears a loan's balance,
- * marks the loan finished, records the date, the reason and the fees, and works
- * out what the closure saved.
- *
- * **Idempotent by construction**, following the `resolveAll()` precedent: it
- * derives state from the rows rather than accumulating, so importing the same
- * statement twice cannot close a loan twice or count a fee twice.
+ * Idempotent by construction, like `resolveAll()`: state is derived from the
+ * rows, so importing the same statement twice cannot close a loan twice.
  */
 
 /** How close a principal payment must be to the balance to count as a payoff. */

@@ -2,23 +2,12 @@ import { prisma } from "../../config/database";
 import { decimalToNumber, round2 } from "../../utils/money.utils";
 
 /**
- * Account balance, derived — never accumulated.
+ * Account balance, derived — never accumulated. The bank's printed closing
+ * balance already contains every transaction up to its date, so the balance is
+ * the newest such anchor plus only what is dated after it. Re-importing an
+ * overlapping statement therefore cannot drift it.
  *
- * The old rule added every imported statement's net movement onto the stored
- * balance. That is only correct if statements never overlap, which is exactly
- * what re-importing a longer statement does: the shared period gets added a
- * second time and the balance drifts by the size of the overlap, permanently.
- *
- * The rule here is: **the bank's printed closing balance is the truth.** A
- * statement states the account's balance at the end of its period; that single
- * number already contains every transaction up to that date, however many times
- * we imported them. So the balance is the newest such anchor plus only what is
- * dated after it. Importing the same statement again — or any older or
- * overlapping one — changes neither the anchor nor the tail, so the balance is
- * idempotent by construction rather than by careful bookkeeping.
- *
- * A statement whose file carries no balance column cannot anchor anything; if
- * no statement ever did, we fall back to the legacy sum and say so, because a
+ * With no anchor anywhere we fall back to the accumulated sum and say so: a
  * derived-looking number with no source is worse than an admitted estimate.
  */
 export type BalanceBasis = "statement" | "accumulated";

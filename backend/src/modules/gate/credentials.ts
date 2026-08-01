@@ -2,16 +2,12 @@ import crypto from "crypto";
 import { env } from "../../config/env";
 
 /**
- * The single place that answers "is this who they say they are?".
+ * The single place that answers "is this who they say they are?". Nothing else
+ * reads a credential directly, so moving to JWT, OAuth or a real user table means
+ * replacing the body of `verifyCredentials` and nothing else.
  *
- * Everything else in the app — the login route, the service, the middleware —
- * asks this module and never reads a credential itself. That is the whole point:
- * moving to JWT, OAuth or a real multi-user table means replacing the body of
- * `verifyCredentials` and nothing else. No caller changes, no route changes.
- *
- * Today it is a single development identity read from the environment. It is
- * deliberately NOT a password stored in code, and deliberately NOT read in two
- * places, so there is exactly one thing to swap out later.
+ * Today: one development identity from the environment — never hard-coded, never
+ * read in a second place.
  */
 
 export interface Identity {

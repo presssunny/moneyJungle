@@ -7,9 +7,11 @@ import { EmptyState } from "../components/common/EmptyState";
 import { ErrorMessage } from "../components/common/ErrorMessage";
 import { Input } from "../components/common/Input";
 import { Modal } from "../components/common/Modal";
+import { PageShell } from "../components/common/PageShell";
 import { Select } from "../components/common/Select";
-import { SkeletonRows } from "../components/common/Skeleton";
+import { SkeletonKpiRow, SkeletonRows } from "../components/common/Skeleton";
 import { Table, type Column } from "../components/common/Table";
+import { SummaryCard } from "../components/dashboard/SummaryCard";
 import { useAsync } from "../hooks/useAsync";
 import { apiErrorMessage } from "../services/api";
 import {
@@ -165,15 +167,46 @@ export default function SubscriptionsPage() {
 
   const visibleCandidates = (candidatesRes.data ?? []).filter((c) => !dismissed.has(c.name));
 
-  return (
-    <>
-      <div className="page-toolbar">
-        <Button onClick={openCreate}>+ מנוי חדש</Button>
-        <div className="toolbar-total">
-          עלות חודשית: <strong className="mono text-danger">{formatCurrency(monthlyTotal)}</strong>
-        </div>
-      </div>
+  const items = subs.data?.items ?? [];
+  const activeCount = items.filter((i) => i.status === "active").length;
 
+  return (
+    <PageShell
+      toolbar={<Button onClick={openCreate}>+ מנוי חדש</Button>}
+      summary={
+        <AsyncSection
+          resource={subs}
+          errorTitle="לא הצלחנו לטעון את סיכום המנויים"
+          skeleton={<SkeletonKpiRow count={4} label="טוען סיכום מנויים" />}
+        >
+          {(data) => (
+            <div className="kpi-row">
+              <SummaryCard label="מנויים פעילים" value={String(activeCount)} icon="📺" />
+              <SummaryCard
+                label="עלות חודשית"
+                value={formatCurrency(data.monthlyTotal)}
+                icon="💸"
+                tone="danger"
+              />
+              {/* The number that actually changes behaviour: a 60 ₪/month
+                  subscription is 720 ₪ a year, and nobody thinks of it that way. */}
+              <SummaryCard
+                label="עלות שנתית"
+                value={formatCurrency(data.monthlyTotal * 12)}
+                icon="📆"
+                sub="במנויים החודשיים הנוכחיים"
+              />
+              <SummaryCard
+                label="מושהים"
+                value={String(items.length - activeCount)}
+                icon="⏸️"
+                sub={visibleCandidates.length > 0 ? `${visibleCandidates.length} מועמדים זוהו` : undefined}
+              />
+            </div>
+          )}
+        </AsyncSection>
+      }
+    >
       {visibleCandidates.length > 0 && (
         <Card title={`🔎 זוהו ${visibleCandidates.length} מנויים אפשריים מדוחות האשראי`}>
           <p className="settings-hint">
@@ -257,6 +290,6 @@ export default function SubscriptionsPage() {
       </Modal>
 
       {confirm.dialog}
-    </>
+    </PageShell>
   );
 }
