@@ -2,23 +2,14 @@ import * as XLSX from "xlsx";
 import { round2 } from "../../utils/money.utils";
 
 /**
- * Reader for the bank's printed amortisation table (לוח סילוקין).
+ * Reader for the bank's printed amortisation table (לוח סילוקין) — the loan's
+ * source of truth for its TERMS, but not for what happened: an early repayment
+ * is invisible here and only the statement knows about it.
  *
- * The file is the loan's source of truth for its TERMS: balance, rate, monthly
- * payment, remaining payments, next payment date, end date and the full future
- * schedule all come straight out of it. It is NOT the source of truth for what
- * happened — an early repayment is invisible here and only the bank statement
- * knows about it.
- *
- * Two properties of the format make it trustworthy, and both are enforced:
- *  1. The principal column sums to the opening balance **to the agora**. A file
- *     that fails this is rejected instead of stored — a schedule that does not
- *     reconcile is a mis-read file, not a loan.
- *  2. Every row satisfies `interest = balanceBefore × r` for one single rate, so
- *     the annual rate can be recovered exactly (measured spread across 58 rows of
- *     a real file: 2.8 parts per million).
- *
- * Verified against three real FIBI exports (loan 108, tracks 432 and 562).
+ * Two enforced properties make the format trustworthy: the principal column sums
+ * to the opening balance to the agora (a file that fails is rejected, not
+ * stored), and every row satisfies `interest = balanceBefore × r` for a single
+ * rate, so the annual rate is recovered exactly.
  */
 
 /** Header labels, in the order the bank prints them. Matched loosely on words. */

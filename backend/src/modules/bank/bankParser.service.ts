@@ -260,15 +260,22 @@ function findHeaderRow(rows: Cell[][]): { rowIndex: number; columns: Partial<Rec
   return null;
 }
 
-function parseCellDate(value: Cell): Date | null {
+/** Exported for the date invariants in `bankParser.dates.test.ts`. */
+export function parseCellDate(value: Cell): Date | null {
   if (value instanceof Date) {
     if (Number.isNaN(value.getTime())) return null;
-    // SheetJS (`cellDates: true`) builds a cell date from LOCAL-time components,
-    // but a `@db.Date` column keeps the UTC day. East of Greenwich that shifted
-    // every Excel-imported row one day back — 28/07 was stored as 27/07, which
-    // put an early repayment on the wrong day and off by a month at month ends.
-    // Every other branch below already anchors to UTC; this one did not.
-    return new Date(Date.UTC(value.getFullYear(), value.getMonth(), value.getDate()));
+    // SheetJS converts Excel date serials with a sub-minute drift: 28/07/2026
+    // arrives as 23:59:20 on the 27th. Truncating to a calendar day therefore
+    // lost a day on EVERY Excel-imported row — an early repayment landed on the
+    // wrong date, and a 1st-of-month row moved into the previous month, taking
+    // its amount with it.
+    //
+    // Rounding to the nearest local midnight absorbs the drift, and the result is
+    // anchored to UTC because `@db.Date` keeps the UTC day. Verified against the
+    // real statement: 2026-07-27T20:59:20Z → 2026-07-28.
+    const dayMs = 24 * 60 * 60 * 1000;
+    const localMs = value.getTime() - value.getTimezoneOffset() * 60_000;
+    return new Date(Math.round(localMs / dayMs) * dayMs);
   }
   if (typeof value === "number") {
     const parsed = XLSX.SSF.parse_date_code(value);
@@ -338,19 +345,14 @@ function parseSignedAmount(value: Cell): number | null {
 // ---------------------------------------------------------------------------
 
 /**
- * Loan-related line patterns, most specific first. The bank prints principal and
- * interest as separate lines, so this is a *labelling* step: it never changes
- * the deposit/withdrawal decision, which comes from the physical column only.
+ * Loan-related line patterns, most specific first. Labelling only — it never
+ * changes the deposit/withdrawal decision, which comes from the physical column.
  *
- *   הלוואה - תשלום קרן            → principal (debt reduction, not spending)
- *   הלוואה - תשלום ריבית 00965    → interest  (financing expense)
- *   ריבית על הלוואה 00990 28/05   → interest  (financing expense)
- *   ריבית על מסגרת ראשית 13.00%   → overdraft interest (financing expense)
- *   זיכוי בגין הטבה זמנית בריבית משיכת יתר
- *                                 → overdraft interest, credit direction: a
- *                                   rebate on facility interest, i.e. negative
- *                                   financing expense — never income.
- *   הלואה-תשלום 108               → combined repayment, no breakdown available
+ *   הלוואה - תשלום קרן                       → principal (debt reduction)
+ *   הלוואה - תשלום ריבית 00965               → interest (financing expense)
+ *   ריבית על מסגרת ראשית 13.00%              → overdraft interest
+ *   זיכוי בגין הטבה זמנית בריבית משיכת יתר   → the same, in the credit column
+ *   הלואה-תשלום 108                          → combined, no breakdown available
  */
 const LINE_KIND_PATTERNS: Array<{ kind: BankLineKind; pattern: RegExp }> = [
   { kind: "loan_principal", pattern: /הלוו?אה\s*-?\s*תשלום\s*קרן/ },
@@ -1100,16 +1102,13 @@ function keywordType(text: string): BankTransactionKind | null {
 }
 
 /**
- * Fallback parser for PDF statements that carry no recoverable column layout.
+ * Fallback parser for PDF statements with no recoverable column layout. Works
+ * line-by-line, classifying by the change in running balance where the statement
+ * prints one, otherwise by an explicit sign or description keywords.
  *
- * We work line-by-line: a transaction line starts with a date and carries one or
- * two money numbers. When the statement prints a running balance we classify each
- * row by the change in balance; otherwise we fall back to an explicit sign or
- * description keywords. This is a best-effort last resort — the positional parser
- * (parseBankStatementPdfByColumns) is tried first and is far more reliable, since
- * it reads the debit/credit column each amount actually sits in. Rows classified
- * by keywords alone are pushed into the review queue: they are a guess, and a
- * guess must be visible.
+ * A last resort — the positional parser runs first and reads the actual column.
+ * Rows classified by keywords alone go to the review queue: a guess must be
+ * visible.
  */
 async function parseBankStatementPdfByText(buffer: Buffer): Promise<ParsedBankStatement> {
   let text: string;
@@ -1229,19 +1228,14 @@ async function parseBankStatementPdfByText(buffer: Buffer): Promise<ParsedBankSt
   return buildStatement("pdf-text", "קורא PDF טקסטואלי (מסלול גיבוי)", parsed, rejected);
 }
 
-// ---------------------------------------------------------------------------
-// Positional PDF parsing (primary)
+// ---------- Positional PDF parsing (primary) ----------
 //
-// Israeli bank statements (tested against First International / הבינלאומי) print
-// a real table whose columns — זכות (credit), חובה (debit), יתרה (balance) — are
-// only distinguishable by their x-position. Plain text extraction glues the
-// amount, balance and reference numbers together and loses which column each
-// amount came from, so income and expenses become indistinguishable. Here we
-// keep every text token's x/y and reconstruct the table: the column an amount
-// sits in tells us deposit vs. withdrawal directly — the authoritative signal.
-// This path NEVER falls back to description keywords: a row whose amount cannot
-// be tied to a column is reported, not guessed.
-// ---------------------------------------------------------------------------
+// The statement's columns — זכות, חובה, יתרה — are distinguishable only by
+// x-position; plain text extraction glues the numbers together and loses which
+// column an amount came from, making income and expenses indistinguishable. So
+// we keep every token's x/y and rebuild the table, and never fall back to
+// description keywords: a row that cannot be tied to a column is reported, not
+// guessed.
 
 interface TextItem {
   s: string;

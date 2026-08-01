@@ -34,13 +34,25 @@ export const subscriptionsService = {
       where: { userId },
       orderBy: [{ status: "asc" }, { billingDate: "asc" }],
     });
-    const monthlyTotal = items
-      .filter((item) => item.status === "active")
-      .reduce(
-        (sum, item) => sum + (item.frequency === "yearly" ? Number(item.amount) / 12 : Number(item.amount)),
-        0
-      );
-    return { items, monthlyTotal: Math.round(monthlyTotal * 100) / 100 };
+    const active = items.filter((item) => item.status === "active");
+    const monthlyTotal = active.reduce(
+      (sum, item) => sum + (item.frequency === "yearly" ? Number(item.amount) / 12 : Number(item.amount)),
+      0
+    );
+    // The yearly figure is what actually changes behaviour — a 60 ₪/month
+    // subscription is 720 ₪ a year and nobody thinks of it that way. It is
+    // computed here rather than as `monthlyTotal * 12` in the UI, so the
+    // monthly/yearly normalisation rule stays in one place (CLAUDE.md §4).
+    const annualTotal = active.reduce(
+      (sum, item) => sum + (item.frequency === "yearly" ? Number(item.amount) : Number(item.amount) * 12),
+      0
+    );
+    return {
+      items,
+      monthlyTotal: Math.round(monthlyTotal * 100) / 100,
+      annualTotal: Math.round(annualTotal * 100) / 100,
+      activeCount: active.length,
+    };
   },
 
   /**
