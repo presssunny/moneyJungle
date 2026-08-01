@@ -3,6 +3,8 @@ import { Prisma } from "../../../generated/prisma/client";
 import { ApiError } from "../../utils/ApiError";
 import { round2 } from "../../utils/money.utils";
 import { buildRuleCategorizer } from "../categories/categorization.service";
+import { hashFile } from "../imports/statementDetector.service";
+import { accountBalanceService } from "./accountBalance.service";
 import {
   classifyBankLine,
   describeIngestionReport,
@@ -29,12 +31,41 @@ async function requireAccount(userId: number, id: number) {
 }
 
 export const bankService = {
-  listAccounts(userId: number) {
-    return prisma.bankAccount.findMany({
+  /**
+   * Accounts with their balance recomputed from statements + transactions, plus
+   * where that number came from. The stored column is refreshed on read so a
+   * balance can never be stale relative to the data it is derived from.
+   */
+  async listAccounts(userId: number) {
+    const accounts = await prisma.bankAccount.findMany({
       where: { userId },
       orderBy: { id: "asc" },
       include: { _count: { select: { transactions: true } } },
     });
+    return Promise.all(
+      accounts.map(async (account) => {
+        const derived = await accountBalanceService.recompute(userId, account.id);
+        return { ...account, currentBalance: derived.balance, balanceDetail: derived };
+      })
+    );
+  },
+
+  /** Every statement taken in for an account, newest period first. */
+  listStatements(userId: number, accountId: number) {
+    return prisma.bankStatementImport.findMany({
+      where: { userId, bankAccountId: accountId },
+      orderBy: [{ coverageTo: "desc" }, { createdAt: "desc" }],
+    });
+  },
+
+  /** State the balance the bank shows, for files that print no balance column. */
+  async setAnchor(userId: number, accountId: number, balance: number, asOf: string) {
+    await requireAccount(userId, accountId);
+    await prisma.bankAccount.update({
+      where: { id: accountId },
+      data: { anchorBalance: balance, anchorDate: new Date(asOf) },
+    });
+    return accountBalanceService.recompute(userId, accountId);
   },
 
   createAccount(userId: number, body: CreateBankAccountBody) {
@@ -50,15 +81,14 @@ export const bankService = {
   },
 
   async updateAccount(userId: number, id: number, body: UpdateBankAccountBody) {
-    const account = await requireAccount(userId, id);
-    // Editing the initial balance must shift the current balance by the same
-    // delta, otherwise the running balance silently drifts from its transactions.
+    await requireAccount(userId, id);
+    // No manual balance shifting: the balance is recomputed from the statements
+    // and the transactions, so editing the opening balance only matters when no
+    // statement has ever anchored the account.
     const data: Prisma.BankAccountUncheckedUpdateInput = { ...body };
-    if (body.initialBalance != null) {
-      const delta = body.initialBalance - Number(account.initialBalance);
-      data.currentBalance = { increment: round2(delta) };
-    }
-    return prisma.bankAccount.update({ where: { id }, data });
+    await prisma.bankAccount.update({ where: { id }, data });
+    await accountBalanceService.recompute(userId, id);
+    return prisma.bankAccount.findFirst({ where: { id, userId } });
   },
 
   async removeAccount(userId: number, id: number) {
@@ -77,24 +107,21 @@ export const bankService = {
 
   async createTransaction(userId: number, accountId: number, body: CreateBankTransactionBody) {
     await requireAccount(userId, accountId);
-    const [transaction] = await prisma.$transaction([
-      prisma.bankTransaction.create({
-        data: {
-          userId,
-          bankAccountId: accountId,
-          transactionDate: body.transactionDate,
-          description: body.description ?? null,
-          amount: body.amount,
-          type: body.type,
-          categoryId: body.categoryId ?? null,
-        },
-        include: { category: true },
-      }),
-      prisma.bankAccount.update({
-        where: { id: accountId },
-        data: { currentBalance: { increment: signedAmount(body.type, body.amount) } },
-      }),
-    ]);
+    const transaction = await prisma.bankTransaction.create({
+      data: {
+        userId,
+        bankAccountId: accountId,
+        transactionDate: body.transactionDate,
+        description: body.description ?? null,
+        amount: body.amount,
+        type: body.type,
+        categoryId: body.categoryId ?? null,
+      },
+      include: { category: true },
+    });
+    // A row dated inside a period the bank already reported is deliberately not
+    // added on top: the printed balance for that period already accounts for it.
+    await accountBalanceService.recompute(userId, accountId);
     return transaction;
   },
 
@@ -162,12 +189,10 @@ export const bankService = {
 
     let deposits = 0;
     let withdrawals = 0;
-    let balanceDelta = 0;
     if (fresh.length > 0) {
       await prisma.$transaction([
         prisma.bankTransaction.createMany({
           data: fresh.map((r) => {
-            balanceDelta += signedAmount(r.type, r.amount);
             if (r.type === "deposit") deposits += 1;
             else withdrawals += 1;
             // Persist the classification so the resolver knows *what kind* of
@@ -189,12 +214,40 @@ export const bankService = {
             };
           }),
         }),
-        prisma.bankAccount.update({
-          where: { id: accountId },
-          data: { currentBalance: { increment: round2(balanceDelta) } },
-        }),
       ]);
     }
+
+    // Record the statement itself: the period it covers and the balance the bank
+    // printed for it. This is what lets the balance be derived rather than
+    // accumulated — without the covered period, an overlapping re-import is
+    // indistinguishable from new money. Recorded even when every row was a
+    // duplicate: a re-upload of a *newer* statement still moves the anchor.
+    const coverageFrom = new Date(Math.min(...dates));
+    const coverageTo = new Date(Math.max(...dates));
+    await prisma.bankStatementImport.create({
+      data: {
+        userId,
+        bankAccountId: accountId,
+        fileName,
+        fileHash: hashFile(buffer),
+        coverageFrom,
+        coverageTo,
+        openingBalance: report.openingBalance,
+        closingBalance: report.closingBalance,
+        parsedRows: rows.length,
+        importedRows: fresh.length,
+        skippedDuplicates: rows.length - fresh.length,
+      },
+    });
+
+    // Full recomputation — there is no increment path left that could drift.
+    const balance = await accountBalanceService.recompute(userId, accountId);
+    console.log(
+      `[קליטת דוח בנק] יתרת החשבון: ${balance.balance} — ${balance.explanation}` +
+        (report.closingBalance === null
+          ? " (הקובץ הזה אינו כולל עמודת יתרה, ולכן אינו יכול לעגן את היתרה)"
+          : "")
+    );
 
     // Resolve straight away: a row that sits in `pending` is invisible to every
     // figure in the app, which reads as "the import did nothing". The resolver
@@ -218,12 +271,7 @@ export const bankService = {
   async removeTransaction(userId: number, id: number) {
     const transaction = await prisma.bankTransaction.findFirst({ where: { id, userId } });
     if (!transaction) throw ApiError.notFound("התנועה לא נמצאה");
-    await prisma.$transaction([
-      prisma.bankTransaction.delete({ where: { id } }),
-      prisma.bankAccount.update({
-        where: { id: transaction.bankAccountId },
-        data: { currentBalance: { decrement: signedAmount(transaction.type, Number(transaction.amount)) } },
-      }),
-    ]);
+    await prisma.bankTransaction.delete({ where: { id } });
+    await accountBalanceService.recompute(userId, transaction.bankAccountId);
   },
 };

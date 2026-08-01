@@ -174,13 +174,47 @@ export interface Settings {
   notificationsJson?: Record<string, unknown> | null;
 }
 
+/**
+ * Where an account balance came from. "statement" means it is anchored to a
+ * balance the bank stated; "accumulated" means we could only add transactions
+ * up, which no statement has confirmed.
+ */
+export interface BalanceDetail {
+  balance: number;
+  basis: "statement" | "accumulated";
+  anchor: {
+    statementId: number | null;
+    fileName: string;
+    coverageTo: string;
+    closingBalance: number;
+  } | null;
+  afterAnchorNet: number;
+  afterAnchorCount: number;
+  explanation: string;
+}
+
 export interface BankAccount {
   id: number;
   bankName: string;
   accountName: string;
   initialBalance: Money;
   currentBalance: Money;
+  balanceDetail?: BalanceDetail;
   _count?: { transactions: number };
+}
+
+/** One imported statement: the period it covers and the balances it printed. */
+export interface BankStatementImport {
+  id: number;
+  fileName: string;
+  coverageFrom: string;
+  coverageTo: string;
+  openingBalance: Money | null;
+  closingBalance: Money | null;
+  parsedRows: number;
+  importedRows: number;
+  skippedDuplicates: number;
+  createdAt: string;
 }
 
 export interface BankTransaction {
