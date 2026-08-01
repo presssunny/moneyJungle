@@ -2,6 +2,8 @@
 
 import type {
   Alert,
+  BalanceDetail,
+  BankStatementImport,
   BankAccount,
   BankTransaction,
   Category,
@@ -97,6 +99,20 @@ export async function updateBankAccount(id: number, input: Partial<BankAccountIn
 
 export async function deleteBankAccount(id: number): Promise<void> {
   await api.delete(`/bank/accounts/${id}`);
+}
+
+export async function listBankStatements(accountId: number): Promise<BankStatementImport[]> {
+  const { data } = await api.get(`/bank/accounts/${accountId}/statements`);
+  return data;
+}
+
+/** State the balance the bank shows as of a date, anchoring the account. */
+export async function setBankAnchor(
+  accountId: number,
+  input: { balance: number; asOf: string }
+): Promise<BalanceDetail> {
+  const { data } = await api.post(`/bank/accounts/${accountId}/anchor`, input);
+  return data;
 }
 
 export async function listBankTransactions(accountId: number): Promise<BankTransaction[]> {

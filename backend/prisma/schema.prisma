@@ -68,6 +68,7 @@ model User {
   creditTransactions CreditTransaction[]
   bankAccounts       BankAccount[]
   bankTransactions   BankTransaction[]
+  bankStatements     BankStatementImport[]
   recurringPayments  RecurringPayment[]
   subscriptions      Subscription[]
   loans              Loan[]
@@ -276,15 +277,55 @@ model BankAccount {
   bankName       String   @map("bank_name") @db.VarChar(120)
   accountName    String   @map("account_name") @db.VarChar(120)
   initialBalance Decimal  @default(0) @map("initial_balance") @db.Decimal(12, 2)
+  /// Derived, never accumulated — a cached copy of accountBalance.derive().
   currentBalance Decimal  @default(0) @map("current_balance") @db.Decimal(12, 2)
+  /// Balance the user states from the bank itself, as of `anchorDate`. Used when
+  /// no statement carries a printed balance column. Competes with statement
+  /// anchors on date: whichever is more recent wins.
+  anchorBalance  Decimal? @map("anchor_balance") @db.Decimal(12, 2)
+  anchorDate     DateTime? @map("anchor_date") @db.Date
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
-  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   transactions BankTransaction[]
+  statements   BankStatementImport[]
 
   @@index([userId])
   @@map("bank_accounts")
+}
+
+/// One imported bank statement: which period it covers and what balance the
+/// bank printed for it. This is what makes the account balance reproducible —
+/// the balance is derived from the newest statement's printed closing balance
+/// plus anything dated after it, never accumulated import by import. Without
+/// the covered period stored, an overlapping re-import cannot be told apart
+/// from new money.
+model BankStatementImport {
+  id            Int      @id @default(autoincrement())
+  userId        Int      @map("user_id")
+  bankAccountId Int      @map("bank_account_id")
+  fileName      String   @map("file_name") @db.VarChar(255)
+  /// SHA-256 of the uploaded bytes — the same file re-uploaded is recognised.
+  fileHash      String   @map("file_hash") @db.VarChar(64)
+  /// Period the statement covers, from its own transaction dates.
+  coverageFrom  DateTime @map("coverage_from") @db.Date
+  coverageTo    DateTime @map("coverage_to") @db.Date
+  /// Balances the bank printed. Null when the file carries no balance column —
+  /// such a statement can never anchor the account balance.
+  openingBalance Decimal? @map("opening_balance") @db.Decimal(12, 2)
+  closingBalance Decimal? @map("closing_balance") @db.Decimal(12, 2)
+  parsedRows        Int      @default(0) @map("parsed_rows")
+  importedRows      Int      @default(0) @map("imported_rows")
+  skippedDuplicates Int      @default(0) @map("skipped_duplicates")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account BankAccount @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+
+  @@index([userId, bankAccountId, coverageTo])
+  @@index([userId, fileHash])
+  @@map("bank_statement_imports")
 }
 
 model BankTransaction {

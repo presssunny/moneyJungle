@@ -5,6 +5,7 @@ import { validate } from "../../middlewares/validation.middleware";
 import { ApiError } from "../../utils/ApiError";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { IdParam, idParamSchema } from "../../utils/validation.utils";
+import { accountBalanceService } from "./accountBalance.service";
 import { bankService } from "./bank.service";
 import { reconciliationService } from "./reconciliation.service";
 import {
@@ -13,12 +14,14 @@ import {
   ReconcileExpenseBody,
   ReconcileIncomeBody,
   ReconcileLoanBody,
+  SetAnchorBody,
   UpdateBankAccountBody,
   createBankAccountSchema,
   createBankTransactionSchema,
   reconcileExpenseSchema,
   reconcileIncomeSchema,
   reconcileLoanSchema,
+  setAnchorSchema,
   updateBankAccountSchema,
 } from "./bank.validation";
 
@@ -35,6 +38,40 @@ bankRoutes.get(
   "/accounts",
   asyncHandler(async (req: Request, res: Response) => {
     res.json(await bankService.listAccounts(req.userId!));
+  })
+);
+
+/** Statements taken in for an account: period covered and printed balances. */
+bankRoutes.get(
+  "/accounts/:id/statements",
+  validate({ params: idParamSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.validated?.params as IdParam;
+    res.json(await bankService.listStatements(req.userId!, id));
+  })
+);
+
+/**
+ * State the balance the bank shows as of a date. Anchors the account when the
+ * statement files carry no printed balance column.
+ */
+bankRoutes.post(
+  "/accounts/:id/anchor",
+  validate({ params: idParamSchema, body: setAnchorSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.validated?.params as IdParam;
+    const body = req.validated?.body as SetAnchorBody;
+    res.json(await bankService.setAnchor(req.userId!, id, body.balance, body.asOf));
+  })
+);
+
+/** Recompute the balance from scratch — safe to call at any time. */
+bankRoutes.post(
+  "/accounts/:id/recompute",
+  validate({ params: idParamSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.validated?.params as IdParam;
+    res.json(await accountBalanceService.recompute(req.userId!, id));
   })
 );
 

@@ -44,6 +44,13 @@ export const reconcileLoanSchema = z.object({
   startDate: z.string().optional(),
 });
 
+/** A balance can legitimately be negative (overdraft) — no nonnegative here. */
+export const setAnchorSchema = z.object({
+  balance: z.coerce.number(),
+  asOf: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "נדרש תאריך בפורמט YYYY-MM-DD"),
+});
+
+export type SetAnchorBody = z.infer<typeof setAnchorSchema>;
 export type CreateBankAccountBody = z.infer<typeof createBankAccountSchema>;
 export type UpdateBankAccountBody = z.infer<typeof updateBankAccountSchema>;
 export type CreateBankTransactionBody = z.infer<typeof createBankTransactionSchema>;

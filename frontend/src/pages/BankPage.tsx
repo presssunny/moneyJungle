@@ -23,6 +23,7 @@ import {
   importBankStatement,
   listBankAccounts,
   listBankTransactions,
+  setBankAnchor,
 } from "../services/planning.service";
 import type { BankAccount, BankTransaction } from "../types/models";
 import { formatCurrency, formatDate, formatMonthKey } from "../utils/format";
@@ -47,6 +48,7 @@ export default function BankPage() {
   const [accountOpen, setAccountOpen] = useState(false);
   const [accountForm, setAccountForm] = useState({ bankName: "", accountName: "", initialBalance: 0 });
   const [txOpen, setTxOpen] = useState(false);
+  const [anchorForm, setAnchorForm] = useState({ balance: "", asOf: new Date().toISOString().slice(0, 10) });
   const [txForm, setTxForm] = useState({
     transactionDate: new Date().toISOString().slice(0, 10),
     description: "",
@@ -115,6 +117,22 @@ export default function BankPage() {
         setPendingFile(null);
         await importInto(account.id, file);
       }
+      load();
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    }
+  }
+
+  async function submitAnchor(e: FormEvent) {
+    e.preventDefault();
+    if (selectedId === null) return;
+    setError("");
+    try {
+      await setBankAnchor(selectedId, {
+        balance: Number(anchorForm.balance),
+        asOf: anchorForm.asOf,
+      });
+      setAnchorForm({ balance: "", asOf: new Date().toISOString().slice(0, 10) });
       load();
     } catch (err) {
       setError(apiErrorMessage(err));
@@ -236,9 +254,13 @@ export default function BankPage() {
             <SummaryCard
               label="יתרה בחשבון הנבחר"
               value={selected ? formatCurrency(Number(selected.currentBalance)) : "—"}
-              certainty={selected ? "measured" : "unknown"}
+              /* A balance nobody confirmed is an estimate, and is marked as one. */
+              certainty={
+                !selected ? "unknown" : selected.balanceDetail?.basis === "statement" ? "measured" : "scenario"
+              }
               tone={selected && Number(selected.currentBalance) < 0 ? "danger" : "success"}
               sub={selected ? `${selected.bankName} · ${selected.accountName}` : "לא נבחר חשבון"}
+              footnote={selected?.balanceDetail?.explanation}
             />
           )}
         </AsyncSection>
@@ -267,6 +289,37 @@ export default function BankPage() {
           )}
         </AsyncSection>
       </div>
+
+      {/* A balance we could not tie to anything the bank stated is called out,
+          with the one action that fixes it. */}
+      {selected?.balanceDetail?.basis === "accumulated" && (
+        <Card title="היתרה לא מאומתת">
+          <p className="settings-hint">
+            אף דף חשבון שיובא לא כלל עמודת יתרה, ולכן היתרה מחושבת כסכום כל התנועות — היא עלולה
+            להיות שגויה. אפשר לתקן בשתי דרכים: לייבא דף חשבון שכולל עמודת יתרה, או להזין כאן את
+            היתרה שמופיעה בבנק ואת התאריך שאליו היא נכונה. מאותו רגע היתרה תיגזר מהמספר הזה
+            ומהתנועות שאחריו בלבד.
+          </p>
+          <form className="form-inline" onSubmit={submitAnchor}>
+            <Input
+              label="יתרה בבנק (₪)"
+              type="number"
+              step="0.01"
+              required
+              value={anchorForm.balance}
+              onChange={(e) => setAnchorForm({ ...anchorForm, balance: e.target.value })}
+            />
+            <Input
+              label="נכון לתאריך"
+              type="date"
+              required
+              value={anchorForm.asOf}
+              onChange={(e) => setAnchorForm({ ...anchorForm, asOf: e.target.value })}
+            />
+            <Button type="submit">עיגון היתרה</Button>
+          </form>
+        </Card>
+      )}
 
       <Card title={selected ? `ייבוא דף חשבון — ${selected.accountName}` : "ייבוא דף חשבון (עו״ש)"}>
         {error && <ErrorMessage message={error} />}
