@@ -3,7 +3,12 @@ import { Prisma } from "../../../generated/prisma/client";
 
 export const loansRepository = {
   findAll(userId: number) {
-    return prisma.loan.findMany({ where: { userId }, orderBy: { createdAt: "asc" } });
+    // Active first, then most recently closed — the screen shows what still costs
+    // money above what is already behind the user.
+    return prisma.loan.findMany({
+      where: { userId },
+      orderBy: [{ status: "asc" }, { closedAt: "desc" }, { createdAt: "asc" }],
+    });
   },
 
   findActive(userId: number) {

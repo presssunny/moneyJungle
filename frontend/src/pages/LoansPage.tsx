@@ -1,13 +1,16 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
+import { AsyncSection } from "../components/common/AsyncSection";
 import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
+import { useConfirm } from "../components/common/ConfirmDialog";
 import { EmptyState } from "../components/common/EmptyState";
 import { ErrorMessage } from "../components/common/ErrorMessage";
 import { Input } from "../components/common/Input";
-import { Loading } from "../components/common/Loading";
 import { Modal } from "../components/common/Modal";
 import { Select } from "../components/common/Select";
+import { SkeletonRows } from "../components/common/Skeleton";
 import { Table, type Column } from "../components/common/Table";
+import { useAsync } from "../hooks/useAsync";
 import { apiErrorMessage } from "../services/api";
 import {
   createLoan,
@@ -17,8 +20,8 @@ import {
   updateLoan,
   type LoanInput,
 } from "../services/finance.service";
-import type { StatementLoanActivity, StatementLoanGroup } from "../services/planning.service";
-import type { Loan, LoanScheduleRow, LoanTotals } from "../types/models";
+import type { StatementLoanGroup } from "../services/planning.service";
+import type { Loan, LoanScheduleRow } from "../types/models";
 import { formatCurrency } from "../utils/format";
 
 const LOAN_TYPES = [
@@ -44,26 +47,17 @@ const emptyForm: LoanInput = {
 };
 
 export default function LoansPage() {
-  const [loans, setLoans] = useState<Loan[] | null>(null);
-  const [totals, setTotals] = useState<LoanTotals | null>(null);
-  const [fromStatement, setFromStatement] = useState<StatementLoanActivity | null>(null);
+  const loansRes = useAsync(() => listLoans(), [], "לא הצלחנו לטעון את ההלוואות");
+  const confirm = useConfirm();
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Loan | null>(null);
   const [form, setForm] = useState<LoanInput>(emptyForm);
   const [error, setError] = useState("");
   const [schedule, setSchedule] = useState<{ loan: Loan; rows: LoanScheduleRow[] } | null>(null);
 
-  const load = useCallback(() => {
-    listLoans()
-      .then((data) => {
-        setLoans(data.loans);
-        setTotals(data.totals);
-        setFromStatement(data.fromStatement);
-      })
-      .catch(() => setLoans([]));
-  }, []);
-
-  useEffect(load, [load]);
+  const load = loansRes.reload;
+  const totals = loansRes.data?.totals ?? null;
+  const fromStatement = loansRes.data?.fromStatement ?? null;
 
   function openCreate() {
     setEditing(null);
@@ -104,18 +98,33 @@ export default function LoansPage() {
     }
   }
 
-  async function remove(loan: Loan) {
-    if (!window.confirm(`למחוק את ההלוואה "${loan.loanName}"?`)) return;
-    await deleteLoan(loan.id);
-    load();
+  function remove(loan: Loan) {
+    confirm.ask(
+      {
+        title: "מחיקת הלוואה",
+        message: (
+          <>
+            ההלוואה <strong>{loan.loanName}</strong> תימחק.
+            <span className="confirm-consequence">
+              היתרה, ההחזר החודשי והריבית שלה ייעלמו מהדשבורד, מהתובנות ומתחזית התזרים.
+              תשלומים שכבר מופיעים בדוח הבנק יישארו — הם נלקחים משם, לא מכאן.
+            </span>
+          </>
+        ),
+        confirmLabel: "מחיקה",
+        tone: "danger",
+      },
+      async () => {
+        await deleteLoan(loan.id);
+        load();
+      }
+    );
   }
 
   async function showSchedule(loan: Loan) {
     const rows = await getLoanSchedule(loan.id);
     setSchedule({ loan, rows });
   }
-
-  if (!loans) return <Loading />;
 
   const columns: Column<Loan>[] = [
     {
@@ -247,12 +256,20 @@ export default function LoansPage() {
       </div>
 
       <Card>
-        <Table
-          columns={columns}
-          rows={loans}
-          rowKey={(row) => row.id}
-          emptyState={<EmptyState icon="📉" title="אין הלוואות" hint="הוסיפי הלוואה כדי לעקוב אחרי ריביות והחזרים" />}
-        />
+        <AsyncSection
+          resource={loansRes}
+          errorTitle="לא הצלחנו לטעון את ההלוואות"
+          skeleton={<SkeletonRows rows={3} label="טוען הלוואות" />}
+        >
+          {(data) => (
+            <Table
+              columns={columns}
+              rows={data.loans}
+              rowKey={(row) => row.id}
+              emptyState={<EmptyState icon="📉" title="אין הלוואות" hint="הוסיפי הלוואה כדי לעקוב אחרי ריביות והחזרים" />}
+            />
+          )}
+        </AsyncSection>
       </Card>
 
       {fromStatement && fromStatement.groups.length > 0 && (
@@ -328,6 +345,8 @@ export default function LoansPage() {
           />
         )}
       </Modal>
+
+      {confirm.dialog}
     </>
   );
 }
