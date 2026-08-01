@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { env } from "../../config/env";
 import { ApiError } from "../../utils/ApiError";
+import { currentIdentity, verifyCredentials, type Identity } from "./credentials";
 import { gateRepository } from "./gate.repository";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -9,17 +10,21 @@ function hashToken(token: string): string {
   return crypto.createHash("sha256").update(token).digest("hex");
 }
 
-/** Constant-time string comparison to avoid timing attacks on the gate password. */
-function safeEqual(a: string, b: string): boolean {
-  const hashA = crypto.createHash("sha256").update(a).digest();
-  const hashB = crypto.createHash("sha256").update(b).digest();
-  return crypto.timingSafeEqual(hashA, hashB);
-}
-
 export const gateService = {
-  async login(password: string): Promise<{ token: string; expiresAt: Date }> {
-    if (!safeEqual(password, env.APP_GATE_PASSWORD)) {
-      throw ApiError.unauthorized("סיסמה שגויה");
+  /**
+   * Identity checking lives in `credentials.ts`; this service only turns a
+   * verified identity into a session. Keeping the two apart is what makes
+   * swapping in JWT/OAuth later a one-file change.
+   */
+  async login(
+    username: string | undefined,
+    password: string
+  ): Promise<{ token: string; expiresAt: Date; user: Identity }> {
+    const identity = verifyCredentials(username, password);
+    if (!identity) {
+      // One message for both failure modes — naming which field was wrong would
+      // tell an attacker that the other one was right.
+      throw ApiError.unauthorized("שם המשתמש או הסיסמה שגויים");
     }
 
     const token = crypto.randomBytes(32).toString("hex");
@@ -28,7 +33,12 @@ export const gateService = {
     await gateRepository.deleteExpired();
     await gateRepository.createSession(hashToken(token), expiresAt);
 
-    return { token, expiresAt };
+    return { token, expiresAt, user: identity };
+  },
+
+  /** Who a valid session belongs to. Single-user today; per-session later. */
+  identity(): Identity {
+    return currentIdentity();
   },
 
   async logout(token: string): Promise<void> {

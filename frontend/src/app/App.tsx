@@ -13,10 +13,10 @@ import CreditPage from "../pages/CreditPage";
 import DashboardPage from "../pages/DashboardPage";
 import ExpensesPage from "../pages/ExpensesPage";
 import FamilyPage from "../pages/FamilyPage";
-import GatePage from "../pages/GatePage";
 import ImportsPage from "../pages/ImportsPage";
 import IncomesPage from "../pages/IncomesPage";
 import LoansPage from "../pages/LoansPage";
+import LoginPage from "../pages/LoginPage";
 import ManagePage from "../pages/ManagePage";
 import OnboardingPage from "../pages/OnboardingPage";
 import PaymentMethodsPage from "../pages/PaymentMethodsPage";
@@ -29,8 +29,9 @@ import TransactionsPage from "../pages/TransactionsPage";
 import { isLoggedIn } from "../services/gate.service";
 import { RequireOnboarding } from "./RequireOnboarding";
 
+/** Every route below the login screen is behind this. */
 function RequireGate({ children }: { children: ReactNode }) {
-  if (!isLoggedIn()) return <Navigate to="/gate" replace />;
+  if (!isLoggedIn()) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }
 
@@ -38,7 +39,9 @@ export default function App() {
   return (
     <ThemeProvider>
       <Routes>
-        <Route path="/gate" element={<GatePage />} />
+        <Route path="/login" element={<LoginPage />} />
+        {/* Old entry point — kept so existing bookmarks and links still land. */}
+        <Route path="/gate" element={<Navigate to="/login" replace />} />
         <Route
           path="/onboarding"
           element={
