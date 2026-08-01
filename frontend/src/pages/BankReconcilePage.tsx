@@ -46,16 +46,11 @@ const LOAN_TYPE_OPTIONS = [
 ];
 
 /**
- * מסך התאמת בנק (reconciliation).
- *
- * דוח בנק מיובא נשמר כתנועות גולמיות, וכל שורה מקבלת **סיווג** אחד שקובע מה הכסף
- * הזה: הכנסה, הוצאה שוטפת, ריבית (הוצאה מימונית), קרן הלוואה (הקטנת חוב — לא
- * הוצאה), קבלת הלוואה (התחייבות — לא הכנסה), חיוב אשראי שכבר מפורט בטאב אשראי
- * (מוחרג כדי למנוע כפל ספירה) או העברה פנימית.
- *
- * המסך הזה הוא מסלול הביקורת של המספרים: הוא מציג לאן הלכה כל שורה ולמה, כולל
- * הסכומים שבכוונה אינם חלק מההוצאות. שורה בלי סיווג היא באג — היא לא נספרת באף
- * מספר במערכת — ולכן היא מוצגת באדום.
+ * Bank reconciliation screen — the audit trail behind the figures. Every imported
+ * row carries one resolution saying what the money is, and this screen shows where
+ * each row went and why, including the amounts deliberately kept out of the
+ * expense total. A row with no resolution is a bug: it is counted nowhere, so it
+ * is shown in red.
  */
 export default function BankReconcilePage() {
   const res = useAsync<ReconciliationView>(

@@ -12,35 +12,17 @@ import {
 import { buildCreditCoverage } from "./creditCoverage.service";
 
 /**
- * Bank reconciliation.
+ * Bank reconciliation. Imported rows are not copied into incomes/loans/expenses —
+ * that would double-count against the credit module (CLAUDE.md §4). The resolver
+ * decides what each row means, writes it to `resolution` + `reconcileNote`, and
+ * creates a record only where the money belongs to an income/expense figure.
  *
- * An imported bank statement lands as raw rows in `bank_transactions`. Those rows
- * are NOT copied blindly into incomes/loans/expenses — that would double-count
- * against the credit module and violate the single-source-of-truth rule
- * (CLAUDE.md §4). Instead the resolver decides what each row MEANS, writes that
- * meaning to `resolution` + `reconcileNote`, and creates a record in the target
- * table only where the money really belongs to an income/expense figure.
- *
- * The rule the resolver is built around: **every row ends with a resolution.** A
- * row may legitimately be absent from the expense total — principal lowers debt,
- * a settled card bill is itemized in the credit module — but then its resolution
- * names where it went instead. Nothing is left in `pending` without a reason
- * written on it in Hebrew, because "pending" is invisible in every figure and
- * silently makes the totals wrong.
- *
- * Money-meaning rules (CLAUDE.md §5, banker's rulings):
- *   - direction comes from the physical column, never from the description text
- *   - loan interest         → expense (financing), own category
- *   - interest credited back → NEGATIVE financing expense, never income
- *   - loan principal        → debt reduction, never an expense
- *   - combined loan payment → its own bucket, never folded into principal
- *   - loan received         → a liability, never income
- *   - card settlement       → excluded only when that card is really itemized
+ * Every row ends with a resolution: `pending` is invisible in every total, so a
+ * row left there silently makes the figures wrong. See BankResolution for the
+ * money-meaning rules (CLAUDE.md §5).
  */
 
-// ---------------------------------------------------------------------------
-// Income-type guessing — a *suggestion* only; the user can change it.
-// ---------------------------------------------------------------------------
+// ---------- Income-type guessing (a suggestion; the user can change it) ----------
 function guessIncomeType(description: string): string {
   const d = description;
   if (/קצב|בטוח\s*לאומי|ביטוח\s*לאומי|מזונות|נכות|אבטלה|הבטחת\s*הכנסה/.test(d)) return "allowance";
@@ -57,18 +39,14 @@ const INCOME_TYPE_LABELS: Record<string, string> = {
   extra: "הכנסה נוספת",
 };
 
-// ---------------------------------------------------------------------------
-// Categories the resolver needs by name.
-// ---------------------------------------------------------------------------
+// ---------- Categories the resolver looks up by name ----------
 
 /** Carries the cost of credit, so interest never hides inside ordinary spend. */
 const FINANCING_CATEGORY = "ריבית ועמלות בנק";
 /** A card bill nothing itemizes: coarse by nature, so it says so by name. */
 const UNITEMIZED_CARD_CATEGORY = "חיוב אשראי ללא פירוט";
 
-// ---------------------------------------------------------------------------
-// Row shape returned to the client (Decimal already converted to number).
-// ---------------------------------------------------------------------------
+// ---------- Client-facing row shape ----------
 export interface ReconcileRow {
   id: number;
   date: string;
@@ -200,9 +178,7 @@ function toRow(t: RawTx): ReconcileRow {
 
 const LOAN_KINDS = new Set(["loan_principal", "loan_interest", "loan_mixed"]);
 
-// ---------------------------------------------------------------------------
-// Internal transfers and atypical credits
-// ---------------------------------------------------------------------------
+// ---------- Internal transfers and atypical credits ----------
 
 /** Same amount out and back within a few days may be one internal move. */
 const ROUND_TRIP_MAX_DAYS = 7;
@@ -210,14 +186,10 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Wording that means "money moved between accounts". BOTH legs must read like a
- * transfer before a matching pair is treated as internal.
- *
- * Matching on amount and date alone is not enough, and the real statement proves
- * it: 7,000 left as "העברה מהחשבון" on 05/07 and 7,000 arrived as "זיכוי" on
- * 10/07. Held as a round trip, both legs vanished — yet the banker's verified
- * income for the period (114,680.00 ₪) includes that credit, because plain
- * "זיכוי" with סו״פ 222 is an ordinary incoming receipt, the same code as
- * קצבת ילדים. Only when both sides say "transfer" is netting them out justified.
+ * transfer before a pair is netted out. Amount and date alone are not enough: in
+ * the real statement 7,000 left as "העברה מהחשבון" and 7,000 arrived as "זיכוי"
+ * five days later, but the verified income for the period includes that credit —
+ * a plain "זיכוי" is an ordinary receipt, not the transfer coming back.
  */
 const INTERNAL_TRANSFER_TEXT = /העברה|העברת|לחשבון|מהחשבון|בין\s*חשבונות|הפקדה\s*לחשבון|מסלקה/;
 
@@ -263,10 +235,10 @@ function findInternalTransferIds(rows: PairRow[]): Set<number> {
 }
 
 /**
- * A credit this many times the typical one is still counted as income — the
- * statement puts it in the credit column and nothing says otherwise — but it is
- * flagged, because a one-off wire is exactly what a loan drawdown or a transfer
- * from another account looks like when the wording gives nothing away.
+ * A credit this many times the typical one is still income — the statement puts
+ * it in the credit column — but it is flagged: a one-off wire is what a loan
+ * drawdown or a transfer between own accounts looks like when the wording says
+ * nothing.
  */
 const ATYPICAL_DEPOSIT_RATIO = 10;
 
@@ -281,9 +253,7 @@ function findAtypicalDepositIds(candidates: Array<{ id: number; amount: number }
   return flagged;
 }
 
-// ---------------------------------------------------------------------------
-// What one resolve pass did, in money terms — logged in Hebrew and returned.
-// ---------------------------------------------------------------------------
+// ---------- Resolve-pass result ----------
 export interface ResolveResult {
   /** Rows whose resolution/records changed in this pass. */
   changed: number;
@@ -397,13 +367,10 @@ export const reconciliationService = {
    * Give every imported bank row a financial meaning, and make the records in the
    * other tables agree with it.
    *
-   * Idempotent and self-correcting: it is the same pass on a fresh import and on
-   * a re-run, and when a decision changes (a credit statement arrives and a card
-   * bill that used to be counted as spend becomes itemized) the record it created
-   * earlier is removed. That is what keeps the bank and credit sources from ever
-   * double-counting the same money.
-   *
-   * Rows the user resolved by hand (`manual_excluded`) are never touched.
+   * Idempotent and self-correcting: when a decision changes — a credit statement
+   * arrives and a card bill that was counted as spend becomes itemized — the
+   * record created earlier is removed. That is what keeps the bank and credit
+   * sources from double-counting. `manual_excluded` rows are never touched.
    */
   async resolveAll(userId: number): Promise<ResolveResult> {
     await this.backfillClassification(userId);
@@ -622,19 +589,18 @@ export const reconciliationService = {
   },
 
   /**
-   * Loan activity as the statement actually reports it, grouped per loan
-   * reference. Nothing here is invented: the amounts are the bank's own lines, so
-   * a loan whose terms the user never entered still shows its real repayments.
-   *
-   * Read-only and derived — `bank_transactions` stays the single source, so these
-   * figures can never drift from the reconciliation screen.
+   * Loan activity as the statement reports it, grouped per loan reference, so a
+   * loan whose terms were never entered still shows its real repayments. Derived
+   * from `bank_transactions`, so it cannot drift from the reconciliation screen.
    */
   async loanActivityFromStatement(userId: number) {
     const rows = await prisma.bankTransaction.findMany({
       where: {
         userId,
         OR: [
-          { lineKind: { in: ["loan_principal", "loan_interest", "loan_mixed", "loan_drawdown"] } },
+          // `loan_fee` is included so an early-repayment charge appears beside the
+          // loan it closed, instead of only inside the financing total.
+          { lineKind: { in: ["loan_principal", "loan_interest", "loan_mixed", "loan_drawdown", "loan_fee"] } },
           { resolution: { in: ["debt_reduction", "loan_repayment_unsplit", "loan_drawdown"] } },
         ],
       },
@@ -661,6 +627,7 @@ export const reconciliationService = {
       interestRefunded: number;
       unsplitPaid: number;
       drawdown: number;
+      feesPaid: number;
       linkedLoanId: number | null;
       months: string[];
       rows: Array<{
@@ -691,6 +658,7 @@ export const reconciliationService = {
           interestRefunded: 0,
           unsplitPaid: 0,
           drawdown: 0,
+          feesPaid: 0,
           linkedLoanId: r.linkedLoanId,
           months: [],
           rows: [],
@@ -705,6 +673,7 @@ export const reconciliationService = {
       else if (r.lineKind === "loan_interest" && isIn)
         g.interestRefunded = round2(g.interestRefunded + amount);
       else if (r.lineKind === "loan_drawdown") g.drawdown = round2(g.drawdown + amount);
+      else if (r.lineKind === "loan_fee" && !isIn) g.feesPaid = round2(g.feesPaid + amount);
 
       const month = r.transactionDate.toISOString().slice(0, 7);
       if (!g.months.includes(month)) g.months.push(month);
@@ -732,6 +701,7 @@ export const reconciliationService = {
       interestRefunded: round2(items.reduce((s, g) => s + g.interestRefunded, 0)),
       unsplitPaid: round2(items.reduce((s, g) => s + g.unsplitPaid, 0)),
       drawdown: round2(items.reduce((s, g) => s + g.drawdown, 0)),
+      feesPaid: round2(items.reduce((s, g) => s + g.feesPaid, 0)),
       /** Everything that lowered debt: principal + repayments with no split. */
       debtReduction: round2(items.reduce((s, g) => s + g.principalPaid + g.unsplitPaid, 0)),
     };
@@ -798,13 +768,10 @@ export const reconciliationService = {
   },
 
   /**
-   * Create a Loan from a detected group (or link its rows to an existing loan),
-   * and mark every supplied bank row linked. The stateful loan fields (original
-   * amount, rate, term) come from the user — a statement line cannot supply them.
-   *
-   * The rows keep their own resolution: a principal line stays debt reduction and
-   * a drawdown stays a liability. Linking adds the loan they belong to; it never
-   * turns them into spending or income.
+   * Create a Loan from a detected group (or link its rows to an existing loan).
+   * The stateful fields (original amount, rate, term) come from the user — a
+   * statement line cannot supply them. Rows keep their own resolution: linking
+   * adds the loan they belong to, it never turns them into spending or income.
    */
   async linkLoan(
     userId: number,
@@ -915,9 +882,7 @@ export const reconciliationService = {
   },
 };
 
-// ---------------------------------------------------------------------------
-// Resolver internals
-// ---------------------------------------------------------------------------
+// ---------- Resolver internals ----------
 
 async function categoryIdByName(userId: number, name: string): Promise<number | null> {
   const category = await prisma.category.findFirst({
@@ -978,6 +943,20 @@ function decideTarget(row: ResolverRow, ctx: DecideContext): ResolutionTarget {
       record: "expense",
       categoryId: ctx.financingCategoryId,
       negative: true,
+    };
+  }
+
+  // Closing a loan early costs a fee. It is a cost OF THE CREDIT, so it belongs
+  // with interest in financing — not among the household's ordinary spending,
+  // where it would look like a 148 ₪ purchase nobody made.
+  if (row.lineKind === "loan_fee") {
+    return {
+      resolution: "financing_charge",
+      status: "done",
+      note: "עמלת פירעון מוקדם — הוצאה מימונית של ההלוואה, לא הוצאה שוטפת",
+      record: "expense",
+      categoryId: ctx.financingCategoryId,
+      negative: isIn,
     };
   }
 
@@ -1065,11 +1044,9 @@ function decideTarget(row: ResolverRow, ctx: DecideContext): ResolutionTarget {
 
 /**
  * Make the database agree with a decision. Returns whether anything changed, so a
- * re-run on settled data is silent.
- *
- * The order matters: records that no longer belong are deleted BEFORE the right
- * one is created, so a row can never hold two links at once (which is exactly how
- * a double count would start).
+ * re-run on settled data is silent. Records that no longer belong are deleted
+ * before the right one is created: a row holding two links is how a double count
+ * starts.
  */
 async function applyTarget(userId: number, row: ResolverRow, target: ResolutionTarget): Promise<boolean> {
   let changed = false;

@@ -1,24 +1,20 @@
 /**
- * Classification checks for the money-meaning rules (CLAUDE.md §5).
- *
- * No test runner is configured in this project, so this is a standalone script:
+ * Classification checks for the money-meaning rules (CLAUDE.md §5). No test
+ * runner is configured, so this is a standalone script:
  *
  *   npx ts-node -T src/modules/bank/bankClassification.check.ts
  *
- * It exists because most of these rules are NOT exercised by the statement we
- * have on disk — a loan drawdown, a principal reversal, a supplier whose name
- * contains an issuer name — and each of them, if it broke, would silently move
- * money into the wrong figure instead of failing loudly.
+ * It covers the cases the statement on disk does not exercise — a loan drawdown,
+ * a principal reversal, a supplier whose name contains an issuer name — where a
+ * break would move money into the wrong figure instead of failing loudly.
  */
 import { classifyBankLine, creditCardRefOf } from "./bankParser.service";
 
 type Kind = "deposit" | "withdrawal";
 
 const cases: Array<{ description: string; type: Kind; expected: string; why: string }> = [
-  // קבלת הלוואה — התחייבות, לא הכנסה
   { description: "הלוואה 108 קבלת הלוואה", type: "deposit", expected: "loan_drawdown", why: "קבלת הלוואה אינה הכנסה" },
   { description: "העמדת הלוואה 4455", type: "deposit", expected: "loan_drawdown", why: "קבלת הלוואה אינה הכנסה" },
-  // ריבית בעמודת הזכות — זיכוי ריבית, לא הכנסה
   {
     description: "הלוואה - תשלום ריבית 03757",
     type: "deposit",
@@ -31,7 +27,6 @@ const cases: Array<{ description: string; type: Kind; expected: string; why: str
     expected: "interest_credit",
     why: "זיכוי ריבית מסגרת — הוצאה מימונית שלילית",
   },
-  // ריבית בחובה — הוצאה מימונית
   { description: "ריבית על הלוואה 09/07 00965", type: "withdrawal", expected: "loan_interest", why: "ריבית היא הוצאה" },
   {
     description: "ריבית על מסגרת ראשית 28/05 13.00%",
@@ -39,7 +34,6 @@ const cases: Array<{ description: string; type: Kind; expected: string; why: str
     expected: "overdraft_interest",
     why: "ריבית מסגרת היא הוצאה מימונית",
   },
-  // קרן ותשלום מעורב
   { description: "הלוואה - תשלום קרן", type: "withdrawal", expected: "loan_principal", why: "קרן = הקטנת חוב" },
   { description: "הלואה-תשלום 108", type: "withdrawal", expected: "loan_mixed", why: "תשלום ללא פירוט קרן/ריבית" },
   {
@@ -48,7 +42,6 @@ const cases: Array<{ description: string; type: Kind; expected: string; why: str
     expected: "loan_principal",
     why: "קרן בזכות היא היפוך תשלום, לא קבלת הלוואה חדשה",
   },
-  // חיובי כרטיס אשראי
   {
     description: "כרטיסי אשראי לי - 2349",
     type: "withdrawal",
@@ -56,12 +49,10 @@ const cases: Array<{ description: string; type: Kind; expected: string; why: str
     why: "חיוב כרטיס — נבדק מול דוח האשראי",
   },
   { description: 'עפ"י הרשאה כאל', type: "withdrawal", expected: "credit_card_payment", why: "הרשאה לחיוב לחברת אשראי" },
-  // תנועות רגילות
   { description: "כספומט ב 7468234", type: "withdrawal", expected: "standard", why: "משיכת מזומן — הוצאה" },
   { description: "העברה מהחשבון", type: "withdrawal", expected: "standard", why: "העברה — הוצאה עד שיימצא צד שני" },
   { description: "זיכוי", type: "deposit", expected: "standard", why: "תקבול כללי — הכנסה (סו״פ 222)" },
   { description: "קצבת ילדים", type: "deposit", expected: "standard", why: "קצבה — הכנסה" },
-  // שם עסק שמכיל שם חברת אשראי אינו חיוב אשראי
   {
     description: 'מיכאל אלגרבלי בע"מ',
     type: "withdrawal",

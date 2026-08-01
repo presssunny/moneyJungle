@@ -6,31 +6,31 @@ export interface DefaultCategoryRule {
 }
 
 export const defaultCategoryRules: DefaultCategoryRule[] = [
-  // דלק
+  // Fuel
   { keyword: "yellow", categoryName: "דלק" },
   { keyword: "paz", categoryName: "דלק" },
   { keyword: "delek", categoryName: "דלק" },
   { keyword: "פז", categoryName: "דלק" },
   { keyword: "דלק", categoryName: "דלק" },
   { keyword: "סונול", categoryName: "דלק" },
-  // אוכל בחוץ
+  // Eating out
   { keyword: "wolt", categoryName: "אוכל בחוץ / מסעדות / משלוחים" },
   { keyword: "ten bis", categoryName: "אוכל בחוץ / מסעדות / משלוחים" },
   { keyword: "10bis", categoryName: "אוכל בחוץ / מסעדות / משלוחים" },
   { keyword: "תן ביס", categoryName: "אוכל בחוץ / מסעדות / משלוחים" },
   { keyword: "מסעדה", categoryName: "אוכל בחוץ / מסעדות / משלוחים" },
   { keyword: "מקדונלד", categoryName: "אוכל בחוץ / מסעדות / משלוחים" },
-  // סופר
+  // Groceries
   { keyword: "שופרסל", categoryName: "אוכל בסופר" },
   { keyword: "רמי לוי", categoryName: "אוכל בסופר" },
   { keyword: "ויקטורי", categoryName: "אוכל בסופר" },
   { keyword: "יוחננוף", categoryName: "אוכל בסופר" },
   { keyword: "מגה", categoryName: "אוכל בסופר" },
-  // פארם
+  // Pharmacy
   { keyword: "super-pharm", categoryName: "פארם ובריאות" },
   { keyword: "סופר פארם", categoryName: "פארם ובריאות" },
   { keyword: "be פארם", categoryName: "פארם ובריאות" },
-  // מנויים
+  // Subscriptions
   { keyword: "netflix", categoryName: "מנויים חודשיים" },
   { keyword: "spotify", categoryName: "מנויים חודשיים" },
   { keyword: "apple", categoryName: "מנויים חודשיים" },
@@ -38,17 +38,17 @@ export const defaultCategoryRules: DefaultCategoryRule[] = [
   { keyword: "canva", categoryName: "מנויים חודשיים" },
   { keyword: "openai", categoryName: "מנויים חודשיים" },
   { keyword: "chatgpt", categoryName: "מנויים חודשיים" },
-  // סיגריות
+  // Cigarettes
   { keyword: "טבק", categoryName: "סיגריות" },
   { keyword: "סיגריות", categoryName: "סיגריות" },
-  // תקשורת
+  // Telecom
   { keyword: "פרטנר", categoryName: "אינטרנט וסלולר" },
   { keyword: "סלקום", categoryName: "אינטרנט וסלולר" },
   { keyword: "פלאפון", categoryName: "אינטרנט וסלולר" },
   { keyword: "פרטנר", categoryName: "אינטרנט וסלולר" },
   { keyword: "hot", categoryName: "אינטרנט וסלולר" },
   { keyword: "בזק", categoryName: "אינטרנט וסלולר" },
-  // סופרמרקטים ומכולות
+  // Supermarkets and corner shops
   { keyword: "פרשמרקט", categoryName: "אוכל בסופר" },
   { keyword: "carrefour", categoryName: "אוכל בסופר" },
   { keyword: "קרפור", categoryName: "אוכל בסופר" },
@@ -69,7 +69,7 @@ export const defaultCategoryRules: DefaultCategoryRule[] = [
   { keyword: "מכולת", categoryName: "אוכל בסופר" },
   { keyword: "מרכול", categoryName: "אוכל בסופר" },
   { keyword: "משקאות", categoryName: "אוכל בסופר" },
-  // אוכל בחוץ / בתי קפה / מסעדות
+  // Cafes and restaurants
   { keyword: "שווארמה", categoryName: "אוכל בחוץ / מסעדות / משלוחים" },
   { keyword: "פלאפל", categoryName: "אוכל בחוץ / מסעדות / משלוחים" },
   { keyword: "פיצה", categoryName: "אוכל בחוץ / מסעדות / משלוחים" },
@@ -87,28 +87,28 @@ export const defaultCategoryRules: DefaultCategoryRule[] = [
   { keyword: "טורקי", categoryName: "אוכל בחוץ / מסעדות / משלוחים" },
   { keyword: "קיוסק", categoryName: "אוכל בחוץ / מסעדות / משלוחים" },
   { keyword: "בר בריא", categoryName: "אוכל בחוץ / מסעדות / משלוחים" },
-  // בריאות
+  // Health funds
   { keyword: "מכבי", categoryName: "בריאות" },
   { keyword: "כללית", categoryName: "בריאות" },
   { keyword: "לאומית", categoryName: "בריאות" },
   { keyword: "מאוחדת", categoryName: "בריאות" },
   { keyword: "מנורה מבטחים", categoryName: "בריאות" },
-  // ביטוחים
+  // Insurance
   { keyword: "הראל", categoryName: "ביטוחים" },
   { keyword: "כלל ביטוח", categoryName: "ביטוחים" },
   { keyword: "איילון", categoryName: "ביטוחים" },
   { keyword: "הפניקס", categoryName: "ביטוחים" },
-  // פארם
+  // Pharmacy
   { keyword: "סופר פארם", categoryName: "פארם ובריאות" },
   { keyword: "ניו פארם", categoryName: "פארם ובריאות" },
-  // דלק נוסף
+  // More fuel chains
   { keyword: "מנטה", categoryName: "דלק" },
   { keyword: "סדש", categoryName: "דלק" },
   { keyword: "דור אלון", categoryName: "דלק" },
-  // הוצאות עסק (סני)
+  // Business expenses
   { keyword: "anthropic", categoryName: "הוצאות עסק (סני)" },
   { keyword: "claude", categoryName: "הוצאות עסק (סני)" },
-  // תחבורה ציבורית
+  // Public transport
   { keyword: "רב-פס", categoryName: "תחבורה ציבורית" },
   { keyword: "רב פס", categoryName: "תחבורה ציבורית" },
   { keyword: "lime", categoryName: "תחבורה ציבורית" },
