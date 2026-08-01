@@ -1,0 +1,11 @@
+{
+  // Same compiler settings as the build, but with the test code included, so
+  // `npm run typecheck:test` type-checks what `npm run build` deliberately skips.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["src", "generated"],
+  "exclude": ["node_modules", "dist"]
+}

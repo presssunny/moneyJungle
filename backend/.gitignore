@@ -26,3 +26,6 @@ Thumbs.db
 
 # Claude (אם אלה קבצים מקומיים בלבד)
 .claude/settings.local.json
+# Test fixtures = real bank statements (account numbers, balances). Never commit.
+tests/fixtures/*
+!tests/fixtures/README.md

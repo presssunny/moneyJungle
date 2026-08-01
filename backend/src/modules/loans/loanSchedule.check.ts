@@ -1,15 +1,18 @@
 /**
- * Verification of the amortisation-schedule parser against the real bank exports.
+ * Human-readable dump of what the amortisation-schedule parser read out of a
+ * file. A diagnostic, not a test — it asserts nothing and is meant for eyeballing
+ * a NEW export before it becomes a fixture.
+ *
+ * The assertions live in `loanSchedule.golden.test.ts` (`npm run test`).
+ *
  * Run: npx ts-node -T src/modules/loans/loanSchedule.check.ts [file...]
  */
 import fs from "fs";
+import path from "path";
 import { parseLoanSchedule, ScheduleParseError } from "./loanSchedule.parser";
 
-const DEFAULTS = [
-  "/mnt/c/Users/sunny/Downloads/export.xlsx",
-  "/mnt/c/Users/sunny/Downloads/export(1).xlsx",
-  "/mnt/c/Users/sunny/Downloads/export(2).xlsx",
-];
+const FIXTURES = path.resolve(__dirname, "../../../tests/fixtures");
+const DEFAULTS = ["loan-schedule-1.xlsx", "loan-schedule-2.xlsx"].map((name) => path.join(FIXTURES, name));
 
 const files = process.argv.slice(2).length > 0 ? process.argv.slice(2) : DEFAULTS;
 let failures = 0;
