@@ -1,14 +1,17 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
+import { AsyncSection } from "../components/common/AsyncSection";
 import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
+import { useConfirm } from "../components/common/ConfirmDialog";
 import { EmptyState } from "../components/common/EmptyState";
 import { ErrorMessage } from "../components/common/ErrorMessage";
 import { Input } from "../components/common/Input";
-import { Loading } from "../components/common/Loading";
 import { Modal } from "../components/common/Modal";
 import { Select } from "../components/common/Select";
+import { SkeletonRows } from "../components/common/Skeleton";
 import { Table, type Column } from "../components/common/Table";
 import { useMonth } from "../context/MonthContext";
+import { useAsync } from "../hooks/useAsync";
 import { useLookups } from "../hooks/useLookups";
 import { apiErrorMessage } from "../services/api";
 import {
@@ -39,24 +42,16 @@ const emptyForm: RecurringInput = {
 export default function RecurringPage() {
   const { monthKey } = useMonth();
   const { expenseCategories, paymentMethods } = useLookups();
-  const [items, setItems] = useState<RecurringPayment[] | null>(null);
-  const [monthlyTotal, setMonthlyTotal] = useState(0);
+  const recurring = useAsync(() => listRecurring(), [], "לא הצלחנו לטעון את התשלומים הקבועים");
+  const confirm = useConfirm();
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<RecurringPayment | null>(null);
   const [form, setForm] = useState<RecurringInput>(emptyForm);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
-  const load = useCallback(() => {
-    listRecurring()
-      .then((data) => {
-        setItems(data.items);
-        setMonthlyTotal(data.monthlyTotal);
-      })
-      .catch(() => setItems([]));
-  }, []);
-
-  useEffect(load, [load]);
+  const monthlyTotal = recurring.data?.monthlyTotal ?? 0;
+  const load = recurring.reload;
 
   function openCreate() {
     setEditing(null);
@@ -92,10 +87,26 @@ export default function RecurringPage() {
     }
   }
 
-  async function remove(item: RecurringPayment) {
-    if (!window.confirm(`למחוק את התשלום הקבוע "${item.name}"?`)) return;
-    await deleteRecurring(item.id);
-    load();
+  function askRemove(item: RecurringPayment) {
+    confirm.ask(
+      {
+        title: "מחיקת תשלום קבוע",
+        message: (
+          <>
+            התשלום הקבוע <strong>{item.name}</strong> יימחק מהתוכנית החודשית.
+            <span className="confirm-consequence">
+              הוצאות שכבר נוצרו ממנו בחודשים קודמים יישארו — נמחקת רק התוכנית להבא.
+            </span>
+          </>
+        ),
+        confirmLabel: "מחיקה",
+        tone: "danger",
+      },
+      async () => {
+        await deleteRecurring(item.id);
+        load();
+      }
+    );
   }
 
   async function generate() {
@@ -111,8 +122,6 @@ export default function RecurringPage() {
       setMessage(apiErrorMessage(err));
     }
   }
-
-  if (!items) return <Loading />;
 
   const columns: Column<RecurringPayment>[] = [
     { key: "name", header: "שם", render: (row) => <strong>{row.name}</strong> },
@@ -136,8 +145,8 @@ export default function RecurringPage() {
       align: "left",
       render: (row) => (
         <span className="row-actions">
-          <Button size="sm" variant="ghost" onClick={() => openEdit(row)}>✏️</Button>
-          <Button size="sm" variant="ghost" onClick={() => remove(row)}>🗑️</Button>
+          <Button size="sm" variant="ghost" onClick={() => openEdit(row)} aria-label={`עריכת ${row.name}`}>✏️</Button>
+          <Button size="sm" variant="ghost" onClick={() => askRemove(row)} aria-label={`מחיקת ${row.name}`}>🗑️</Button>
         </span>
       ),
     },
@@ -156,12 +165,20 @@ export default function RecurringPage() {
       {message && <div className="info-banner">{message}</div>}
 
       <Card>
-        <Table
-          columns={columns}
-          rows={items}
-          rowKey={(row) => row.id}
-          emptyState={<EmptyState icon="🔁" title="אין תשלומים קבועים" hint='למשל: שכר דירה, גן, ביטוחים — כמו בגיליון האקסל המשפחתי' />}
-        />
+        <AsyncSection
+          resource={recurring}
+          errorTitle="לא הצלחנו לטעון את התשלומים הקבועים"
+          skeleton={<SkeletonRows rows={5} label="טוען תשלומים קבועים" />}
+        >
+          {(data) => (
+            <Table
+              columns={columns}
+              rows={data.items}
+              rowKey={(row) => row.id}
+              emptyState={<EmptyState icon="🔁" title="אין תשלומים קבועים" hint='למשל: שכר דירה, גן, ביטוחים — כמו בגיליון האקסל המשפחתי' />}
+            />
+          )}
+        </AsyncSection>
       </Card>
 
       <Modal title={editing ? "עריכת תשלום קבוע" : "תשלום קבוע חדש"} open={formOpen} onClose={() => setFormOpen(false)}>
@@ -216,6 +233,8 @@ export default function RecurringPage() {
           </div>
         </form>
       </Modal>
+
+      {confirm.dialog}
     </>
   );
 }

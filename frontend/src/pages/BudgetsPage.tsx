@@ -2,6 +2,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import { AsyncSection } from "../components/common/AsyncSection";
 import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
+import { useConfirm } from "../components/common/ConfirmDialog";
 import { EmptyState } from "../components/common/EmptyState";
 import { ErrorMessage } from "../components/common/ErrorMessage";
 import { Input } from "../components/common/Input";
@@ -29,6 +30,7 @@ import { formatCurrency } from "../utils/format";
  * a plan" is a budget question, not a bookkeeping one (§5.2).
  */
 export default function BudgetsPage() {
+  const confirm = useConfirm();
   const { monthKey } = useMonth();
   const { expenseCategories } = useLookups();
   const [formOpen, setFormOpen] = useState(false);
@@ -89,10 +91,24 @@ export default function BudgetsPage() {
     }
   }
 
-  async function remove(id: number, name: string) {
-    if (!window.confirm(`למחוק את התקציב של "${name}"?`)) return;
-    await deleteBudget(id);
-    load();
+  function remove(id: number, name: string) {
+    confirm.ask(
+      {
+        title: "מחיקת תקציב",
+        message: (
+          <>
+            התקציב של <strong>{name}</strong> יימחק לחודש הזה.
+            <span className="confirm-consequence">ההוצאות עצמן נשארות — נמחק רק היעד שנקבע להן.</span>
+          </>
+        ),
+        confirmLabel: "מחיקה",
+        tone: "danger",
+      },
+      async () => {
+        await deleteBudget(id);
+        load();
+      }
+    );
   }
 
   const usedCategoryIds = new Set(budgets.map((b) => b.categoryId));
@@ -353,6 +369,8 @@ export default function BudgetsPage() {
           </div>
         </form>
       </Modal>
+
+      {confirm.dialog}
     </>
   );
 }

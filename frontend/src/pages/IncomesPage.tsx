@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { AsyncSection } from "../components/common/AsyncSection";
 import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
+import { useConfirm } from "../components/common/ConfirmDialog";
 import { EmptyState } from "../components/common/EmptyState";
 import { ErrorMessage } from "../components/common/ErrorMessage";
 import { Input } from "../components/common/Input";
@@ -37,6 +38,7 @@ const emptyForm = (monthKey: string): IncomeInput => ({
 });
 
 export default function IncomesPage() {
+  const confirm = useConfirm();
   const { monthKey } = useMonth();
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Income | null>(null);
@@ -86,10 +88,24 @@ export default function IncomesPage() {
     }
   }
 
-  async function remove(income: Income) {
-    if (!window.confirm(`למחוק את ההכנסה "${income.description || typeLabel(income.type)}"?`)) return;
-    await deleteIncome(income.id);
-    load();
+  function remove(income: Income) {
+    confirm.ask(
+      {
+        title: "מחיקת הכנסה",
+        message: (
+          <>
+            ההכנסה <strong>{income.description || typeLabel(income.type)}</strong> תימחק.
+            <span className="confirm-consequence">היתרה החודשית ושיעור החיסכון יחושבו מחדש.</span>
+          </>
+        ),
+        confirmLabel: "מחיקה",
+        tone: "danger",
+      },
+      async () => {
+        await deleteIncome(income.id);
+        load();
+      }
+    );
   }
 
   const columns: Column<Income>[] = [
@@ -196,6 +212,8 @@ export default function IncomesPage() {
           </div>
         </form>
       </Modal>
+
+      {confirm.dialog}
     </>
   );
 }

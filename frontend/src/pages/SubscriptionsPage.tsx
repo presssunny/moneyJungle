@@ -1,13 +1,16 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
+import { AsyncSection } from "../components/common/AsyncSection";
 import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
+import { useConfirm } from "../components/common/ConfirmDialog";
 import { EmptyState } from "../components/common/EmptyState";
 import { ErrorMessage } from "../components/common/ErrorMessage";
 import { Input } from "../components/common/Input";
-import { Loading } from "../components/common/Loading";
 import { Modal } from "../components/common/Modal";
 import { Select } from "../components/common/Select";
+import { SkeletonRows } from "../components/common/Skeleton";
 import { Table, type Column } from "../components/common/Table";
+import { useAsync } from "../hooks/useAsync";
 import { apiErrorMessage } from "../services/api";
 import {
   createSubscription,
@@ -28,28 +31,27 @@ const emptyForm: SubscriptionInput = {
 };
 
 export default function SubscriptionsPage() {
-  const [items, setItems] = useState<Subscription[] | null>(null);
-  const [monthlyTotal, setMonthlyTotal] = useState(0);
-  const [candidates, setCandidates] = useState<SubscriptionCandidate[]>([]);
+  // Two independent widgets: the detected-candidates card is a bonus, so its
+  // failure must not hide the subscriptions the user already has (IA §1.3).
+  const subs = useAsync(() => listSubscriptions(), [], "לא הצלחנו לטעון את המנויים");
+  const candidatesRes = useAsync(
+    () => getSubscriptionCandidates(),
+    [],
+    "לא הצלחנו לזהות מנויים אפשריים"
+  );
+  const confirm = useConfirm();
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Subscription | null>(null);
   const [form, setForm] = useState<SubscriptionInput>(emptyForm);
   const [error, setError] = useState("");
 
-  const load = useCallback(() => {
-    listSubscriptions()
-      .then((data) => {
-        setItems(data.items);
-        setMonthlyTotal(data.monthlyTotal);
-      })
-      .catch(() => setItems([]));
-    getSubscriptionCandidates()
-      .then(setCandidates)
-      .catch(() => setCandidates([]));
-  }, []);
+  const monthlyTotal = subs.data?.monthlyTotal ?? 0;
 
-  useEffect(load, [load]);
+  function load() {
+    subs.reload();
+    candidatesRes.reload();
+  }
 
   async function addCandidate(c: SubscriptionCandidate) {
     await createSubscription({
@@ -99,13 +101,27 @@ export default function SubscriptionsPage() {
     load();
   }
 
-  async function remove(item: Subscription) {
-    if (!window.confirm(`למחוק את המנוי "${item.name}"?`)) return;
-    await deleteSubscription(item.id);
-    load();
+  function askRemove(item: Subscription) {
+    confirm.ask(
+      {
+        title: "מחיקת מנוי",
+        message: (
+          <>
+            המנוי <strong>{item.name}</strong> יימחק.
+            <span className="confirm-consequence">
+              אם רק רצית להפסיק לשלם — עדיף להשהות אותו (⏸️), כך הוא נשמר בהיסטוריה.
+            </span>
+          </>
+        ),
+        confirmLabel: "מחיקה",
+        tone: "danger",
+      },
+      async () => {
+        await deleteSubscription(item.id);
+        load();
+      }
+    );
   }
-
-  if (!items) return <Loading />;
 
   const columns: Column<Subscription>[] = [
     {
@@ -140,14 +156,14 @@ export default function SubscriptionsPage() {
           <Button size="sm" variant="ghost" onClick={() => toggleStatus(row)} title={row.status === "active" ? "השהיה" : "הפעלה"}>
             {row.status === "active" ? "⏸️" : "▶️"}
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => openEdit(row)}>✏️</Button>
-          <Button size="sm" variant="ghost" onClick={() => remove(row)}>🗑️</Button>
+          <Button size="sm" variant="ghost" onClick={() => openEdit(row)} aria-label={`עריכת ${row.name}`}>✏️</Button>
+          <Button size="sm" variant="ghost" onClick={() => askRemove(row)} aria-label={`מחיקת ${row.name}`}>🗑️</Button>
         </span>
       ),
     },
   ];
 
-  const visibleCandidates = candidates.filter((c) => !dismissed.has(c.name));
+  const visibleCandidates = (candidatesRes.data ?? []).filter((c) => !dismissed.has(c.name));
 
   return (
     <>
@@ -187,12 +203,20 @@ export default function SubscriptionsPage() {
       )}
 
       <Card>
-        <Table
-          columns={columns}
-          rows={items}
-          rowKey={(row) => row.id}
-          emptyState={<EmptyState icon="📺" title="אין מנויים" hint="נטפליקס, ספוטיפיי, חדר כושר — כאן רואים כמה זה עולה בחודש" />}
-        />
+        <AsyncSection
+          resource={subs}
+          errorTitle="לא הצלחנו לטעון את המנויים"
+          skeleton={<SkeletonRows rows={4} label="טוען מנויים" />}
+        >
+          {(data) => (
+            <Table
+              columns={columns}
+              rows={data.items}
+              rowKey={(row) => row.id}
+              emptyState={<EmptyState icon="📺" title="אין מנויים" hint="נטפליקס, ספוטיפיי, חדר כושר — כאן רואים כמה זה עולה בחודש" />}
+            />
+          )}
+        </AsyncSection>
       </Card>
 
       <Modal title={editing ? "עריכת מנוי" : "מנוי חדש"} open={formOpen} onClose={() => setFormOpen(false)}>
@@ -231,6 +255,8 @@ export default function SubscriptionsPage() {
           </div>
         </form>
       </Modal>
+
+      {confirm.dialog}
     </>
   );
 }

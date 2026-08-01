@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { AsyncSection } from "../components/common/AsyncSection";
 import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
+import { useConfirm } from "../components/common/ConfirmDialog";
 import { EmptyState } from "../components/common/EmptyState";
 import { ErrorMessage } from "../components/common/ErrorMessage";
 import { Input } from "../components/common/Input";
@@ -28,6 +29,7 @@ const emptyForm: SavingsGoalInput = { goalName: "", targetAmount: 0, currentAmou
  * No chart here on purpose: the per-goal progress bars already carry it.
  */
 export default function SavingsPage() {
+  const confirm = useConfirm();
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<SavingsGoal | null>(null);
   const [form, setForm] = useState<SavingsGoalInput>(emptyForm);
@@ -83,10 +85,26 @@ export default function SavingsPage() {
     load();
   }
 
-  async function remove(goal: SavingsGoal) {
-    if (!window.confirm(`למחוק את היעד "${goal.goalName}"?`)) return;
-    await deleteSavingsGoal(goal.id);
-    load();
+  function remove(goal: SavingsGoal) {
+    confirm.ask(
+      {
+        title: "מחיקת יעד חיסכון",
+        message: (
+          <>
+            היעד <strong>{goal.goalName}</strong> יימחק.
+            <span className="confirm-consequence">
+              היסטוריית ההפקדות אליו תימחק גם היא, והסכום שנצבר לא ייספר עוד בנכסים.
+            </span>
+          </>
+        ),
+        confirmLabel: "מחיקה",
+        tone: "danger",
+      },
+      async () => {
+        await deleteSavingsGoal(goal.id);
+        load();
+      }
+    );
   }
 
   const totalSaved = goals.reduce((sum, g) => sum + Number(g.currentAmount), 0);
@@ -244,6 +262,8 @@ export default function SavingsPage() {
           </div>
         </form>
       </Modal>
+
+      {confirm.dialog}
     </>
   );
 }
