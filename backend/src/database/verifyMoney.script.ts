@@ -1,21 +1,12 @@
 /**
- * Money-integrity check. Run it after any import or reconciliation change:
+ * Money-integrity check — run after any import or reconciliation change:
  *
  *   npx ts-node -T src/database/verifyMoney.script.ts
  *
- * It asserts the invariants that make the app's figures trustworthy, rather than
- * checking hard-coded amounts (those change with every new statement):
- *
- *   1. Every bank row has a resolution — no row sits outside all the figures.
- *   2. The resolutions add up to the raw statement totals, to the agora. If a
- *      bucket were dropped or counted twice, this is where it shows.
- *   3. Every row that resolves to income/expense actually HAS its record, and no
- *      row that resolves to something else has one. That is the double-count
- *      guard: a card bill cannot be both excluded and counted as spend.
- *   4. `incomes` equals the income bucket, and `expenses` equals the expense
- *      buckets plus whatever the user entered by hand.
- *   5. Nothing in the credit module is attributed to a card whose settlement was
- *      also counted as spend (bank ↔ credit double count).
+ * Asserts invariants rather than fixed amounts, which change with every new
+ * statement: every row resolved, the resolutions adding back up to the raw
+ * statement totals, and a record existing exactly where the resolution says it
+ * should and nowhere else.
  */
 import { prisma } from "../config/database";
 import { EXPENSE_RESOLUTIONS } from "../modules/bank/bankResolution";

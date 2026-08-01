@@ -1,41 +1,31 @@
 /**
- * What a reconciled bank row MEANS financially. One row → exactly one resolution,
- * so "where did this money go in the app?" always has an answer, and the reverse
- * question — "which rows make up this figure?" — can be answered from the data.
- *
- * The split between `reconcileStatus` and `resolution` is deliberate:
- *   - `reconcileStatus` says whether a human still has to look at the row.
- *   - `resolution` says what the row is, in money terms.
- * A row may be `done` and still be absent from every expense figure (principal is
- * debt reduction, a settled card bill is already itemized in the credit module) —
- * that is not money falling between the chairs, it is money counted elsewhere,
- * and each case names where.
+ * What a reconciled bank row means financially (CLAUDE.md §5). A row can be
+ * resolved and still be absent from every expense figure — principal lowers debt,
+ * a settled card bill is itemized in the credit module — and the resolution names
+ * where it went instead.
  */
 export type BankResolution =
-  /** Promoted to הכנסות. */
   | "income"
-  /** Promoted to הוצאות — ordinary spending. */
   | "expense"
-  /** Interest paid: an expense, in the financing category (CLAUDE.md §5). */
+  /** Interest paid — financing expense, own category. */
   | "financing_charge"
-  /** Interest refunded: a NEGATIVE financing expense. Never income. */
+  /** Interest refunded — a NEGATIVE financing expense, never income. */
   | "financing_credit"
-  /** Loan principal: lowers debt. Not spending, shown in הלוואות. */
+  /** Loan principal — lowers debt, not spending. */
   | "debt_reduction"
-  /** Combined loan payment the statement never split into principal/interest. */
+  /** Combined loan payment the statement never split. */
   | "loan_repayment_unsplit"
-  /** A loan received: creates a liability, never income. */
+  /** A loan received — a liability, never income. */
   | "loan_drawdown"
-  /** Card bill already itemized in the credit module — excluded, no double count. */
+  /** Itemized in the credit module — excluded, no double count. */
   | "credit_card_settled"
-  /** Card bill with no matching credit import: real spend, counted here. */
+  /** No matching credit import — real spend, counted here. */
   | "credit_card_unitemized"
-  /** Money moved between the user's own accounts — both legs held out. */
   | "internal_transfer"
-  /** The user set this row aside by hand. The resolver never touches it again. */
+  /** Set aside by hand; the resolver never touches it again. */
   | "manual_excluded";
 
-/** Resolutions that put the row's amount into an expense figure. */
+/** Resolutions whose amount lands in an expense figure. */
 export const EXPENSE_RESOLUTIONS: ReadonlySet<BankResolution> = new Set<BankResolution>([
   "expense",
   "financing_charge",
@@ -49,7 +39,7 @@ export const DEBT_RESOLUTIONS: ReadonlySet<BankResolution> = new Set<BankResolut
   "loan_repayment_unsplit",
 ]);
 
-/** Human-readable label per resolution — one wording, used by API and UI alike. */
+/** One wording per resolution, used by API and UI alike. */
 export const RESOLUTION_LABELS: Record<BankResolution, string> = {
   income: "הכנסה",
   expense: "הוצאה שוטפת",

@@ -1,13 +1,9 @@
 /**
- * Re-resolve every imported bank row for every user, and print what changed in
- * Hebrew.
+ * Re-resolve every imported bank row, for use after new categorization rules, a
+ * new classification pattern, or a late-arriving credit statement. Idempotent —
+ * a second run reports 0 updated rows.
  *
- * Run it after anything that can change what a row means: new categorization
- * rules, a new classification pattern, or a credit statement that arrived after
- * the bank statement. The resolver is idempotent, so running it twice in a row is
- * a no-op — the second run reports 0 updated rows.
- *
- *   npx ts-node src/database/resolveBank.script.ts
+ *   npx ts-node -T src/database/resolveBank.script.ts
  */
 import { prisma } from "../config/database";
 import { describeResolveResult, reconciliationService } from "../modules/bank/reconciliation.service";

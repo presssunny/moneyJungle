@@ -4,25 +4,14 @@ import { creditCardRefOf } from "./bankParser.service";
 
 /**
  * Is a credit-card settlement drawn from the current account already itemized in
- * the credit module?
- *
- * This is the single decision that keeps the two imported sources honest against
- * each other, and it cuts both ways:
- *
- *   - itemized  → the card statement lists every purchase, so the bank's lump-sum
- *     settlement MUST be excluded from spend, or every one of those purchases is
- *     counted twice (CLAUDE.md §4).
- *   - NOT itemized → nothing anywhere describes that money, so excluding the
- *     settlement makes it disappear from the app while it really left the account.
- *     It has to be counted as spend, coarse as that is, and labelled as such.
- *
- * Excluding unconditionally — the previous behaviour — quietly loses every card
- * whose statement was never imported. In this account that is card 3704: two
- * settlements totalling 5,852.85 ₪ with no credit rows behind them.
+ * the credit module? The answer cuts both ways: an itemized card must have its
+ * lump-sum settlement excluded or every purchase is counted twice (CLAUDE.md §4),
+ * while excluding an un-imported card deletes money that really left the account.
+ * Excluding unconditionally — the previous behaviour — silently lost card 3704
+ * here: two settlements, 5,852.85 ₪, with no credit rows behind them.
  */
 
-/** Days between the card company's charge date and the bank debit still count as
- *  the same settlement: the two dates differ by a day or two in practice. */
+/** The card company's charge date and the bank debit differ by a day or two. */
 const CHARGE_MATCH_DAYS = 5;
 /** A line that names no card at all is matched to a charge date only this close. */
 const ISSUER_ONLY_MATCH_DAYS = 3;
