@@ -64,6 +64,94 @@ export function computeLoan(input: LoanInput): LoanComputed {
   };
 }
 
+/**
+ * Where a loan stands in its life. Derived, never stored, so it can never drift
+ * from the balance and the status.
+ *
+ * `ending_soon` exists so the last few months are visible *before* they happen —
+ * that is when a user can plan for the payment that is about to free up.
+ */
+export type LoanLifecycle = "active" | "ending_soon" | "closed" | "overdue";
+
+/** Payments left at or below which a loan is "לקראת סיום". */
+export const ENDING_SOON_PAYMENTS = 3;
+
+export interface LoanProgressInput {
+  status: string;
+  originalAmount: number;
+  currentBalance: number;
+  monthlyPayment: number;
+  annualInterestRate: number;
+  totalPayments: number | null;
+  paymentsMade: number | null;
+  originalAmountSource: string;
+  scheduleSource: string;
+}
+
+export interface LoanProgress {
+  lifecycle: LoanLifecycle;
+  /** Principal repaid so far. */
+  principalRepaid: number;
+  /** 0–100. Capped, so a stale balance can never render a 103% bar. */
+  progressPercent: number;
+  paymentsMade: number | null;
+  paymentsRemaining: number | null;
+  totalPayments: number | null;
+  /**
+   * How sure the progress figures are (IA §1.2). "measured" once the schedule
+   * came from the bank AND the opening amount is known; "scenario" while either
+   * is reconstructed or simulated. Never surfaced as a plain confident number.
+   */
+  certainty: "measured" | "scenario";
+}
+
+/**
+ * Progress and lifecycle for one loan.
+ *
+ * Kept apart from `computeLoan` on purpose: five modules (dashboard, insights,
+ * alerts, updates, cashflow) depend on that function's exact shape, so it stays
+ * untouched and this is additive.
+ */
+export function loanProgress(loan: LoanProgressInput): LoanProgress {
+  const repaid = Math.max(loan.originalAmount - loan.currentBalance, 0);
+  const percent =
+    loan.originalAmount > 0 ? Math.min(round2((repaid / loan.originalAmount) * 100), 100) : 0;
+
+  // Payments left: from the schedule when it exists, else from the simulation.
+  let remaining: number | null = null;
+  if (loan.totalPayments !== null && loan.paymentsMade !== null) {
+    remaining = Math.max(loan.totalPayments - loan.paymentsMade, 0);
+  } else if (loan.currentBalance > 0) {
+    remaining = computeLoan({
+      currentBalance: loan.currentBalance,
+      annualInterestRate: loan.annualInterestRate,
+      monthlyPayment: loan.monthlyPayment,
+    }).remainingMonths;
+  }
+
+  const closed = loan.status === "finished" || loan.currentBalance <= 0.005;
+  const lifecycle: LoanLifecycle = closed
+    ? "closed"
+    : loan.status === "overdue"
+      ? "overdue"
+      : remaining !== null && remaining <= ENDING_SOON_PAYMENTS
+        ? "ending_soon"
+        : "active";
+
+  return {
+    lifecycle,
+    principalRepaid: round2(repaid),
+    progressPercent: closed ? 100 : percent,
+    paymentsMade: loan.paymentsMade,
+    paymentsRemaining: closed ? 0 : remaining,
+    totalPayments: loan.totalPayments,
+    certainty:
+      loan.scheduleSource === "bank_file" && loan.originalAmountSource !== "reconstructed"
+        ? "measured"
+        : "scenario",
+  };
+}
+
 /** Spitzer fixed monthly payment for principal P, annual rate (%), n months. */
 export function spitzerMonthlyPayment(principal: number, annualRatePercent: number, months: number): number {
   const i = annualRatePercent / 100 / 12;

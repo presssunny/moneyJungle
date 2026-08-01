@@ -2,6 +2,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import { AsyncSection } from "../components/common/AsyncSection";
 import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
+import { useConfirm } from "../components/common/ConfirmDialog";
 import { DropZone } from "../components/common/DropZone";
 import { EmptyState } from "../components/common/EmptyState";
 import { ErrorMessage } from "../components/common/ErrorMessage";
@@ -42,6 +43,7 @@ const TX_TYPES = [
  * optional in §6.3 and is deferred rather than blocking this stage.
  */
 export default function BankPage() {
+  const confirm = useConfirm();
   const { monthKey } = useMonth();
   const { expenseCategories } = useLookups();
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -187,17 +189,48 @@ export default function BankPage() {
     setAccountOpen(true);
   }
 
-  async function removeAccount(account: BankAccount) {
-    if (!window.confirm(`למחוק את החשבון "${account.accountName}" על כל התנועות שבו?`)) return;
-    await deleteBankAccount(account.id);
-    setSelectedId(null);
-    load();
+  function removeAccount(account: BankAccount) {
+    confirm.ask(
+      {
+        title: "מחיקת חשבון בנק",
+        message: (
+          <>
+            החשבון <strong>{account.accountName}</strong> יימחק.
+            <span className="confirm-consequence">
+              כל התנועות שיובאו אליו יימחקו יחד איתו, והסכומים שנגזרו מהן ייעלמו מהדשבורד.
+              הפעולה אינה הפיכה — אפשר יהיה לייבא את הדוחות מחדש.
+            </span>
+          </>
+        ),
+        confirmLabel: "מחיקת החשבון",
+        tone: "danger",
+      },
+      async () => {
+        await deleteBankAccount(account.id);
+        setSelectedId(null);
+        load();
+      }
+    );
   }
 
-  async function removeTx(tx: BankTransaction) {
-    if (!window.confirm("למחוק את התנועה?")) return;
-    await deleteBankTransaction(tx.id);
-    load();
+  function removeTx(tx: BankTransaction) {
+    confirm.ask(
+      {
+        title: "מחיקת תנועה",
+        message: (
+          <>
+            התנועה <strong>{tx.description || "ללא תיאור"}</strong> תימחק מהחשבון.
+            <span className="confirm-consequence">היתרה והסכומים החודשיים יחושבו מחדש בלעדיה.</span>
+          </>
+        ),
+        confirmLabel: "מחיקה",
+        tone: "danger",
+      },
+      async () => {
+        await deleteBankTransaction(tx.id);
+        load();
+      }
+    );
   }
 
   const txColumns: Column<BankTransaction>[] = [
@@ -508,6 +541,8 @@ export default function BankPage() {
           </div>
         </form>
       </Modal>
+
+      {confirm.dialog}
     </>
   );
 }

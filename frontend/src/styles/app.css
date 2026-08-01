@@ -658,6 +658,108 @@
   background: color-mix(in srgb, var(--primary) 4%, transparent);
 }
 
+/* ---------- Table → cards on narrow screens ----------
+   A 9-column table cannot be read on a 360px phone, and `overflow-x: auto` only
+   hides the problem behind a sideways scroll (IA §8.2). Below 860px every row
+   becomes a card: the first cell is its title, and each remaining cell shows its
+   column header (carried down as `data-label`) beside the value.
+
+   Done in CSS rather than by rendering a second markup tree, so all 13 tables in
+   the app get it without touching a single page. */
+
+@media (max-width: 860px) {
+  .table-wrap {
+    overflow-x: visible;
+  }
+
+  .table,
+  .table tbody,
+  .table tr,
+  .table td {
+    display: block;
+    width: 100%;
+  }
+
+  /* Headers move into the cells; keep them reachable for screen readers. */
+  .table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+
+  .table tr {
+    background: color-mix(in srgb, var(--bg-card) 60%, transparent);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 4px 12px 8px;
+    margin-bottom: 10px;
+  }
+
+  .table td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 7px 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
+    text-align: right !important; /* overrides the per-column inline alignment */
+  }
+
+  .table td::before {
+    content: attr(data-label);
+    flex: 0 0 auto;
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  /* First cell is the card title: full width, no label, heavier. */
+  .table td:first-child {
+    padding-top: 10px;
+    font-size: 15px;
+  }
+
+  .table td:first-child::before,
+  /* An unlabelled column (e.g. the actions column) needs no prefix. */
+  .table td[data-label=""]::before {
+    content: none;
+  }
+
+  .table td:last-child {
+    border-bottom: none;
+    justify-content: flex-start;
+    padding-bottom: 4px;
+  }
+
+  .table tbody tr:hover {
+    background: color-mix(in srgb, var(--bg-card) 60%, transparent);
+  }
+}
+
+/* ---------- Confirm dialog ---------- */
+
+.confirm-body {
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.confirm-body strong {
+  color: var(--text);
+}
+
+/* The consequence of the action — what will actually be lost. */
+.confirm-consequence {
+  display: block;
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
 /* ---------- Modal ---------- */
 
 .modal-overlay {
