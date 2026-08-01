@@ -20,7 +20,9 @@ export type BankLineKind =
   | "loan_principal"
   | "loan_interest"
   | "overdraft_interest"
-  | "loan_mixed";
+  | "loan_mixed"
+  /** Fee charged for closing a loan early — a financing cost, not spending. */
+  | "loan_fee";
 
 /** How well a row's running balance could be verified. */
 export type BankBalanceCheck = "printed" | "chain" | "unverified" | "mismatch";
@@ -259,7 +261,15 @@ function findHeaderRow(rows: Cell[][]): { rowIndex: number; columns: Partial<Rec
 }
 
 function parseCellDate(value: Cell): Date | null {
-  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null;
+    // SheetJS (`cellDates: true`) builds a cell date from LOCAL-time components,
+    // but a `@db.Date` column keeps the UTC day. East of Greenwich that shifted
+    // every Excel-imported row one day back — 28/07 was stored as 27/07, which
+    // put an early repayment on the wrong day and off by a month at month ends.
+    // Every other branch below already anchors to UTC; this one did not.
+    return new Date(Date.UTC(value.getFullYear(), value.getMonth(), value.getDate()));
+  }
   if (typeof value === "number") {
     const parsed = XLSX.SSF.parse_date_code(value);
     if (!parsed) return null;
@@ -352,6 +362,13 @@ const LINE_KIND_PATTERNS: Array<{ kind: BankLineKind; pattern: RegExp }> = [
   { kind: "overdraft_interest", pattern: /ריבית.{0,20}(משיכת\s*יתר|מסגרת).{0,30}(זיכוי|החזר|הטבה)/ },
   { kind: "overdraft_interest", pattern: /ריבית\s*על\s*מסגרת/ },
   { kind: "loan_mixed", pattern: /הלוו?אה\s*-?\s*תשלום\s*\d{2,6}(?:\s|$)/ },
+  // Closing a loan early costs a fee, and the bank prints it WITHOUT the word
+  // "הלוואה" — so without these two patterns the charge fell through to
+  // "standard" and was counted as ordinary household spending.
+  //   ע. פרעון מוקדם                        60.00
+  //   עמלת אי הודעה מוקדמת - פירעון מוקדם   87.65
+  { kind: "loan_fee", pattern: /פ[יר]?[רי]עון\s*מוקדם/ },
+  { kind: "loan_fee", pattern: /עמלת\s*אי\s*הודעה\s*מוקדמת/ },
 ];
 
 /** Loan/facility number inside the description — after removing date fragments. */
@@ -361,8 +378,21 @@ function extractLoanRef(description: string): string | null {
   return match ? match[1] : null;
 }
 
-/** Only loan lines carry a loan number; a facility (מסגרת) belongs to the account. */
-const KINDS_WITH_LOAN_REF: ReadonlySet<BankLineKind> = new Set<BankLineKind>(["loan_interest", "loan_mixed"]);
+/**
+ * Only loan lines carry a loan number; a facility (מסגרת) belongs to the account.
+ *
+ * `loan_principal` is in this set because a payoff line DOES print the number
+ * ("הלוואה - תשלום קרן 108" — a real 87,646.82 ₪ early repayment). Dropping it
+ * left every principal row with `loanRef: null`, and with it no way to tell
+ * which loan a repayment — least of all a closing one — belonged to.
+ * An ordinary monthly principal line has no number and still resolves to null.
+ */
+const KINDS_WITH_LOAN_REF: ReadonlySet<BankLineKind> = new Set<BankLineKind>([
+  "loan_principal",
+  "loan_interest",
+  "loan_mixed",
+  "loan_fee",
+]);
 
 function classifyLineKind(description: string): { lineKind: BankLineKind; loanRef: string | null } {
   const text = description.replace(/\s+/g, " ").trim();
@@ -868,6 +898,7 @@ function buildStatement(
     loan_interest: 0,
     overdraft_interest: 0,
     loan_mixed: 0,
+    loan_fee: 0,
   };
   const review: BankRowIssue[] = [];
 
