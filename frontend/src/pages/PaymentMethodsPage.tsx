@@ -7,9 +7,11 @@ import { EmptyState } from "../components/common/EmptyState";
 import { ErrorMessage } from "../components/common/ErrorMessage";
 import { Input } from "../components/common/Input";
 import { Modal } from "../components/common/Modal";
+import { PageShell } from "../components/common/PageShell";
 import { Select } from "../components/common/Select";
-import { SkeletonRows } from "../components/common/Skeleton";
+import { SkeletonKpiRow, SkeletonRows } from "../components/common/Skeleton";
 import { Table, type Column } from "../components/common/Table";
+import { SummaryCard } from "../components/dashboard/SummaryCard";
 import { useAsync } from "../hooks/useAsync";
 import { apiErrorMessage } from "../services/api";
 import {
@@ -118,11 +120,33 @@ export default function PaymentMethodsPage() {
   ];
 
   return (
-    <>
-      <div className="page-toolbar">
-        <Button onClick={openCreate}>+ אמצעי תשלום</Button>
-      </div>
-
+    <PageShell
+      toolbar={<Button onClick={openCreate}>+ אמצעי תשלום</Button>}
+      summary={
+        <AsyncSection
+          resource={methods}
+          errorTitle="לא הצלחנו לטעון את סיכום אמצעי התשלום"
+          skeleton={<SkeletonKpiRow count={3} label="טוען סיכום" />}
+        >
+          {(rows) => (
+            <div className="kpi-row">
+              <SummaryCard label="אמצעי תשלום" value={String(rows.length)} icon="💼" />
+              <SummaryCard
+                label="שהוספתי"
+                value={String(rows.filter((m) => m.userId !== null).length)}
+                icon="✏️"
+              />
+              <SummaryCard
+                label="ברירת מחדל"
+                value={String(rows.filter((m) => m.userId === null).length)}
+                icon="🔒"
+                sub="לא ניתנים למחיקה"
+              />
+            </div>
+          )}
+        </AsyncSection>
+      }
+    >
       <Card>
         <AsyncSection
           resource={methods}
@@ -155,6 +179,6 @@ export default function PaymentMethodsPage() {
       </Modal>
 
       {confirm.dialog}
-    </>
+    </PageShell>
   );
 }

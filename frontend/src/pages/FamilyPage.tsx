@@ -7,8 +7,10 @@ import { EmptyState } from "../components/common/EmptyState";
 import { ErrorMessage } from "../components/common/ErrorMessage";
 import { Input } from "../components/common/Input";
 import { Modal } from "../components/common/Modal";
-import { SkeletonRows } from "../components/common/Skeleton";
+import { PageShell } from "../components/common/PageShell";
+import { SkeletonKpiRow, SkeletonRows } from "../components/common/Skeleton";
 import { Table, type Column } from "../components/common/Table";
+import { SummaryCard } from "../components/dashboard/SummaryCard";
 import { useAsync } from "../hooks/useAsync";
 import { apiErrorMessage } from "../services/api";
 import {
@@ -122,12 +124,40 @@ export default function FamilyPage() {
     },
   ];
 
-  return (
-    <>
-      <div className="page-toolbar">
-        <Button onClick={openCreate}>+ בן משפחה</Button>
-      </div>
+  const members_ = members.data ?? [];
+  // Counts only — no money is derived here (CLAUDE.md §4).
+  const withActivity = members_.filter(
+    (m) => (m._count?.expenses ?? 0) + (m._count?.incomes ?? 0) + (m._count?.loans ?? 0) > 0
+  ).length;
 
+  return (
+    <PageShell
+      toolbar={<Button onClick={openCreate}>+ בן משפחה</Button>}
+      summary={
+        <AsyncSection
+          resource={members}
+          errorTitle="לא הצלחנו לטעון את סיכום המשפחה"
+          skeleton={<SkeletonKpiRow count={3} label="טוען סיכום" />}
+        >
+          {(rows) => (
+            <div className="kpi-row">
+              <SummaryCard label="בני משפחה" value={String(rows.length)} icon="👨‍👩‍👧" />
+              <SummaryCard
+                label="עם נתונים משויכים"
+                value={String(withActivity)}
+                icon="🔗"
+                sub={withActivity < rows.length ? `${rows.length - withActivity} ללא נתונים` : undefined}
+              />
+              <SummaryCard
+                label="הלוואות משויכות"
+                value={String(rows.reduce((sum, m) => sum + (m._count?.loans ?? 0), 0))}
+                icon="📉"
+              />
+            </div>
+          )}
+        </AsyncSection>
+      }
+    >
       <Card>
         <AsyncSection
           resource={members}
@@ -165,6 +195,6 @@ export default function FamilyPage() {
       </Modal>
 
       {confirm.dialog}
-    </>
+    </PageShell>
   );
 }

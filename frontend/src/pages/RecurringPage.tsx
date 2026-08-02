@@ -7,9 +7,11 @@ import { EmptyState } from "../components/common/EmptyState";
 import { ErrorMessage } from "../components/common/ErrorMessage";
 import { Input } from "../components/common/Input";
 import { Modal } from "../components/common/Modal";
+import { PageShell } from "../components/common/PageShell";
 import { Select } from "../components/common/Select";
-import { SkeletonRows } from "../components/common/Skeleton";
+import { SkeletonKpiRow, SkeletonRows } from "../components/common/Skeleton";
 import { Table, type Column } from "../components/common/Table";
+import { SummaryCard } from "../components/dashboard/SummaryCard";
 import { useMonth } from "../context/MonthContext";
 import { useAsync } from "../hooks/useAsync";
 import { useLookups } from "../hooks/useLookups";
@@ -50,7 +52,6 @@ export default function RecurringPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
-  const monthlyTotal = recurring.data?.monthlyTotal ?? 0;
   const load = recurring.reload;
 
   function openCreate() {
@@ -152,16 +153,50 @@ export default function RecurringPage() {
     },
   ];
 
-  return (
-    <>
-      <div className="page-toolbar">
-        <Button onClick={openCreate}>+ תשלום קבוע</Button>
-        <Button variant="outline" onClick={generate}>יצירת הוצאות החודש ⚡</Button>
-        <div className="toolbar-total">
-          סה״כ חודשי: <strong className="mono text-danger">{formatCurrency(monthlyTotal)}</strong>
-        </div>
-      </div>
+  const items = recurring.data?.items ?? [];
+  // Next payment due, so the screen answers "what is about to leave the account?"
+  // and not only "what did I set up?".
+  const nextDue = items
+    .map((item) => item.nextPaymentDate)
+    .sort()
+    .find(() => true);
 
+  return (
+    <PageShell
+      toolbar={
+        <>
+          <Button onClick={openCreate}>+ תשלום קבוע</Button>
+          <Button variant="outline" onClick={generate}>
+            יצירת הוצאות החודש ⚡
+          </Button>
+        </>
+      }
+      summary={
+        <AsyncSection
+          resource={recurring}
+          errorTitle="לא הצלחנו לטעון את סיכום התשלומים הקבועים"
+          skeleton={<SkeletonKpiRow count={3} label="טוען סיכום" />}
+        >
+          {(data) => (
+            <div className="kpi-row">
+              <SummaryCard label="תשלומים קבועים" value={String(data.items.length)} icon="🔁" />
+              <SummaryCard
+                label="סה״כ חודשי"
+                value={formatCurrency(data.monthlyTotal)}
+                icon="💸"
+                tone="danger"
+                sub={`מתוך התוכנית של ${formatMonthKey(monthKey)}`}
+              />
+              <SummaryCard
+                label="התשלום הקרוב"
+                value={nextDue ? formatDate(nextDue) : "—"}
+                icon="📅"
+              />
+            </div>
+          )}
+        </AsyncSection>
+      }
+    >
       {message && <div className="info-banner">{message}</div>}
 
       <Card>
@@ -235,6 +270,6 @@ export default function RecurringPage() {
       </Modal>
 
       {confirm.dialog}
-    </>
+    </PageShell>
   );
 }
