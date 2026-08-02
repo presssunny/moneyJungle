@@ -48,8 +48,6 @@ export default function SubscriptionsPage() {
   const [form, setForm] = useState<SubscriptionInput>(emptyForm);
   const [error, setError] = useState("");
 
-  const monthlyTotal = subs.data?.monthlyTotal ?? 0;
-
   function load() {
     subs.reload();
     candidatesRes.reload();
@@ -168,7 +166,6 @@ export default function SubscriptionsPage() {
   const visibleCandidates = (candidatesRes.data ?? []).filter((c) => !dismissed.has(c.name));
 
   const items = subs.data?.items ?? [];
-  const activeCount = items.filter((i) => i.status === "active").length;
 
   return (
     <PageShell
@@ -181,24 +178,22 @@ export default function SubscriptionsPage() {
         >
           {(data) => (
             <div className="kpi-row">
-              <SummaryCard label="מנויים פעילים" value={String(activeCount)} icon="📺" />
+              <SummaryCard label="מנויים פעילים" value={String(data.activeCount)} icon="📺" />
               <SummaryCard
                 label="עלות חודשית"
                 value={formatCurrency(data.monthlyTotal)}
                 icon="💸"
                 tone="danger"
               />
-              {/* The number that actually changes behaviour: a 60 ₪/month
-                  subscription is 720 ₪ a year, and nobody thinks of it that way. */}
               <SummaryCard
                 label="עלות שנתית"
-                value={formatCurrency(data.monthlyTotal * 12)}
+                value={formatCurrency(data.annualTotal)}
                 icon="📆"
-                sub="במנויים החודשיים הנוכחיים"
+                sub="מה שהמנויים הפעילים יעלו בשנה"
               />
               <SummaryCard
                 label="מושהים"
-                value={String(items.length - activeCount)}
+                value={String(items.length - data.activeCount)}
                 icon="⏸️"
                 sub={visibleCandidates.length > 0 ? `${visibleCandidates.length} מועמדים זוהו` : undefined}
               />
