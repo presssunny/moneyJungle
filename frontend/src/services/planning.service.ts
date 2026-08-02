@@ -382,7 +382,13 @@ export interface SubscriptionInput {
   status?: string;
 }
 
-export async function listSubscriptions(): Promise<{ items: Subscription[]; monthlyTotal: number }> {
+export async function listSubscriptions(): Promise<{
+  items: Subscription[];
+  monthlyTotal: number;
+  /** Yearly cost of the active subscriptions, normalised on the server (§4). */
+  annualTotal: number;
+  activeCount: number;
+}> {
   const { data } = await api.get("/subscriptions");
   return data;
 }
