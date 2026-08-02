@@ -2,7 +2,9 @@ import { AsyncSection } from "../components/common/AsyncSection";
 import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
 import { EmptyState } from "../components/common/EmptyState";
-import { SkeletonRows } from "../components/common/Skeleton";
+import { PageShell } from "../components/common/PageShell";
+import { SkeletonKpiRow, SkeletonRows } from "../components/common/Skeleton";
+import { SummaryCard } from "../components/dashboard/SummaryCard";
 import { useAsync } from "../hooks/useAsync";
 import { deleteAlert, listAlerts, markAlertRead, markAllAlertsRead } from "../services/planning.service";
 import type { Alert } from "../types/models";
@@ -37,14 +39,37 @@ export default function AlertsPage() {
   const unread = alerts.data?.filter((a) => !a.isRead).length ?? 0;
 
   return (
-    <>
-      <div className="page-toolbar">
-        {unread > 0 && <Button variant="outline" onClick={readAll}>סימון הכל כנקרא ✓</Button>}
-        <div className="toolbar-total">
-          {unread > 0 ? <strong>{unread} התראות שלא נקראו</strong> : <span className="text-muted">אין התראות חדשות</span>}
-        </div>
-      </div>
-
+    <PageShell
+      toolbar={
+        unread > 0 ? <Button variant="outline" onClick={readAll}>סימון הכל כנקרא ✓</Button> : undefined
+      }
+      summary={
+        <AsyncSection
+          resource={alerts}
+          errorTitle="לא הצלחנו לטעון את סיכום ההתראות"
+          skeleton={<SkeletonKpiRow count={3} label="טוען סיכום" />}
+        >
+          {(rows) => (
+            <div className="kpi-row">
+              <SummaryCard
+                label="לא נקראו"
+                value={String(unread)}
+                icon="🔔"
+                tone={unread > 0 ? "warning" : "success"}
+                accent={unread > 0}
+              />
+              <SummaryCard
+                label="דחופות"
+                value={String(rows.filter((a) => a.severity === "critical").length)}
+                icon="🚨"
+                tone="danger"
+              />
+              <SummaryCard label="סה״כ התראות" value={String(rows.length)} icon="📋" />
+            </div>
+          )}
+        </AsyncSection>
+      }
+    >
       <AsyncSection
         resource={alerts}
         errorTitle="לא הצלחנו לטעון את ההתראות"
@@ -83,6 +108,6 @@ export default function AlertsPage() {
           </div>
         )}
       </AsyncSection>
-    </>
+    </PageShell>
   );
 }
