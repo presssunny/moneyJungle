@@ -2210,3 +2210,281 @@
     gap: 14px;
   }
 }
+
+/* ==========================================================================
+   Micro-interactions
+   Motion here is functional, never decorative: it shows where a thing came
+   from and confirms that a click landed. Everything is disabled wholesale by
+   the `prefers-reduced-motion` rule in globals.css, so none of it is load-bearing.
+   ========================================================================== */
+
+/* Content arrives instead of appearing — the eye keeps its place on reload. */
+.page-shell > section {
+  animation: section-in 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Sections stagger slightly so the page reads top-down, not all at once.
+   Capped at six: past that the last section feels slow rather than smooth. */
+.page-shell > section:nth-child(1) { animation-delay: 0ms; }
+.page-shell > section:nth-child(2) { animation-delay: 40ms; }
+.page-shell > section:nth-child(3) { animation-delay: 80ms; }
+.page-shell > section:nth-child(4) { animation-delay: 120ms; }
+.page-shell > section:nth-child(5) { animation-delay: 160ms; }
+.page-shell > section:nth-child(n + 6) { animation-delay: 200ms; }
+
+@keyframes section-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+/* Cards lift on hover only where hovering means something (a pointer, not a
+   finger), so touch users never see a stuck hover state. */
+@media (hover: hover) {
+  .summary-card,
+  .card {
+    transition:
+      border-color 0.16s ease,
+      transform 0.16s ease,
+      box-shadow 0.16s ease;
+  }
+
+  .summary-card-clickable:hover {
+    transform: translateY(-2px);
+    border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+    box-shadow: 0 10px 24px -14px rgba(0, 0, 0, 0.5);
+  }
+}
+
+/* A pressed button acknowledges the press before the request returns. */
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+/* Table rows settle instead of flashing when a filter changes the set. */
+.table tbody tr {
+  transition: background 0.12s ease;
+}
+
+/* Toasts slide in from the edge they live on. */
+.toast {
+  animation: toast-in 0.24s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+}
+
+/* Modal content follows its overlay rather than snapping into place. */
+.modal {
+  animation: modal-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.modal-overlay {
+  animation: fade-in 0.16s ease both;
+}
+
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(8px);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* An empty state is a dead end unless it offers a way out — give its icon a
+   little life so the screen does not read as broken. */
+.empty-state-icon {
+  animation: empty-float 4s ease-in-out infinite;
+}
+
+@keyframes empty-float {
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+/* ==========================================================================
+   Assistant
+   The app talking. Deliberately not styled as an error or a toast: it is the
+   normal way a flow reports what it did and asks what it cannot know.
+   ========================================================================== */
+
+.assistant {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  margin-top: 14px;
+  background: color-mix(in srgb, var(--bg-card) 70%, transparent);
+  border-inline-start: 3px solid var(--border);
+}
+
+.assistant-done {
+  border-inline-start-color: var(--success);
+  background: color-mix(in srgb, var(--success) 6%, transparent);
+}
+
+.assistant-info {
+  border-inline-start-color: var(--secondary);
+  background: color-mix(in srgb, var(--secondary) 6%, transparent);
+}
+
+/* A question is not a failure, so it is not red — it is the primary colour,
+   because answering it is the next step, not a recovery from a mistake. */
+.assistant-asking {
+  border-inline-start-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 7%, transparent);
+}
+
+.assistant-head {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.assistant-avatar {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  font-size: 17px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+.assistant-says {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Lines appear in sequence, so it reads as speech rather than a wall of text. */
+.assistant-line {
+  font-size: 14.5px;
+  line-height: 1.6;
+  margin: 0 0 2px;
+  animation: assistant-line-in 0.3s ease both;
+}
+
+@keyframes assistant-line-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+}
+
+.assistant-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+}
+
+.assistant-fact {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.assistant-fact dt {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.assistant-fact dd {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.assistant-questions {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border);
+}
+
+.assistant-question {
+  border: none;
+  padding: 0;
+  margin: 0 0 12px;
+}
+
+.assistant-question-text {
+  padding: 0;
+  font-size: 14.5px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.assistant-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.assistant-option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+  text-align: start;
+  padding: 10px 14px;
+  min-height: 44px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text);
+  transition:
+    border-color 0.14s,
+    background 0.14s;
+}
+
+.assistant-option:hover {
+  border-color: var(--primary);
+}
+
+.assistant-option-active {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+}
+
+.assistant-option-label {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.assistant-option-hint {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.assistant-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.assistant-footer {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+}
+
+@media (max-width: 560px) {
+  .assistant-option {
+    flex: 1 1 100%;
+  }
+}
