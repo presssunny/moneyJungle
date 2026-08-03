@@ -2,7 +2,9 @@ import { useMemo } from "react";
 import { AsyncSection } from "../components/common/AsyncSection";
 import { Card } from "../components/common/Card";
 import { EmptyState } from "../components/common/EmptyState";
-import { SkeletonChart } from "../components/common/Skeleton";
+import { PageShell } from "../components/common/PageShell";
+import { SkeletonChart, SkeletonKpiRow } from "../components/common/Skeleton";
+import { SummaryCard } from "../components/dashboard/SummaryCard";
 import { useMonth } from "../context/MonthContext";
 import { useAsync } from "../hooks/useAsync";
 import { listReminders } from "../services/reminders.service";
@@ -113,14 +115,47 @@ export default function CalendarPage() {
     ...Array.from({ length: daysInMonth }, (_, i) => ({ day: i + 1 })),
   ];
 
-  return (
-    <>
-      <div className="page-toolbar">
-        <div className="toolbar-total">
-          תשלומים ואירועים צפויים החודש: <strong className="mono">{formatCurrency(monthTotal)}</strong>
-        </div>
-      </div>
+  // The heaviest day of the month — the one worth planning around.
+  const heaviest = [...eventsByDay.entries()]
+    .map(([day, events]) => ({ day, total: events.reduce((sum, e) => sum + (e.amount ?? 0), 0) }))
+    .sort((a, b) => b.total - a.total)[0];
+  const eventCount = [...eventsByDay.values()].flat().length;
 
+  return (
+    <PageShell
+      summary={
+        <AsyncSection
+          resource={schedule}
+          errorTitle="לא הצלחנו לטעון את סיכום החודש"
+          skeleton={<SkeletonKpiRow count={3} label="טוען סיכום" />}
+        >
+          {() => (
+            <div className="kpi-row">
+              <SummaryCard
+                label="צפוי לצאת החודש"
+                value={formatCurrency(monthTotal)}
+                icon="📅"
+                tone="danger"
+                sub={`${eventCount} אירועים`}
+              />
+              <SummaryCard
+                label="היום העמוס"
+                value={heaviest ? `${heaviest.day} בחודש` : "—"}
+                icon="⚠️"
+                tone={heaviest ? "warning" : "default"}
+                sub={heaviest ? formatCurrency(heaviest.total) : undefined}
+              />
+              <SummaryCard
+                label="ימים עם תשלומים"
+                value={String(eventsByDay.size)}
+                icon="🗓️"
+                sub={`מתוך ${daysInMonth}`}
+              />
+            </div>
+          )}
+        </AsyncSection>
+      }
+    >
       <Card>
         <AsyncSection
           resource={schedule}
@@ -171,6 +206,6 @@ export default function CalendarPage() {
         <span><span className="calendar-dot calendar-event-recurring" /> תשלומים קבועים</span>
         <span><span className="calendar-dot calendar-event-subscription" /> מנויים</span>
       </div>
-    </>
+    </PageShell>
   );
 }

@@ -7,9 +7,11 @@ import { EmptyState } from "../components/common/EmptyState";
 import { ErrorMessage } from "../components/common/ErrorMessage";
 import { Input } from "../components/common/Input";
 import { Modal } from "../components/common/Modal";
+import { PageShell } from "../components/common/PageShell";
 import { Select } from "../components/common/Select";
-import { SkeletonRows } from "../components/common/Skeleton";
+import { SkeletonKpiRow, SkeletonRows } from "../components/common/Skeleton";
 import { Table, type Column } from "../components/common/Table";
+import { SummaryCard } from "../components/dashboard/SummaryCard";
 import { useAsync } from "../hooks/useAsync";
 import { apiErrorMessage } from "../services/api";
 import {
@@ -20,7 +22,6 @@ import {
   listCategories,
   listRules,
 } from "../services/planning.service";
-import { toast } from "../services/toast";
 import type { Category, CategoryRule } from "../types/models";
 
 export default function CategoriesRulesPage() {
@@ -83,12 +84,8 @@ export default function CategoriesRulesPage() {
         tone: "danger",
       },
       async () => {
-        try {
-          await deleteCategory(category.id);
-          load();
-        } catch (err) {
-          toast.error(apiErrorMessage(err));
-        }
+        await deleteCategory(category.id);
+        load();
       }
     );
   }
@@ -109,12 +106,8 @@ export default function CategoriesRulesPage() {
         tone: "danger",
       },
       async () => {
-        try {
-          await deleteRule(rule.id);
-          load();
-        } catch (err) {
-          toast.error(apiErrorMessage(err));
-        }
+        await deleteRule(rule.id);
+        load();
       }
     );
   }
@@ -145,14 +138,53 @@ export default function CategoriesRulesPage() {
     },
   ];
 
-  return (
-    <>
-      <div className="page-toolbar">
-        <Button onClick={() => setCatOpen(true)}>+ קטגוריה</Button>
-        <Button variant="outline" onClick={() => setRuleOpen(true)}>+ חוק סיווג</Button>
-        <span className="text-muted">חוקי סיווג מסווגים אוטומטית עסקאות אשראי והוצאות מיובאות לפי מילת מפתח</span>
-      </div>
+  const cats = categoriesRes.data ?? [];
+  const rules = rulesRes.data ?? [];
 
+  return (
+    <PageShell
+      toolbar={
+        <>
+          <Button onClick={() => setCatOpen(true)}>+ קטגוריה</Button>
+          <Button variant="outline" onClick={() => setRuleOpen(true)}>
+            + חוק סיווג
+          </Button>
+          <span className="text-muted">
+            חוקי סיווג מסווגים אוטומטית עסקאות אשראי והוצאות מיובאות לפי מילת מפתח
+          </span>
+        </>
+      }
+      summary={
+        <AsyncSection
+          resource={categoriesRes}
+          errorTitle="לא הצלחנו לטעון את הסיכום"
+          skeleton={<SkeletonKpiRow count={4} label="טוען סיכום" />}
+        >
+          {(rows) => (
+            <div className="kpi-row">
+              <SummaryCard
+                label="קטגוריות הוצאה"
+                value={String(rows.filter((c) => c.type === "expense").length)}
+                icon="🏷️"
+              />
+              <SummaryCard
+                label="קטגוריות הכנסה"
+                value={String(rows.filter((c) => c.type === "income").length)}
+                icon="💰"
+                tone="success"
+              />
+              <SummaryCard label="חוקי סיווג" value={String(rules.length)} icon="🪄" />
+              <SummaryCard
+                label="חוקים שהוספתי"
+                value={String(rules.filter((r) => r.userId !== null).length)}
+                icon="✏️"
+                sub={`${cats.filter((c) => c.userId !== null).length} קטגוריות משלי`}
+              />
+            </div>
+          )}
+        </AsyncSection>
+      }
+    >
       <Card title="קטגוריות">
         <AsyncSection
           resource={categoriesRes}
@@ -257,6 +289,6 @@ export default function CategoriesRulesPage() {
       </Modal>
 
       {confirm.dialog}
-    </>
+    </PageShell>
   );
 }
