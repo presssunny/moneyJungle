@@ -19,7 +19,7 @@ import { LoanCard, type LoanActions } from "../components/loans/LoanCard";
 import { LoanCelebration } from "../components/loans/LoanCelebration";
 import { LoanScheduleDrawer } from "../components/loans/LoanScheduleDrawer";
 import { useAsync } from "../hooks/useAsync";
-import { apiErrorMessage } from "../services/api";
+import { apiErrorMessage, toastApiError } from "../services/api";
 import {
   createLoan,
   deleteLoan,
@@ -30,7 +30,6 @@ import {
   type ScheduleImportResult,
 } from "../services/finance.service";
 import type { StatementLoanGroup } from "../services/planning.service";
-import { toast } from "../services/toast";
 import type { Loan, LoanEvent } from "../types/models";
 import { formatCurrency } from "../utils/format";
 
@@ -143,7 +142,7 @@ export default function LoansPage() {
       setUploadTarget(null);
       loansRes.reload();
     } catch (err) {
-      toast.error(apiErrorMessage(err));
+      toastApiError(err);
     } finally {
       setUploadBusy(false);
     }
@@ -176,12 +175,8 @@ export default function LoansPage() {
           tone: "danger",
         },
         async () => {
-          try {
-            await deleteLoan(loan.id);
-            loansRes.reload();
-          } catch (err) {
-            toast.error(apiErrorMessage(err));
-          }
+          await deleteLoan(loan.id);
+          loansRes.reload();
         }
       ),
   };

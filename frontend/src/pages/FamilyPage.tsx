@@ -19,7 +19,6 @@ import {
   listFamily,
   updateFamilyMember,
 } from "../services/planning.service";
-import { toast } from "../services/toast";
 import type { FamilyMember } from "../types/models";
 import { formatDate } from "../utils/format";
 
@@ -89,12 +88,8 @@ export default function FamilyPage() {
         tone: "danger",
       },
       async () => {
-        try {
-          await deleteFamilyMember(member.id);
-          members.reload();
-        } catch (err) {
-          toast.error(apiErrorMessage(err));
-        }
+        await deleteFamilyMember(member.id);
+        members.reload();
       }
     );
   }

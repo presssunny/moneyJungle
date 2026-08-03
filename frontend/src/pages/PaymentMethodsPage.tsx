@@ -20,7 +20,6 @@ import {
   listPaymentMethods,
   updatePaymentMethod,
 } from "../services/planning.service";
-import { toast } from "../services/toast";
 import type { PaymentMethod } from "../types/models";
 
 const METHOD_TYPES = [
@@ -87,12 +86,8 @@ export default function PaymentMethodsPage() {
         tone: "danger",
       },
       async () => {
-        try {
-          await deletePaymentMethod(method.id);
-          methods.reload();
-        } catch (err) {
-          toast.error(apiErrorMessage(err));
-        }
+        await deletePaymentMethod(method.id);
+        methods.reload();
       }
     );
   }

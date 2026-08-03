@@ -1,4 +1,5 @@
 import { useCallback, useState, type ReactNode } from "react";
+import { toastApiError } from "../../services/api";
 import { Button } from "./Button";
 import { Modal } from "./Modal";
 
@@ -72,8 +73,9 @@ interface PendingConfirm extends ConfirmRequest {
  *   confirm.ask({ title, message, tone: "danger" }, () => remove(id));
  *   {confirm.dialog}
  *
- * A failure inside `action` still closes the dialog — a modal stuck open on top
- * of the error would hide the thing the user needs to read.
+ * `action` needs no try/catch: a failure is toasted here and the dialog closes
+ * either way — a modal stuck open on top of the error would hide the thing the
+ * user needs to read.
  */
 export function useConfirm() {
   const [pending, setPending] = useState<PendingConfirm | null>(null);
@@ -90,6 +92,8 @@ export function useConfirm() {
     setBusy(true);
     try {
       await pending.action();
+    } catch (err) {
+      toastApiError(err);
     } finally {
       setBusy(false);
       setPending(null);

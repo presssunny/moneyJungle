@@ -32,10 +32,14 @@ api.interceptors.response.use(
     const isServerFault = !error.response || (typeof status === "number" && status >= 500);
     if (isServerFault && !isGate) {
       toast.error(error.response ? "שגיאת שרת — חלק מהנתונים אולי לא נטענו" : "אין חיבור לשרת");
+      if (typeof error === "object" && error !== null) reported.add(error);
     }
     return Promise.reject(error);
   }
 );
+
+/** Errors the interceptor above already put on screen. */
+const reported = new WeakSet<object>();
 
 /** Extract a display message from an API error response. */
 export function apiErrorMessage(error: unknown, fallback = "אירעה שגיאה, נסה שוב"): string {
@@ -45,4 +49,15 @@ export function apiErrorMessage(error: unknown, fallback = "אירעה שגיא�
     if (!error.response) return "אין חיבור לשרת";
   }
   return fallback;
+}
+
+/**
+ * Report a failed action to the user — the one way pages should do it.
+ *
+ * Stays quiet when the interceptor already toasted this error, so a 5xx shows
+ * one message instead of two.
+ */
+export function toastApiError(error: unknown, fallback?: string): void {
+  if (typeof error === "object" && error !== null && reported.has(error)) return;
+  toast.error(apiErrorMessage(error, fallback));
 }
