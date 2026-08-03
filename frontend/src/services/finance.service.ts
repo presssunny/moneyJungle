@@ -19,6 +19,7 @@ import type {
 } from "../types/models";
 import type { StatementLoanActivity } from "./planning.service";
 import { api } from "./api";
+import type { AssistantAnswers, AssistantStep } from "../types/assistant";
 
 function monthParams(monthKey: string) {
   const [year, month] = monthKey.split("-").map(Number);
@@ -93,7 +94,7 @@ export async function quickAddExpense(text: string): Promise<QuickAddResult> {
 
 /** Outcome of a smart import: what the file was, and what actually went in. */
 export interface SmartImportResult {
-  kind: "bank" | "credit" | "unknown";
+  kind: "bank" | "credit" | "loan_schedule" | "unknown";
   detectionReason: string;
   matchedSignals: string[];
   fileName: string;
@@ -104,16 +105,28 @@ export interface SmartImportResult {
   message: string;
   creditImportId?: number;
   bankAccountId?: number;
+  /** The conversation: narration, facts, and anything still unanswered. */
+  assistant: AssistantStep;
 }
 
 /**
  * Upload a statement without saying what it is. `kind` is sent only when the
  * user overrides a detection she disagrees with.
  */
-export async function smartImportFile(file: File, kind?: "bank" | "credit"): Promise<SmartImportResult> {
+export async function smartImportFile(
+  file: File,
+  kind?: "bank" | "credit",
+  /**
+   * Replies to a previous `assistant.questions`. The SAME file is re-sent with
+   * them — the server keeps no pending upload, so a restart mid-conversation
+   * costs nothing.
+   */
+  answers?: AssistantAnswers
+): Promise<SmartImportResult> {
   const form = new FormData();
   form.append("file", file);
   if (kind) form.append("kind", kind);
+  if (answers && Object.keys(answers).length > 0) form.append("answers", JSON.stringify(answers));
   const { data } = await api.post("/imports/smart", form);
   return data;
 }
@@ -240,6 +253,8 @@ export interface ScheduleImportResult {
   message: string;
   /** What the app could not decide alone and needs the user to answer. */
   questions: Array<{ code: string; text: string }>;
+  /** Same conversation contract as the statement importer. */
+  assistant: AssistantStep;
 }
 
 /**
