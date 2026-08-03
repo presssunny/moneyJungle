@@ -8,6 +8,7 @@ import { EmptyState } from "../components/common/EmptyState";
 import { ErrorMessage } from "../components/common/ErrorMessage";
 import { Input } from "../components/common/Input";
 import { Modal } from "../components/common/Modal";
+import { PageShell } from "../components/common/PageShell";
 import { Select } from "../components/common/Select";
 import { SkeletonRows } from "../components/common/Skeleton";
 import { Table, type Column } from "../components/common/Table";
@@ -241,24 +242,27 @@ export default function ExpensesPage() {
   ];
 
   return (
-    <>
-      <div className="page-toolbar">
-        <Button onClick={openCreate}>+ הוספת הוצאה</Button>
-        <Button variant="outline" onClick={() => fileRef.current?.click()}>
-          ייבוא אקסל 📂
-        </Button>
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".xlsx,.xls,.csv"
-          hidden
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) onImportFile(file);
-            e.target.value = "";
-          }}
-        />
-      </div>
+    <PageShell
+      toolbar={
+        <>
+          <Button onClick={openCreate}>+ הוספת הוצאה</Button>
+          <Button variant="outline" onClick={() => fileRef.current?.click()}>
+            ייבוא אקסל 📂
+          </Button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".xlsx,.xls,.csv"
+            hidden
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) onImportFile(file);
+              e.target.value = "";
+            }}
+          />
+        </>
+      }
+    >
 
       {importMessage && <div className="info-banner">{importMessage}</div>}
 
@@ -396,6 +400,6 @@ export default function ExpensesPage() {
       </Modal>
 
       {confirm.dialog}
-    </>
+    </PageShell>
   );
 }
