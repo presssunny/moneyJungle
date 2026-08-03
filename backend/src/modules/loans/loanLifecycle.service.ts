@@ -1,17 +1,6 @@
 import { prisma } from "../../config/database";
 import { decimalToNumber, round2 } from "../../utils/money.utils";
 
-/**
- * Moves loans through their life from the statement. The schedule says what was
- * planned; only the statement says what happened, so a loan paid off early still
- * shows future payments until a posted principal row clears its balance — then
- * it is marked finished with the date, reason, fees and what the closure saved.
- *
- * Idempotent by construction, like `resolveAll()`: state is derived from the
- * rows, so importing the same statement twice cannot close a loan twice.
- */
-
-/** How close a principal payment must be to the balance to count as a payoff. */
 const PAYOFF_TOLERANCE = 1.0;
 
 /** A fee posted within this many days of the payoff belongs to that closure. */

@@ -1,6 +1,7 @@
 import { prisma } from "../../config/database";
 import { ApiError } from "../../utils/ApiError";
 import { decimalToNumber, round2 } from "../../utils/money.utils";
+import type { AssistantStep } from "../assistant/assistant.types";
 import { parseLoanSchedule, ScheduleParseError, type ParsedSchedule } from "./loanSchedule.parser";
 
 /**
@@ -26,10 +27,12 @@ export interface ScheduleImportResult {
   /** Facts pulled out of the file, for the confirmation panel. */
   parsed: ParsedSchedule;
   /**
-   * Things the app cannot decide alone and must ask about (Assistant flow).
+   * Things the app cannot decide alone and must ask about.
    * Empty when the file answered everything.
    */
   questions: Array<{ code: string; text: string }>;
+  /** The same conversation contract the statement importer uses. */
+  assistant: AssistantStep;
 }
 
 function loanLabel(parsed: ParsedSchedule): string {
@@ -168,6 +171,37 @@ export const loanScheduleService = {
       rowsStored: parsed.rows.length,
       parsed,
       questions,
+      assistant: {
+        // The file answered everything unless the opening amount had to be
+        // reconstructed, or the loan turned out to be already closed.
+        status: questions.length > 0 ? "info" : "done",
+        says: [
+          `קראתי את לוח הסילוקין${parsed.loanNumber ? ` של הלוואה ${parsed.loanNumber}` : ""}.`,
+          `מצאתי ${parsed.rows.length} תשלומים${parsed.trackNumber ? ` במסלול ${parsed.trackNumber}` : ""}.`,
+          created
+            ? "זו הלוואה חדשה, אז יצרתי אותה מהנתונים שבקובץ."
+            : "זיהיתי שזו הלוואה שכבר קיימת אצלי, אז עדכנתי אותה במקום ליצור חדשה.",
+          `הכול נלקח מהקובץ: יתרה, ריבית, החזר, מספר תשלומים ותאריך סיום.`,
+        ],
+        facts: [
+          { label: "יתרת קרן", value: `${parsed.currentBalance.toLocaleString("he-IL")} ₪` },
+          { label: "החזר חודשי", value: `${parsed.monthlyPayment.toLocaleString("he-IL")} ₪` },
+          { label: "ריבית שנתית", value: `${parsed.annualInterestRate}%` },
+          { label: "תשלומים", value: `${parsed.paymentsMade} בוצעו · ${parsed.paymentsRemaining} נותרו` },
+          { label: "סיום צפוי", value: parsed.expectedEndDate },
+        ],
+        questions: questions.map((q) =>
+          q.code === "original_amount"
+            ? {
+                code: q.code,
+                text: q.text,
+                kind: "number" as const,
+                suggestion: String(parsed.originalAmount),
+                optional: true,
+              }
+            : { code: q.code, text: q.text, kind: "confirm" as const, optional: true }
+        ),
+      },
       message: created
         ? `נוצרה ${label}: יתרה ${parsed.currentBalance.toLocaleString("he-IL")} ₪ · ` +
           `${parsed.paymentsRemaining} תשלומים של ${parsed.monthlyPayment.toLocaleString("he-IL")} ₪ · ` +

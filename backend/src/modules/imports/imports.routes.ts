@@ -4,6 +4,7 @@ import { gateAuth } from "../../middlewares/gateAuth.middleware";
 import { validate } from "../../middlewares/validation.middleware";
 import { ApiError } from "../../utils/ApiError";
 import { asyncHandler } from "../../utils/asyncHandler";
+import { readAnswers } from "../assistant/assistant.types";
 import { MonthQuery, monthQuerySchema, resolveMonth } from "../../utils/validation.utils";
 import { importsService } from "./imports.service";
 import { smartImportService } from "./smartImport.service";
@@ -39,23 +40,30 @@ importsRoutes.post(
   })
 );
 
-/** Import a statement of either kind — the app works out which. */
+/**
+ * Import a statement of either kind — the app works out which.
+ *
+ * When it cannot, it does not fail: the response carries `assistant.questions`
+ * and imports nothing. The client answers and re-sends the SAME file with an
+ * `answers` field, which is why no upload is buffered server-side.
+ *
+ * 200 is returned for a pending conversation (nothing went wrong — something is
+ * merely unknown); 201 only when data was actually written.
+ */
 importsRoutes.post(
   "/smart",
   upload.single("file"),
   asyncHandler(async (req: Request, res: Response) => {
     if (!req.file) throw ApiError.badRequest("יש לצרף קובץ אקסל או PDF");
     const fileName = Buffer.from(req.file.originalname, "latin1").toString("utf8");
-    res
-      .status(201)
-      .json(
-        await smartImportService.importFile(
-          req.userId!,
-          fileName,
-          req.file.buffer,
-          readForcedKind(req.body?.kind)
-        )
-      );
+    const result = await smartImportService.importFile(
+      req.userId!,
+      fileName,
+      req.file.buffer,
+      readForcedKind(req.body?.kind),
+      readAnswers(req.body?.answers)
+    );
+    res.status(result.assistant.status === "needs_answers" ? 200 : 201).json(result);
   })
 );
 
