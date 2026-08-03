@@ -1,18 +1,16 @@
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { AssistantPanel } from "../components/assistant/AssistantPanel";
 import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
+import { DropZone } from "../components/common/DropZone";
+import { PageShell } from "../components/common/PageShell";
 import { useMonth } from "../context/MonthContext";
 import { apiErrorMessage } from "../services/api";
 import { importExpensesFile, smartImportFile, type SmartImportResult } from "../services/finance.service";
+import type { AssistantAnswers } from "../types/assistant";
 import type { ImportExpensesResult } from "../types/models";
 import { formatCurrency, formatMonthKey } from "../utils/format";
-
-const KIND_LABEL: Record<string, string> = {
-  bank: "דף חשבון בנק",
-  credit: "דוח כרטיס אשראי",
-  unknown: "לא זוהה",
-};
 
 export default function ImportsPage() {
   const { monthKey } = useMonth();
@@ -27,18 +25,27 @@ export default function ImportsPage() {
   const [smartResult, setSmartResult] = useState<SmartImportResult | null>(null);
   const [smartError, setSmartError] = useState("");
   const [smartBusy, setSmartBusy] = useState(false);
-  const smartRef = useRef<HTMLInputElement>(null);
   const [lastFile, setLastFile] = useState<File | null>(null);
 
-  async function onSmartFile(file: File, kind?: "bank" | "credit") {
+  /**
+   * One turn of the import conversation.
+   *
+   * `answers` replies to whatever the previous turn asked. The file is sent
+   * again with them — the server holds no pending upload, so the flow survives a
+   * restart and cannot leak memory.
+   */
+  async function onSmartFile(file: File, kind?: "bank" | "credit", answers?: AssistantAnswers) {
     setSmartBusy(true);
     setSmartError("");
-    setSmartResult(null);
     setLastFile(file);
     try {
-      setSmartResult(await smartImportFile(file, kind));
+      const next = await smartImportFile(file, kind, answers);
+      setSmartResult(next);
     } catch (err) {
+      // A genuine failure — not a question. Those come back as a normal
+      // response with `assistant.questions`.
       setSmartError(apiErrorMessage(err));
+      setSmartResult(null);
     } finally {
       setSmartBusy(false);
     }
@@ -58,27 +65,19 @@ export default function ImportsPage() {
   }
 
   return (
-    <>
+    <PageShell>
       <Card title="ייבוא דוח — הכי פשוט">
         <p className="settings-hint">
           גררי לכאן דף חשבון בנק <strong>או</strong> דוח כרטיס אשראי — המערכת מזהה לבד מה זה לפי
           הכותרות בקובץ. אם הדוח כבר הועלה, לא ייווצרו כפילויות: נקלטות רק שורות חדשות.
         </p>
-        <div className="import-dropzone" onClick={() => smartRef.current?.click()}>
-          <div className="import-dropzone-icon">🪄</div>
-          <div>{smartBusy ? "מזהה ומעבד..." : "לחיצה לבחירת קובץ — בנק או אשראי"}</div>
-          <div className="text-muted">.xlsx / .xls / .csv / .pdf עד 10MB</div>
-        </div>
-        <input
-          ref={smartRef}
-          type="file"
+        <DropZone
+          onFile={(file) => onSmartFile(file)}
+          busy={smartBusy}
           accept=".xlsx,.xls,.csv,.pdf"
-          hidden
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) onSmartFile(file);
-            e.target.value = "";
-          }}
+          icon="🪄"
+          title={smartBusy ? "קורא את הקובץ..." : "גררי לכאן דף חשבון או דוח אשראי, או לחצי לבחירה"}
+          hint=".xlsx / .xls / .csv / .pdf עד 10MB"
         />
 
         {smartError && (
@@ -97,47 +96,47 @@ export default function ImportsPage() {
           </div>
         )}
 
+        {/* The conversation. An unrecognised file is a question here, not a red
+            error — and a successful import narrates what it actually did. */}
         {smartResult && (
-          <div className="info-banner">
-            <div>
-              זוהה: <strong>{KIND_LABEL[smartResult.kind] ?? smartResult.kind}</strong>
-              <span className="text-muted"> · {smartResult.detectionReason}</span>
-            </div>
-            <div>
-              {smartResult.alreadyImported ? "⚠️ " : "✅ "}
-              {smartResult.message}
-            </div>
-            <div className="text-muted">
-              בקובץ {smartResult.parsedRows} שורות · נוספו {smartResult.importedRows} · דולגו{" "}
-              {smartResult.skippedDuplicates} (כבר היו)
-            </div>
-            {/* Wrong guess is recoverable: re-run the same file as the other kind. */}
-            {lastFile && !smartResult.alreadyImported && (
-              <div className="import-result-actions">
-                {smartResult.importedRows > 0 && (
-                  <Button
-                    size="sm"
-                    onClick={() =>
-                      navigate(smartResult.kind === "credit" ? "/accounts?tab=credit" : "/accounts?tab=reconcile")
-                    }
-                  >
-                    {smartResult.kind === "credit" ? "לאישור העסקאות ←" : "למסך ההתאמות ←"}
-                  </Button>
-                )}
-              </div>
-            )}
-            {lastFile && smartResult.importedRows === 0 && !smartResult.alreadyImported && (
-              <div className="import-result-actions">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => onSmartFile(lastFile, smartResult.kind === "bank" ? "credit" : "bank")}
-                >
-                  זיהוי שגוי? נסי כ־{smartResult.kind === "bank" ? "דוח אשראי" : "דף חשבון"}
-                </Button>
-              </div>
-            )}
-          </div>
+          <AssistantPanel
+            step={smartResult.assistant}
+            busy={smartBusy}
+            onAnswer={(answers) => lastFile && onSmartFile(lastFile, undefined, answers)}
+            footer={
+              smartResult.assistant.status !== "needs_answers" && lastFile ? (
+                <div className="import-result-actions">
+                  {smartResult.importedRows > 0 && (
+                    <Button
+                      size="sm"
+                      onClick={() =>
+                        navigate(
+                          smartResult.kind === "credit" ? "/accounts?tab=credit" : "/accounts?tab=reconcile"
+                        )
+                      }
+                    >
+                      {smartResult.kind === "credit" ? "לאישור העסקאות ←" : "למסך ההתאמות ←"}
+                    </Button>
+                  )}
+                  {smartResult.kind === "loan_schedule" && (
+                    <Button size="sm" onClick={() => navigate("/accounts?tab=loans")}>
+                      למסך ההלוואות ←
+                    </Button>
+                  )}
+                  {/* A wrong guess stays recoverable in one click. */}
+                  {smartResult.kind !== "unknown" && smartResult.kind !== "loan_schedule" && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => onSmartFile(lastFile, smartResult.kind === "bank" ? "credit" : "bank")}
+                    >
+                      זיהוי שגוי? נסי כ־{smartResult.kind === "bank" ? "דוח אשראי" : "דף חשבון"}
+                    </Button>
+                  )}
+                </div>
+              ) : undefined
+            }
+          />
         )}
       </Card>
 
@@ -186,6 +185,6 @@ export default function ImportsPage() {
         </p>
         <Button variant="outline" onClick={() => navigate("/credit")}>לעמוד האשראי 💳</Button>
       </Card>
-    </>
+    </PageShell>
   );
 }
