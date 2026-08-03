@@ -12,7 +12,7 @@ import * as XLSX from "xlsx";
  * duplicated and downloaded as "document(3).xlsx", and a wrong guess sends a
  * statement to the wrong parser.
  */
-export type StatementKind = "bank" | "credit" | "unknown";
+export type StatementKind = "bank" | "credit" | "loan_schedule" | "unknown";
 
 export interface StatementDetection {
   kind: StatementKind;
@@ -41,6 +41,23 @@ const BANK_SIGNALS: Array<{ pattern: RegExp; label: string; weight: number }> = 
   { pattern: /ת\.\s*ערך|תאריך\s*ערך/, label: "תאריך ערך", weight: 2 },
   { pattern: /אסמכתא/, label: "אסמכתא", weight: 2 },
   { pattern: /סוג\s*פעולה|פעולה/, label: "פעולה", weight: 1 },
+];
+
+/**
+ * An amortisation table is NOT a statement, and mistaking one for a statement is
+ * expensive: a real upload of `לוח סילוקין` scored 3 on "יתרה" (matching
+ * "יתרה לאחר תשלום קרן"), was routed to the bank parser, and wrote 58 future
+ * "transactions" dated up to 2031 straight into the account.
+ *
+ * These markers are checked FIRST and decide on their own, because they are
+ * unique to a schedule — no statement has a payment-number column or a balance
+ * that is explicitly "after a principal payment".
+ */
+const SCHEDULE_SIGNALS: Array<{ pattern: RegExp; label: string }> = [
+  { pattern: /לוח\s*סילוקין/, label: "לוח סילוקין" },
+  { pattern: /מספר\s*תשלום\s*קרן/, label: "מספר תשלום קרן" },
+  { pattern: /יתרה\s*לאחר\s*תשלום\s*קרן/, label: "יתרה לאחר תשלום קרן" },
+  { pattern: /סכום\s*תשלום\s*קרן/, label: "סכום תשלום קרן" },
 ];
 
 const CREDIT_SIGNALS: Array<{ pattern: RegExp; label: string; weight: number }> = [
@@ -126,6 +143,21 @@ export function detectStatement(buffer: Buffer, fileName: string): StatementDete
       kind: "unknown",
       reason: "לא הצלחנו לפתוח את הקובץ — נדרש קובץ אקסל או PDF",
       matchedSignals: [],
+      bankScore: 0,
+      creditScore: 0,
+      fileHash,
+    };
+  }
+
+  // A schedule is decided before anything else: two of its own markers are
+  // conclusive, and letting it fall through to the statement scoring is what
+  // put future-dated rows into a real bank account.
+  const scheduleHits = SCHEDULE_SIGNALS.filter((signal) => signal.pattern.test(text));
+  if (scheduleHits.length >= 2) {
+    return {
+      kind: "loan_schedule",
+      reason: `זוהה לוח סילוקין של הלוואה לפי: ${scheduleHits.map((h) => h.label).join(", ")}`,
+      matchedSignals: scheduleHits.map((h) => h.label),
       bankScore: 0,
       creditScore: 0,
       fileHash,
