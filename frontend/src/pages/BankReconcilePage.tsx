@@ -8,7 +8,7 @@ import { Select } from "../components/common/Select";
 import { SkeletonRows } from "../components/common/Skeleton";
 import { useAsync } from "../hooks/useAsync";
 import { useLookups } from "../hooks/useLookups";
-import { apiErrorMessage } from "../services/api";
+import { toastApiError } from "../services/api";
 import {
   getReconciliation,
   reconcileAuto,
@@ -72,7 +72,7 @@ export default function BankReconcilePage() {
       );
       res.reload();
     } catch (err) {
-      toast.error(apiErrorMessage(err));
+      toastApiError(err);
     } finally {
       setBusy(false);
     }
@@ -85,7 +85,7 @@ export default function BankReconcilePage() {
       toast.success(okMsg);
       res.reload();
     } catch (err) {
-      toast.error(apiErrorMessage(err));
+      toastApiError(err);
     } finally {
       setBusy(false);
     }
