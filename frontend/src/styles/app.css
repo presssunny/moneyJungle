@@ -2488,3 +2488,166 @@
     flex: 1 1 100%;
   }
 }
+
+/* ---------- Documents centre ---------- */
+
+.doc-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.doc-status-success {
+  color: var(--success);
+}
+
+.doc-status-warning {
+  color: var(--warning);
+}
+
+.doc-status-muted {
+  color: var(--text-muted);
+}
+
+.doc-coverage {
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+/* ---------- Wizard ----------
+   One question at a time, with a card that fills in as the user answers. */
+
+.wizard {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.wizard-progress {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.wizard-progress-text {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.wizard-dots {
+  display: flex;
+  gap: 6px;
+}
+
+.wizard-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--text-muted) 35%, transparent);
+  transition:
+    background 0.2s,
+    transform 0.2s;
+}
+
+.wizard-dot-done {
+  background: var(--success);
+}
+
+.wizard-dot-active {
+  background: var(--primary);
+  transform: scale(1.35);
+}
+
+.wizard-body {
+  display: grid;
+  grid-template-columns: 1fr 200px;
+  gap: 18px;
+  align-items: start;
+}
+
+.wizard-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.wizard-hint {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+}
+
+/* Each step swaps in, so it reads as a new question rather than a redrawn form. */
+.wizard-fields {
+  animation: wizard-step-in 0.24s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes wizard-step-in {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+}
+
+.wizard-choices {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+/* The running card: what the app knows so far, so entry feels like progress. */
+.wizard-summary {
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--primary) 6%, transparent);
+}
+
+.wizard-summary-title {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.wizard-summary-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 0;
+  font-size: 13px;
+}
+
+.wizard-summary-row span {
+  color: var(--text-muted);
+}
+
+.wizard-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.wizard-actions-end {
+  display: flex;
+  gap: 8px;
+}
+
+@media (max-width: 620px) {
+  .wizard-body {
+    grid-template-columns: 1fr;
+  }
+
+  /* On a phone the summary belongs above the field, where it is visible while
+     typing rather than below the fold. */
+  .wizard-summary {
+    order: -1;
+  }
+}
