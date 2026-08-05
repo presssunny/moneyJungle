@@ -1,10 +1,7 @@
 /**
- * The contract for talking to the user instead of failing at her: a flow that
- * cannot finish returns what it DID work out (`says`, `facts`) plus the specific
- * thing it needs (`questions`). No LLM — the parsers' own knowledge, surfaced.
- *
- * Deliberately stateless: the client re-sends the file together with `answers`,
- * so no server-side session or buffered upload has to survive a restart.
+ * A flow that cannot finish returns what it DID work out (`says`, `facts`) plus
+ * what it needs (`questions`). Stateless on purpose: the client re-sends the file
+ * with `answers`, so no server session or buffered upload survives a restart.
  */
 
 export type AssistantAnswerKind = "choice" | "confirm" | "number" | "text";
@@ -38,12 +35,7 @@ export interface AssistantFact {
   value: string;
 }
 
-/**
- * One turn of the conversation. The caller branches on `status`:
- *  - `done`          — finished, nothing needed.
- *  - `needs_answers` — blocked until the questions are answered.
- *  - `info`          — finished, but something is worth saying.
- */
+/** One turn. `done` = finished · `needs_answers` = blocked · `info` = finished with a remark. */
 export interface AssistantStep {
   status: "done" | "needs_answers" | "info";
   /** Narration, in order: "קראתי את הקובץ", "מצאתי 53 תנועות", … */

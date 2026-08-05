@@ -13,10 +13,8 @@ import { buildCreditCoverage } from "./creditCoverage.service";
 
 /**
  * Bank reconciliation. Rows are never copied into incomes/loans/expenses — that
- * would double-count against the credit module (CLAUDE.md §4). The resolver
- * records what each row MEANS and creates a record only where the money belongs.
- *
- * Every row must end with a resolution: `pending` is invisible in every total.
+ * would double-count against the credit module (CLAUDE.md §4). Every row must end
+ * with a resolution: `pending` is invisible in every total.
  */
 
 // ---------- Income-type guessing (a suggestion; the user can change it) ----------
@@ -358,11 +356,9 @@ export const reconciliationService = {
   },
 
   /**
-   * Give every row a meaning and make the other tables agree with it.
-   *
-   * Idempotent and self-correcting: when a decision changes (a card bill becomes
-   * itemized once its credit statement lands) the earlier record is removed —
-   * that is what stops double-counting. `manual_excluded` rows are never touched.
+   * Give every row a meaning and make the other tables agree with it. Idempotent:
+   * when a decision changes (a card bill becomes itemized once its statement
+   * lands) the earlier record is removed. `manual_excluded` is never touched.
    */
   async resolveAll(userId: number): Promise<ResolveResult> {
     await this.backfillClassification(userId);

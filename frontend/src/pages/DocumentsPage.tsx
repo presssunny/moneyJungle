@@ -40,16 +40,9 @@ function fileSize(bytes: number): string {
 }
 
 /**
- * מרכז המסמכים — one place to drop any file, and the history of everything that
- * was ever dropped.
- *
- * Before this the app had five upload points across four screens and no record
- * at all: a file went in and vanished, so "did I already load July?" had no
- * answer. The five points still work; this is where they are all visible.
- *
- * It stores metadata, not the files. `fileHash` catches a re-upload of the same
- * file and the coverage dates catch an overlapping period, which is everything
- * needed to answer that question — keeping the bytes is a separate decision.
+ * One place to drop any file, and the history of everything ever dropped. The
+ * other five upload points still work; this is where they become visible. Stores
+ * metadata only — the hash catches a re-upload, the dates catch an overlap.
  */
 export default function DocumentsPage() {
   const docs = useAsync(() => listDocuments(), [], "לא הצלחנו לטעון את המסמכים");

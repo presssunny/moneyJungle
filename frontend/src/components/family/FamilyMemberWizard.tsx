@@ -16,15 +16,9 @@ const INCOME_TYPES = [
 ];
 
 /**
- * Adding a family member, as a conversation.
- *
- * The old flow was a one-field form, and everything that made the person real —
- * their income, what they owe — lived on two other screens. Doing it properly
- * meant roughly 22 clicks across three places, so in practice it was not done,
- * and members sat in the list with no data attached.
- *
- * Here the income is created in the same flow, and the running card shows what
- * is being built. Only the name is required; everything else can be skipped.
+ * Adding a family member as a conversation. The income is created in the same
+ * flow rather than on two other screens, which is why members used to sit in the
+ * list with nothing attached. Only the name is required.
  */
 export function FamilyMemberWizard({
   onCancel,

@@ -6,10 +6,8 @@ import { round2 } from "../../utils/money.utils";
 export type BankTransactionKind = "deposit" | "withdrawal";
 
 /**
- * What KIND of money a line is — never its direction, which always comes from
- * the physical column (זכות = in / חובה = out).
- *
- * The bank prints principal and interest on separate lines, so this is
+ * What KIND of money a line is — never its direction, which comes from the
+ * physical column. Principal and interest are printed separately, so this is
  * classification, not arithmetic. `loan_mixed` = a combined line with no split.
  */
 export type BankLineKind =
@@ -94,10 +92,9 @@ export interface BankBalanceMismatch {
 }
 
 /**
- * The money in a statement, in buckets that must never be merged. Financing is
- * reported gross/refunded/net so a netted figure can't pass for the real cost of
- * credit, and `mixed` stays out of `principal` — the statement never called it
- * principal, so neither do we.
+ * Statement money in buckets that must never be merged: financing is gross,
+ * refunded and net so netting can't hide the cost of credit, and `mixed` stays
+ * out of `principal` — the statement never called it principal.
  */
 export interface BankMoneySummary {
   /** Raw column sums. For auditing the balance replay only — not for reporting. */
@@ -253,15 +250,9 @@ function findHeaderRow(rows: Cell[][]): { rowIndex: number; columns: Partial<Rec
 export function parseCellDate(value: Cell): Date | null {
   if (value instanceof Date) {
     if (Number.isNaN(value.getTime())) return null;
-    // SheetJS converts Excel date serials with a sub-minute drift: 28/07/2026
-    // arrives as 23:59:20 on the 27th. Truncating to a calendar day therefore
-    // lost a day on EVERY Excel-imported row — an early repayment landed on the
-    // wrong date, and a 1st-of-month row moved into the previous month, taking
-    // its amount with it.
-    //
-    // Rounding to the nearest local midnight absorbs the drift, and the result is
-    // anchored to UTC because `@db.Date` keeps the UTC day. Verified against the
-    // real statement: 2026-07-27T20:59:20Z → 2026-07-28.
+    // SheetJS decodes Excel serials with a sub-minute drift (28/07 arrives as
+    // 23:59:20 on the 27th), so truncating lost a day on every row. Round to the
+    // nearest local midnight, then anchor to UTC — `@db.Date` keeps the UTC day.
     const dayMs = 24 * 60 * 60 * 1000;
     const localMs = value.getTime() - value.getTimezoneOffset() * 60_000;
     return new Date(Math.round(localMs / dayMs) * dayMs);
@@ -400,11 +391,9 @@ function isInterestRow(row: ParsedBankRow): boolean {
 }
 
 /**
- * lineKind plus the two buckets reconciliation needs, so every Israeli-bank text
- * pattern stays in this one file:
- *   - credit_card_payment: already itemized in the credit module, so it must be
- *     excluded from spend or it double-counts (CLAUDE.md §4).
- *   - interest_credit: interest in the credit column — a rebate, never income.
+ * lineKind plus the two buckets reconciliation needs, keeping every text pattern
+ * in one file: `credit_card_payment` is itemized in the credit module so it must
+ * be excluded from spend (CLAUDE.md §4), `interest_credit` is a rebate not income.
  */
 export type ReconcileLineKind =
   | BankLineKind
@@ -412,17 +401,10 @@ export type ReconcileLineKind =
   | "interest_credit"
   | "loan_drawdown";
 
-// Credit-card bill settlements drawn from the current account: the generic
-// "כרטיסי אשראי" wording, direct-debit ("עפ״י הרשאה") and the card issuers.
-// NB: no `\b` anywhere in this file's Hebrew patterns. In JavaScript a word
-// boundary is defined against [A-Za-z0-9_], so a Hebrew letter is a NON-word
-// character and `\bכאל\b` can never match "הרשאה כאל" — the space and the א are
-// both non-word, so there is no boundary between them. Card issuers are therefore
-// anchored on the surrounding characters by hand.
-//
-// Both edges are required, and both matter: without the leading one "כאל" matches
-// inside "מיכאל" and a supplier payment would be excluded from spend as a card
-// settlement; without the trailing one "מקס" matches inside "מקסימום".
+// Card settlements drawn from the account. No `` in any Hebrew pattern here:
+// JS word boundaries are ASCII-only, so `כאל` never matches. Issuers are
+// anchored on both surrounding characters instead — without the leading edge
+// "כאל" matches inside "מיכאל", without the trailing one "מקס" inside "מקסימום".
 const ISSUER_EDGE = "(?:^|[\\s\\-–־\"״'`(\\[])";
 const ISSUER_NAMES = "כאל|ויזה|ישראכרט|מאסטרקארד|לאומי\\s*קארד|מקס|אמריקן\\s*אקספרס|דיינרס";
 const ISSUER_TAIL = "(?=$|[\\s\\-–־\"״'`)\\],.:]|\\d)";
@@ -1180,14 +1162,10 @@ async function parseBankStatementPdfByText(buffer: Buffer): Promise<ParsedBankSt
   return buildStatement("pdf-text", "קורא PDF טקסטואלי (מסלול גיבוי)", parsed, rejected);
 }
 
-// ---------- Positional PDF parsing (primary) ----------
-//
-// The statement's columns — זכות, חובה, יתרה — are distinguishable only by
-// x-position; plain text extraction glues the numbers together and loses which
-// column an amount came from, making income and expenses indistinguishable. So
-// we keep every token's x/y and rebuild the table, and never fall back to
-// description keywords: a row that cannot be tied to a column is reported, not
-// guessed.
+// Positional PDF parsing. The columns are distinguishable only by x-position, and
+// plain text extraction loses which one an amount came from — making income and
+// expenses indistinguishable. Tokens keep their x/y and the table is rebuilt; a row
+// that cannot be tied to a column is reported, never guessed from keywords.
 
 interface TextItem {
   s: string;

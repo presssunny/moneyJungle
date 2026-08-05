@@ -2,15 +2,9 @@ import { prisma } from "../../config/database";
 import { ApiError } from "../../utils/ApiError";
 
 /**
- * The record of every file that was ever uploaded, and what came of it.
- *
- * Before this, an upload vanished: there was no way to ask "did I already load
- * July?" or "where did these 53 rows come from?". The five existing upload paths
- * each knew the answer for a moment and then discarded it.
- *
- * Recording is deliberately **best-effort and non-blocking**: an import that
- * succeeded must never be reported as failed because the bookkeeping row could
- * not be written. The money already moved; the log is secondary.
+ * The record of every uploaded file and what came of it. Recording is best-effort
+ * and non-blocking: an import that succeeded must never be reported as failed
+ * because the bookkeeping row could not be written.
  */
 
 export type DocumentKind =
