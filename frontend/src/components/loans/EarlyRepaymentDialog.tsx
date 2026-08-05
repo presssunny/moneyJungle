@@ -2,6 +2,7 @@ import { AsyncSection } from "../common/AsyncSection";
 import { Button } from "../common/Button";
 import { Modal } from "../common/Modal";
 import { SkeletonRows } from "../common/Skeleton";
+import { Term } from "../common/Tooltip";
 import { UncertaintyBadge } from "../common/UncertaintyBadge";
 import { useAsync } from "../../hooks/useAsync";
 import { getEarlyRepaymentQuote } from "../../services/finance.service";
@@ -39,11 +40,11 @@ export function EarlyRepaymentDialog({
           <>
             <div className="quote-grid">
               <div className="quote-row">
-                <span>יתרת קרן</span>
+                <span>יתרת <Term name="קרן" /></span>
                 <strong className="mono">{formatCurrency(data.currentBalance)}</strong>
               </div>
               <div className="quote-row">
-                <span>עמלת פירעון מוקדם</span>
+                <span>עמלת <Term name="פירעון מוקדם" /></span>
                 <strong className="mono">
                   {data.estimatedFee > 0 ? formatCurrency(data.estimatedFee) : "לא הוגדרה"}
                 </strong>
