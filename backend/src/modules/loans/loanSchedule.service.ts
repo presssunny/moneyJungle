@@ -1,17 +1,16 @@
 import { prisma } from "../../config/database";
 import { ApiError } from "../../utils/ApiError";
 import { decimalToNumber, round2 } from "../../utils/money.utils";
+import crypto from "crypto";
 import type { AssistantStep } from "../assistant/assistant.types";
+import { documentsService } from "../documents/documents.service";
 import { parseLoanSchedule, ScheduleParseError, type ParsedSchedule } from "./loanSchedule.parser";
 
 /**
- * Turns the bank's amortisation file into the loan itself, so the user never
- * types a balance, rate, payment count or end date the bank already stated.
- *
- * A loan is identified by `loanNumber` + `trackNumber`, so re-uploading a newer
- * export updates it in place rather than duplicating it. The file wins over a
- * simulation but never over reality: an older schedule cannot re-open a loan the
- * statement already closed.
+ * Turns the bank's amortisation file into the loan itself, so nothing the bank
+ * already stated has to be typed. Identified by `loanNumber` + `trackNumber`, so
+ * a newer export updates in place. The file beats a simulation but never
+ * reality — an old schedule cannot re-open a loan the statement closed.
  */
 
 export interface ScheduleImportResult {
@@ -160,6 +159,26 @@ export const loanScheduleService = {
         total: row.total,
         balanceAfter: row.balanceAfter,
       })),
+    });
+
+    await documentsService.record(userId, {
+      fileName: `לוח סילוקין${parsed.loanNumber ? ` — הלוואה ${parsed.loanNumber}` : ""}${parsed.trackNumber ? ` מסלול ${parsed.trackNumber}` : ""}`,
+      fileHash: crypto.createHash("sha256").update(buffer).digest("hex"),
+      sizeBytes: buffer.byteLength,
+      kind: "loan_schedule",
+      linkedLoanId: loan.id,
+      // A schedule covers the payments still ahead, not a past period.
+      coverageFrom: new Date(parsed.nextPaymentDate),
+      coverageTo: new Date(parsed.expectedEndDate),
+      rowsParsed: parsed.rows.length,
+      rowsImported: parsed.rows.length,
+      detection: {
+        loanNumber: parsed.loanNumber,
+        trackNumber: parsed.trackNumber,
+        trackName: parsed.trackName,
+        annualInterestRate: parsed.annualInterestRate,
+      },
+      note: created ? "יצר הלוואה חדשה" : "עדכן הלוואה קיימת",
     });
 
     return {
