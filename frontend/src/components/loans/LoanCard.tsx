@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "../common/Button";
+import { Term } from "../common/Tooltip";
 import { LoanProgressBar } from "./LoanProgressBar";
 import { LoanStatusBadge } from "./LoanStatusBadge";
 import type { Loan } from "../../types/models";
@@ -90,7 +91,7 @@ function ActionsMenu({ loan, actions }: { loan: Loan; actions: LoanActions }) {
 }
 
 /** One fact in the card's detail row. */
-function Fact({ label, value, tone }: { label: string; value: string; tone?: string }) {
+function Fact({ label, value, tone }: { label: ReactNode; value: string; tone?: string }) {
   return (
     <div className="loan-fact">
       <span className="loan-fact-label">{label}</span>
@@ -151,7 +152,7 @@ export function LoanCard({ loan, actions }: { loan: Loan; actions: LoanActions }
         </div>
       ) : (
         <div className="loan-card-facts">
-          <Fact label="יתרת קרן" value={formatCurrency(loan.currentBalance)} />
+          <Fact label={<>יתרת <Term name="קרן" /></>} value={formatCurrency(loan.currentBalance)} />
           <Fact label="החזר חודשי" value={formatCurrency(loan.monthlyPayment)} />
           <Fact
             label="ריבית שנתית"
@@ -159,7 +160,7 @@ export function LoanCard({ loan, actions }: { loan: Loan; actions: LoanActions }
             tone={loan.computed.isExpensive ? "text-danger" : ""}
           />
           <Fact
-            label="ריבית חודשית"
+            label={<><Term name="ריבית" /> חודשית</>}
             value={formatCurrency(loan.computed.monthlyInterestPayment)}
             tone="text-warning"
           />
