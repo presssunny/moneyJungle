@@ -13,6 +13,7 @@ import { dashboardRoutes } from "./modules/dashboard/dashboard.routes";
 import { expensesRoutes } from "./modules/expenses/expenses.routes";
 import { familyRoutes } from "./modules/family/family.routes";
 import { gateRoutes } from "./modules/gate/gate.routes";
+import { documentsRoutes } from "./modules/documents/documents.routes";
 import { importsRoutes } from "./modules/imports/imports.routes";
 import { incomesRoutes } from "./modules/incomes/incomes.routes";
 import { loansRoutes } from "./modules/loans/loans.routes";
@@ -66,6 +67,7 @@ app.use("/api/subscriptions", subscriptionsRoutes);
 app.use("/api/savings", savingsRoutes);
 app.use("/api/family", familyRoutes);
 app.use("/api/imports", importsRoutes);
+app.use("/api/documents", documentsRoutes);
 
 app.use("/api", notFoundMiddleware);
 app.use(errorMiddleware);

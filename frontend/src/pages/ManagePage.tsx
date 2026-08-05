@@ -2,6 +2,7 @@ import { TabbedHub } from "../components/common/TabbedHub";
 import AlertsPage from "./AlertsPage";
 import CalendarPage from "./CalendarPage";
 import CategoriesRulesPage from "./CategoriesRulesPage";
+import DocumentsPage from "./DocumentsPage";
 import FamilyPage from "./FamilyPage";
 import PaymentMethodsPage from "./PaymentMethodsPage";
 import RecurringPage from "./RecurringPage";
@@ -21,6 +22,7 @@ export default function ManagePage() {
         { key: "subscriptions", label: "מנויים", icon: "📺", element: <SubscriptionsPage /> },
         { key: "calendar", label: "לוח שנה", icon: "📅", element: <CalendarPage /> },
         { key: "alerts", label: "התראות", icon: "🚨", element: <AlertsPage /> },
+        { key: "documents", label: "מרכז המסמכים", icon: "📁", element: <DocumentsPage /> },
         { key: "categories", label: "קטגוריות וחוקים", icon: "🏷️", element: <CategoriesRulesPage /> },
         { key: "payment-methods", label: "אמצעי תשלום", icon: "💼", element: <PaymentMethodsPage /> },
         { key: "family", label: "משפחה", icon: "👨‍👩‍👧", element: <FamilyPage /> },

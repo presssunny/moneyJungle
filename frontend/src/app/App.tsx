@@ -11,6 +11,7 @@ import CategoriesRulesPage from "../pages/CategoriesRulesPage";
 import ComparisonPage from "../pages/ComparisonPage";
 import CreditPage from "../pages/CreditPage";
 import DashboardPage from "../pages/DashboardPage";
+import DocumentsPage from "../pages/DocumentsPage";
 import ExpensesPage from "../pages/ExpensesPage";
 import FamilyPage from "../pages/FamilyPage";
 import ImportsPage from "../pages/ImportsPage";
@@ -82,6 +83,7 @@ export default function App() {
           <Route path="/categories" element={<CategoriesRulesPage />} />
           <Route path="/payment-methods" element={<PaymentMethodsPage />} />
           <Route path="/family" element={<FamilyPage />} />
+          <Route path="/documents" element={<DocumentsPage />} />
           <Route path="/imports" element={<ImportsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />

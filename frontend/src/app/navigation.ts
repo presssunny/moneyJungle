@@ -1,12 +1,8 @@
 /**
  * Single source of truth for the primary navigation + route titles.
  *
- * IA redesign (2026-07): the old flat list of 19 sidebar links overwhelmed users.
- * Following finance-app IA research (YNAB "Plan/Accounts/Reflect", Monarch's
- * 5-tab bar + separate settings, Miller's 5±7 rule), the app now has FIVE primary
- * destinations plus one separate "manage" hub. Sub-screens live inside tabbed hubs
- * (see pages/AccountsPage, TransactionsPage, ReportsHubPage, ManagePage) and are
- * reached via ?tab=… on the hub route.
+ * FIVE primary destinations plus a separate "manage" hub, replacing a flat list
+ * of 19 links. Sub-screens live in tabbed hubs, reached via ?tab=… on the route.
  */
 
 export interface NavItem {
@@ -43,6 +39,7 @@ const ROUTE_TITLES: Record<string, NavItem> = {
   "/recurring": { path: "/recurring", label: "תשלומים קבועים", icon: "🔁" },
   "/subscriptions": { path: "/subscriptions", label: "מנויים", icon: "📺" },
   "/loans": { path: "/loans", label: "הלוואות וחובות", icon: "📉" },
+  "/documents": { path: "/documents", label: "מרכז המסמכים", icon: "📁" },
   "/savings": { path: "/savings", label: "חיסכון ויעדים", icon: "🐷" },
   "/calendar": { path: "/calendar", label: "לוח שנה פיננסי", icon: "📅" },
   "/comparison": { path: "/comparison", label: "השוואת חודשים", icon: "⚖️" },
