@@ -11,8 +11,10 @@ import { PageShell } from "../components/common/PageShell";
 import { SkeletonKpiRow, SkeletonRows } from "../components/common/Skeleton";
 import { Table, type Column } from "../components/common/Table";
 import { SummaryCard } from "../components/dashboard/SummaryCard";
+import { FamilyMemberWizard } from "../components/family/FamilyMemberWizard";
 import { useAsync } from "../hooks/useAsync";
 import { apiErrorMessage } from "../services/api";
+import { toast } from "../services/toast";
 import {
   createFamilyMember,
   deleteFamilyMember,
@@ -35,16 +37,14 @@ function linkedSummary(member: FamilyMember): string | null {
 export default function FamilyPage() {
   const members = useAsync(() => listFamily(), [], "לא הצלחנו לטעון את בני המשפחה");
   const confirm = useConfirm();
+  const [wizardOpen, setWizardOpen] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<FamilyMember | null>(null);
   const [name, setName] = useState("");
   const [error, setError] = useState("");
 
   function openCreate() {
-    setEditing(null);
-    setName("");
-    setError("");
-    setFormOpen(true);
+    setWizardOpen(true);
   }
 
   function openEdit(member: FamilyMember) {
@@ -188,6 +188,17 @@ export default function FamilyPage() {
           </div>
         </form>
       </Modal>
+
+      {wizardOpen && (
+        <FamilyMemberWizard
+          onCancel={() => setWizardOpen(false)}
+          onCreated={(created) => {
+            setWizardOpen(false);
+            toast.success(`${created} נוסף/ה למשפחה`);
+            members.reload();
+          }}
+        />
+      )}
 
       {confirm.dialog}
     </PageShell>
