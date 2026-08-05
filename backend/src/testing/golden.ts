@@ -1,10 +1,7 @@
 /**
- * Recorded parser output, used as a numeric regression net. The values are real
- * balances, so the store sits beside the fixtures and is git-ignored.
- *
- * It is the weaker of the two nets — re-recording makes it pass by definition.
- * The invariants in the test files are the ones that hold without any stored
- * number.
+ * Recorded parser output as a numeric regression net. Real balances, so the store
+ * sits beside the fixtures and is git-ignored. The weaker of the two nets —
+ * re-recording makes it pass by definition; the invariants need no stored number.
  */
 import fs from "fs";
 import path from "path";

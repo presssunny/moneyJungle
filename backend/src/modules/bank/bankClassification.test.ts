@@ -1,13 +1,7 @@
 /**
- * Classification of the money-meaning rules (CLAUDE.md §5).
- *
- * Converted from `bankClassification.check.ts`, case for case — the `why` of each
- * case is the assertion name, so a failure says which financial rule broke and
- * not just which string mismatched.
- *
- * These cover what the statements on disk do not exercise — a loan drawdown, a
- * principal reversal, a supplier whose name contains an issuer name — where a
- * break moves money into the wrong figure instead of failing loudly.
+ * The money-meaning rules (CLAUDE.md §5). Each case's `why` is its assertion
+ * name, so a failure names the financial rule that broke. Covers what the
+ * statements on disk do not: drawdowns, principal reversals, false-friend names.
  */
 import { describe, expect, it } from "vitest";
 import { classifyBankLine, creditCardRefOf } from "./bankParser.service";
@@ -135,10 +129,8 @@ runCases("שמות שמכילים שם חברת אשראי", falseFriendCases);
 runCases("עמלות פירעון מוקדם", earlyPayoffFeeCases);
 
 /**
- * A loan number must survive classification. A payoff line prints it
- * ("הלוואה - תשלום קרן 108" — a real 87,646.82 ₪ early repayment); dropping it
- * left no way to tell WHICH loan a repayment closed, and the automatic closure
- * could never fire.
+ * A loan number must survive classification: a payoff line prints it
+ * ("הלוואה - תשלום קרן 108"), and without it nothing can tell which loan closed.
  */
 describe("שימור מספר ההלוואה", () => {
   const cases: Array<{ description: string; type: Kind; expected: string | null; why: string }> = [

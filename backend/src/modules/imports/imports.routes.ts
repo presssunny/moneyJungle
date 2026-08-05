@@ -41,14 +41,10 @@ importsRoutes.post(
 );
 
 /**
- * Import a statement of either kind — the app works out which.
- *
- * When it cannot, it does not fail: the response carries `assistant.questions`
- * and imports nothing. The client answers and re-sends the SAME file with an
- * `answers` field, which is why no upload is buffered server-side.
- *
- * 200 is returned for a pending conversation (nothing went wrong — something is
- * merely unknown); 201 only when data was actually written.
+ * Import a statement of either kind. When the app cannot tell, it asks instead of
+ * failing: `assistant.questions` comes back, nothing is imported, and the client
+ * re-sends the SAME file with `answers` — hence no server-side upload buffer.
+ * 200 = a pending question, 201 = data actually written.
  */
 importsRoutes.post(
   "/smart",

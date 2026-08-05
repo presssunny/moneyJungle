@@ -473,12 +473,9 @@ export default function DashboardPage() {
 }
 
 /**
- * Bank money of this month that is real but is not spending, each item naming the
- * figure that holds it instead. Rendered only when there is something to say.
- *
- * This closes the gap between "what left the account" and "יצא החודש": the two
- * differ by exactly these amounts, and stating them is what makes the difference
- * checkable instead of suspicious.
+ * Bank money this month that is real but is not spending, each item naming the
+ * figure that holds it instead. This is exactly the gap between "what left the
+ * account" and "יצא החודש" — stating it makes the difference checkable.
  */
 function NonSpendingRow({ bank }: { bank: DashboardSummary["bankMonth"] }) {
   const items: Array<{ label: string; value: number; hint: string }> = [

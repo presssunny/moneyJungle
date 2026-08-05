@@ -4,14 +4,9 @@ import type { LoanEvent } from "../../types/models";
 import { formatCurrency } from "../../utils/format";
 
 /**
- * Paying off a loan is the biggest thing that happens in this app. When the app
- * detects one it says so properly instead of quietly moving a row to another
- * list.
- *
- * Confetti is hand-rolled (a few absolutely-positioned divs) rather than pulled
- * from a library — it is 30 elements and one keyframe, and the project carries
- * no animation dependency. It is skipped entirely under `prefers-reduced-motion`,
- * where the message alone carries the news.
+ * Paying off a loan is the biggest thing that happens here, so it gets said
+ * properly rather than moving a row to another list. Confetti is 30 divs and one
+ * keyframe (no animation dependency), skipped under `prefers-reduced-motion`.
  */
 
 const COLOURS = ["var(--primary)", "var(--success)", "var(--secondary)", "var(--warning)"];

@@ -3,12 +3,9 @@ import { formatCurrency } from "../../utils/format";
 import type { Loan } from "../../types/models";
 
 /**
- * How much of the loan is behind the user.
- *
- * The percentage is only as certain as the opening amount it is measured
- * against. When the bank's schedule started mid-way, that amount was
- * reconstructed — so the bar is drawn muted and marked `תרחיש` rather than
- * presented as a fact (IA §1.2).
+ * How much of the loan is behind the user. The percentage is only as certain as
+ * the opening amount: when that was reconstructed from a mid-way schedule the bar
+ * is muted and marked `תרחיש` rather than presented as fact (IA §1.2).
  */
 export function LoanProgressBar({ loan }: { loan: Loan }) {
   const { progressPercent, principalRepaid, certainty, lifecycle } = loan.progress;

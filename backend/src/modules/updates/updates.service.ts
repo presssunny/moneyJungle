@@ -39,7 +39,7 @@ export const updatesService = {
     const today = startOfToday();
     const now = new Date();
 
-    // 1. Reminders — next 14 days
+    // Reminders — next 14 days
     const reminders = await remindersRepository.findUpcoming(userId, today, addDays(today, 14));
     for (const reminder of reminders) {
       const amount = reminder.estimatedAmount
@@ -56,7 +56,7 @@ export const updatesService = {
       });
     }
 
-    // 2. Recurring payments + subscriptions due within 7 days
+    // Recurring payments + subscriptions due within 7 days
     const weekAhead = addDays(today, 7);
     const [recurring, subscriptions] = await Promise.all([
       prisma.recurringPayment.findMany({
@@ -89,7 +89,7 @@ export const updatesService = {
       });
     }
 
-    // 3. Unread alerts
+    // Unread alerts
     const alerts = await prisma.alert.findMany({
       where: { userId, isRead: false },
       orderBy: { createdAt: "desc" },
@@ -107,7 +107,7 @@ export const updatesService = {
       });
     }
 
-    // 4. Expected credit charge for the current month
+    // Expected credit charge for the current month
     const { start, end } = monthRange(now.getFullYear(), now.getMonth() + 1);
     const credit = await prisma.creditTransaction.aggregate({
       where: {
@@ -131,7 +131,7 @@ export const updatesService = {
       });
     }
 
-    // 5. Budgets at or above the warning threshold
+    // Budgets at or above the warning threshold
     const budgets = await prisma.budget.findMany({
       where: { userId, year: now.getFullYear(), month: now.getMonth() + 1 },
       include: { category: true },
@@ -159,7 +159,7 @@ export const updatesService = {
       }
     }
 
-    // 6. Expensive loans
+    // Expensive loans
     const loans = await loansRepository.findActive(userId);
     for (const loan of loans) {
       const rate = decimalToNumber(loan.annualInterestRate);

@@ -75,12 +75,8 @@ function buildSummary(items: SerializedLoan[]) {
 }
 
 /**
- * Tracks of the same bank loan, grouped for display only.
- *
- * Grouping happens here rather than as a parent row in the database on purpose:
- * an aggregate `loans` record would be summed by `findActive()` in dashboard,
- * insights, alerts, updates and cashflow, and every one of them would
- * double-count it.
+ * Tracks of the same bank loan, grouped for display only — never as a parent row
+ * in the database: `findActive()` would sum it in five modules at once.
  */
 function groupByLoanNumber(items: SerializedLoan[]) {
   const groups = new Map<string, { loanNumber: string; tracks: SerializedLoan[] }>();

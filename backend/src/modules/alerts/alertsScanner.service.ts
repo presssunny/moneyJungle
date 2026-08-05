@@ -29,7 +29,7 @@ export async function scanForAlerts(userId: number): Promise<void> {
   const { start, end } = monthRange(year, month);
   const detected: DetectedAlert[] = [];
 
-  // 1. Budget overruns (and near-overruns) for the current month
+  // Budget overruns (and near-overruns) for the current month
   const budgets = await prisma.budget.findMany({
     where: { userId, year, month },
     include: { category: true },
@@ -58,7 +58,7 @@ export async function scanForAlerts(userId: number): Promise<void> {
     }
   }
 
-  // 2. Expensive loans
+  // Expensive loans
   const loans = await loansRepository.findActive(userId);
   for (const loan of loans) {
     const rate = decimalToNumber(loan.annualInterestRate);
@@ -85,7 +85,7 @@ export async function scanForAlerts(userId: number): Promise<void> {
     }
   }
 
-  // 3. Negative balance this month (expenses above income)
+  // Negative balance this month (expenses above income)
   const [incomes, expenses] = await Promise.all([
     prisma.income.aggregate({ where: { userId, incomeDate: { gte: start, lt: end } }, _sum: { amount: true } }),
     prisma.expense.aggregate({ where: { userId, expenseDate: { gte: start, lt: end } }, _sum: { amount: true } }),

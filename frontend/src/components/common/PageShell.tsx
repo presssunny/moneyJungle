@@ -1,27 +1,11 @@
 import type { ReactNode } from "react";
 
 /**
- * The layout every screen shares.
+ * The slot order every screen shares, enforced once instead of re-decided per
+ * page. Slots are optional; what a page does pass lands where it lands elsewhere.
  *
- * The audit found 26 screens each arranged differently: six had a KPI row, one
- * had insights, the rest opened straight onto a table. Reading one screen taught
- * you nothing about the next.
- *
- * So the order is enforced here, once, instead of being re-decided per page:
- *
- *   toolbar → hero → summary → insights → progress → timeline
- *           → charts → details → tables → actions
- *
- * Every slot is optional — a screen with no charts simply passes none — but
- * whatever it does pass lands in the same place it lands everywhere else. The
- * value is not that all screens are full; it is that they are consistent.
- *
- * Two deliberate choices:
- *  - `toolbar` stays at the TOP. The primary action ("+ הוספה") belongs where
- *    the hand reaches first; burying it under the tables to satisfy a diagram
- *    would be worse UX, not better.
- *  - `actions` at the bottom is for the secondary and the bulk: export, "apply
- *    to all", things you reach for after reading, not before.
+ * `toolbar` stays on top (the primary action belongs where the hand reaches
+ * first); `actions` at the bottom is for the secondary and the bulk.
  */
 export interface PageShellProps {
   /** Primary action + page-level totals. Stays at the top. */

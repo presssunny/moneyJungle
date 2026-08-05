@@ -16,11 +16,9 @@ const REASONS = [
 ];
 
 /**
- * Closing a loan by hand — for a payoff the statement never carried, or one the
- * app could not attribute to a specific loan.
- *
- * Most closures never reach this dialog: importing the statement closes the loan
- * on its own. This is the fallback, and it produces exactly the same end state.
+ * Closing a loan by hand — for a payoff the statement never carried. The
+ * fallback: importing a statement usually closes the loan on its own, and this
+ * produces exactly the same end state.
  */
 export function CloseLoanDialog({
   loan,

@@ -1,10 +1,7 @@
 /**
- * Loading placeholders that keep the page layout stable while data arrives
- * (IA §3.5 / §8.4: skeletons, not a spinner — a spinner hides the structure and
- * makes a slow load feel like a broken page).
- *
- * The shapes are decorative (`aria-hidden`); a single polite status message per
- * block carries the meaning for screen readers.
+ * Loading placeholders that keep the layout stable — skeletons, not a spinner,
+ * which hides the structure and makes a slow load feel broken (IA §3.5/§8.4).
+ * Shapes are `aria-hidden`; one polite status message per block carries meaning.
  */
 
 import type { CSSProperties } from "react";

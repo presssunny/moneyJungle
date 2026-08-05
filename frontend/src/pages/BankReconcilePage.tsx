@@ -46,11 +46,9 @@ const LOAN_TYPE_OPTIONS = [
 ];
 
 /**
- * Bank reconciliation screen — the audit trail behind the figures. Every imported
- * row carries one resolution saying what the money is, and this screen shows where
- * each row went and why, including the amounts deliberately kept out of the
- * expense total. A row with no resolution is a bug: it is counted nowhere, so it
- * is shown in red.
+ * The audit trail behind the figures: where each imported row went and why,
+ * including the amounts deliberately kept out of the expense total. A row with no
+ * resolution is a bug — it is counted nowhere, so it shows in red.
  */
 export default function BankReconcilePage() {
   const res = useAsync<ReconciliationView>(

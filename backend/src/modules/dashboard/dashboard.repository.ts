@@ -64,13 +64,10 @@ export const dashboardRepository = {
   },
 
   /**
-   * Bank rows grouped by what they turned out to MEAN, for a single month.
-   *
-   * This is how the dashboard accounts for money that is real but is not spending:
-   * loan principal lowers debt, a settled card bill is itemized in the credit tab,
-   * an internal transfer is not a payment. Each of those has to be visible as
-   * itself — reporting only income and expenses makes the statement look like it
-   * is missing money.
+   * Bank rows for one month, grouped by what they turned out to MEAN. This is how
+   * the dashboard accounts for money that is real but is not spending — principal,
+   * a settled card bill, an internal transfer. Report only income and expenses and
+   * the statement looks like it is missing money.
    */
   bankRowsByResolution(userId: number, start: Date, end: Date) {
     return prisma.bankTransaction.groupBy({

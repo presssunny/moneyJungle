@@ -2,13 +2,10 @@ import { prisma } from "../../config/database";
 import { decimalToNumber, round2 } from "../../utils/money.utils";
 
 /**
- * Account balance, derived — never accumulated. The bank's printed closing
- * balance already contains every transaction up to its date, so the balance is
- * the newest such anchor plus only what is dated after it. Re-importing an
- * overlapping statement therefore cannot drift it.
- *
- * With no anchor anywhere we fall back to the accumulated sum and say so: a
- * derived-looking number with no source is worse than an admitted estimate.
+ * Account balance, derived — never accumulated: the newest printed closing
+ * balance plus only what is dated after it, so re-importing an overlapping
+ * statement cannot drift it. With no anchor at all it falls back to the
+ * accumulated sum and SAYS so — an admitted estimate beats a false fact.
  */
 export type BalanceBasis = "statement" | "accumulated";
 

@@ -3,14 +3,9 @@ import { listCategories, listPaymentMethods } from "../services/planning.service
 import type { Category, PaymentMethod } from "../types/models";
 
 /**
- * Categories + payment methods, loaded once per page.
- *
- * A failure here used to be swallowed entirely, which produced the worst
- * possible outcome: a form that looks perfectly fine with a silently empty
- * dropdown, and no way for the user to tell whether there really are no
- * categories or whether the request failed. It still does not take the page
- * down — these only fill `<select>` options — but it now *says so* through
- * `failed`, and can be retried.
+ * Categories + payment methods, loaded once per page. A failure does not take the
+ * page down — these only fill `<select>` options — but it must SAY so via
+ * `failed`: an empty dropdown that looks fine is worse than an error.
  */
 export function useLookups() {
   const [categories, setCategories] = useState<Category[]>([]);

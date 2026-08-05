@@ -7,11 +7,9 @@ interface LoginFormProps {
 }
 
 /**
- * User name + password, with the password revealable.
- *
- * The reveal toggle is a real `<button type="button">` so it never submits the
- * form, and it announces its state through `aria-pressed` rather than only
- * swapping an icon — the icon alone says nothing to a screen reader.
+ * User name + password. The reveal toggle is a real `<button type="button">` so
+ * it never submits, and announces its state via `aria-pressed` — swapping an
+ * icon alone says nothing to a screen reader.
  */
 export function LoginForm({ onSubmit, loading, error }: LoginFormProps) {
   const [username, setUsername] = useState("");

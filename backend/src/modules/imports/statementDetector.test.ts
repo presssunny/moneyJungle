@@ -1,12 +1,7 @@
 /**
- * File-kind detection.
- *
- * The invariants here are about ROUTING, and routing is where a mistake is most
- * expensive: a file sent to the wrong parser does not fail loudly, it writes
- * plausible-looking nonsense into a real account.
- *
- * The suite is header-text driven, so it needs no fixture and carries no figure
- * from any account.
+ * File-kind detection — header-text driven, so no fixture needed. Routing is
+ * where a mistake costs most: the wrong parser does not fail loudly, it writes
+ * plausible nonsense into a real account.
  */
 import { describe, expect, it } from "vitest";
 import * as XLSX from "xlsx";
@@ -49,15 +44,9 @@ describe("detectStatement", () => {
   });
 
   /**
-   * The regression this suite exists for.
-   *
-   * A real amortisation table scored 3 on the bank signal "יתרה" — because
-   * "יתרה לאחר תשלום קרן" contains it — and nothing else matched. It was routed
-   * to the bank parser, which happily read 58 rows and wrote future-dated
-   * "transactions" through to 2031 into a live account.
-   *
-   * A schedule has markers no statement can have, so it is now decided first and
-   * on its own.
+   * The regression this suite exists for: an amortisation table scored 3 on
+   * "יתרה" (from "יתרה לאחר תשלום קרן"), went to the bank parser and wrote 58
+   * future-dated rows through 2031 into a live account.
    */
   it("לוח סילוקין לא מזוהה כדף חשבון — גם כשיש בו את המילה 'יתרה'", () => {
     const detection = detectStatement(sheetOf(SCHEDULE_HEADER), "export.xlsx");

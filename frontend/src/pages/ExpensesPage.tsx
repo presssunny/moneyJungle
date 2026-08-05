@@ -37,12 +37,9 @@ const emptyForm = (monthKey: string): ExpenseInput => ({
 });
 
 /**
- * The expenses table (sub-tab of טאב "תנועות").
- *
- * The month KPI row, the category chart and the month-pace panel used to live
- * here; they moved up to `TransactionsPage` and to `BudgetsPage` respectively
- * (IA §4.1 / §5.2) so the same number is not a KPI card in two places (§1.1).
- * What stays here is the table plus its local filters.
+ * The expenses table (sub-tab of טאב "תנועות") — the table plus its local
+ * filters, nothing else. The KPI row, category chart and pace panel live on
+ * `TransactionsPage` and `BudgetsPage`, so no number is a KPI card twice (§1.1).
  */
 export default function ExpensesPage() {
   const confirm = useConfirm();

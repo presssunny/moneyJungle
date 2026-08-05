@@ -45,14 +45,10 @@ describe("computeLoan — Spitzer split", () => {
   });
 
   /**
-   * Characterisation, not endorsement. The simulation loop never runs on a zero
-   * balance, so `paidOff` stays false and a settled loan reports `null` — the
-   * same value that means "the payment never covers the interest". The two are
-   * opposite situations sharing one signal.
-   *
-   * Nothing is broken today: `loanProgress` decides "closed" from the balance
-   * before it ever looks here. Pinned so that if the null is ever given a
-   * meaning of its own, this fails loudly instead of drifting.
+   * Characterisation, not endorsement: a settled loan reports `null`, the same
+   * value that means "the payment never covers the interest" — opposite
+   * situations sharing one signal. Harmless today (`loanProgress` decides closed
+   * from the balance), pinned so giving that null a meaning fails loudly.
    */
   it("returns null — not 0 — for an already settled loan", () => {
     const r = computeLoan({ currentBalance: 0, annualInterestRate: 9.4, monthlyPayment: 1886 });

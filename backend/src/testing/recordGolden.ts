@@ -3,9 +3,8 @@
  *
  *   npm run test:golden:record
  *
- * ⚠️ Only when a change in the numbers is intended AND checked against the bank's
- * printed figures. Running it to make a red test green destroys the file's whole
- * value — it will pass by construction.
+ * ⚠️ Only when a change in the numbers is intended AND checked against the bank.
+ * Running it to make a red test green makes it pass by construction.
  */
 import { parseBankStatement, parseBankStatementPdf } from "../modules/bank/bankParser.service";
 import { parseLoanSchedule } from "../modules/loans/loanSchedule.parser";

@@ -80,11 +80,9 @@ function assertStatementInvariants(statement: ParsedBankStatement) {
   });
 
   /**
-   * CLAUDE.md §5 — the debit column splits into exactly four buckets that must
-   * never be merged: ordinary spending, financing (interest + payoff fees),
-   * principal (debt reduction) and a combined repayment with no breakdown.
-   * They must also account for the column in full: a leak means money vanished
-   * from the reports, an overlap means it is counted twice.
+   * CLAUDE.md §5 — four buckets that must never be merged, and that must account
+   * for the column in full: a leak means money vanished from the reports, an
+   * overlap means it is counted twice.
    */
   it("ארבע קטגוריות החובה מכסות את עמודת החובה במלואה — בלי דליפה ובלי כפילות", () => {
     const partition = round2(m.currentSpend + m.financingCharged + m.principal + m.mixed);
@@ -137,11 +135,9 @@ function assertStatementInvariants(statement: ParsedBankStatement) {
   });
 
   /**
-   * The salary-deposit condition that decides whether loan 108's "הריבית עלינו"
-   * interest is waived. A cumulative monthly rule cannot be settled while the
-   * month is still running, so a month the file does not cover end-to-end must
-   * answer "unknown" — never "not_met". Answering "not_met" on a partial month
-   * would tell the user a waiver was lost when it was merely undecided.
+   * The condition that waives loan 108's "הריבית עלינו" interest. A partial month
+   * must answer "unknown", never "not_met" — the latter would report a lost
+   * waiver when the month is merely still running.
    */
   it("חודש שאינו מכוסה במלואו נקבע כ־unknown ולעולם לא כלא־עומד", () => {
     for (const condition of report.monthlyConditions) {

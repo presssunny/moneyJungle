@@ -3,10 +3,8 @@
  *
  *   npx ts-node -T src/database/verifyMoney.script.ts
  *
- * Asserts invariants rather than fixed amounts, which change with every new
- * statement: every row resolved, the resolutions adding back up to the raw
- * statement totals, and a record existing exactly where the resolution says it
- * should and nowhere else.
+ * Invariants, not fixed amounts: every row resolved, the buckets adding back up
+ * to the raw totals, and a record exactly where the resolution says and nowhere else.
  */
 import { prisma } from "../config/database";
 import { EXPENSE_RESOLUTIONS } from "../modules/bank/bankResolution";
@@ -42,7 +40,7 @@ async function verifyUser(userId: number) {
   const sum = (predicate: (r: (typeof shaped)[number]) => boolean) =>
     round2(shaped.filter(predicate).reduce((s, r) => s + r.amount, 0));
 
-  // 1. No row without a meaning, and nothing left pending without a reason.
+  // No row without a meaning, and nothing left pending without a reason.
   const unresolved = shaped.filter((r) => r.resolution === null);
   add(
     "כל שורת בנק מסווגת",
@@ -58,7 +56,7 @@ async function verifyUser(userId: number) {
     silentPending.length === 0 ? "כל שורה לא מסווגת נושאת סיבה" : `${silentPending.length} שורות שותקות`
   );
 
-  // 2. The buckets must add back up to the raw statement totals.
+  // The buckets must add back up to the raw statement totals.
   const depositsRaw = sum((r) => r.type === "deposit");
   const withdrawalsRaw = sum((r) => r.type !== "deposit");
   const byResolutionIn = sum((r) => r.type === "deposit" && r.resolution !== null);
@@ -74,7 +72,7 @@ async function verifyUser(userId: number) {
     `חובה גולמי ${withdrawalsRaw} = מסווג ${byResolutionOut}`
   );
 
-  // 3. Records exist exactly where the resolution says they should.
+  // Records exist exactly where the resolution says they should.
   const missingIncome = shaped.filter((r) => r.resolution === "income" && r.linkedIncomeId === null);
   const missingExpense = shaped.filter(
     (r) => r.resolution !== null && EXPENSE_RESOLUTIONS.has(r.resolution as never) && r.linkedExpenseId === null
@@ -104,7 +102,7 @@ async function verifyUser(userId: number) {
       : `רשומה מיותרת ב-${strayRecord.map((r) => r.id).join(", ")}`
   );
 
-  // 4. The records the resolver owns must equal the buckets.
+  // The records the resolver owns must equal the buckets.
   //
   // Only LINKED records are compared. The tables also hold rows the user entered
   // by hand — `incomes` has no source column at all — and demanding that the

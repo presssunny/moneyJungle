@@ -5,15 +5,9 @@ import { MonthSelector } from "../header/MonthSelector";
 import { filterScope } from "./filterScope";
 
 /**
- * Sticky strip of global filters, directly under the header and above the tab
- * content (IA §2.3). Moving the month picker out of the header gives every tab
- * the same "what am I looking at" line in the same place, and leaves the header
- * to the page title alone.
- *
- * Stage ב' renders the **range only** — account and category pickers wait for
- * the API work in IA §9.2 (no endpoint accepts accountId, and a category filter
- * that only works on one tab would be a lie). The strip wraps instead of
- * scrolling horizontally on mobile (§8.2).
+ * Sticky strip of global filters under the header (IA §2.3), so every tab has its
+ * "what am I looking at" line in the same place. Range only for now — account and
+ * category pickers wait for the API work in §9.2. Wraps on mobile (§8.2).
  */
 export function FilterBar() {
   const location = useLocation();

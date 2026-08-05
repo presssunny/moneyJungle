@@ -6,14 +6,11 @@ import { round2 } from "../../utils/money.utils";
 export type BankTransactionKind = "deposit" | "withdrawal";
 
 /**
- * Secondary classification of a statement line. The money direction is ALWAYS
- * taken from the physical column (זכות = in / חובה = out); lineKind only says
- * *what kind* of money it is, so financing rows (interest) can be told apart
- * from ordinary spending and from debt repayment (principal).
+ * What KIND of money a line is — never its direction, which always comes from
+ * the physical column (זכות = in / חובה = out).
  *
- * In this statement format the bank already prints principal and interest on
- * separate lines, so our job is classification — not arithmetic splitting.
- * `loan_mixed` marks a combined repayment line that carries no breakdown.
+ * The bank prints principal and interest on separate lines, so this is
+ * classification, not arithmetic. `loan_mixed` = a combined line with no split.
  */
 export type BankLineKind =
   | "standard"
@@ -97,14 +94,10 @@ export interface BankBalanceMismatch {
 }
 
 /**
- * The money in a statement, split into buckets that must never be merged.
- *
- * Financing is reported three ways on purpose: gross charged, credited back,
- * and the derived net — so a netted figure can never be mistaken for the real
- * cost of credit. Loan principal (debt reduction) and a combined repayment line
- * with no breakdown (`loan_mixed`) each get their own bucket too: adding them
- * together would report money as "principal" that the statement never called
- * principal.
+ * The money in a statement, in buckets that must never be merged. Financing is
+ * reported gross/refunded/net so a netted figure can't pass for the real cost of
+ * credit, and `mixed` stays out of `principal` — the statement never called it
+ * principal, so neither do we.
  */
 export interface BankMoneySummary {
   /** Raw column sums. For auditing the balance replay only — not for reporting. */
@@ -160,10 +153,8 @@ export interface BankRoundTrip {
 export type BankConditionState = "met" | "not_met" | "unknown";
 
 /**
- * Monthly salary-deposit condition. A calendar month that the file does not
- * cover end-to-end is "unknown" — including the last one: a cumulative monthly
- * rule cannot be decided before the month is over. We never answer "not_met"
- * on a partial month, and the state is derived from salary deposits alone.
+ * Monthly salary-deposit condition. A month the file does not cover end-to-end
+ * is "unknown", never "not_met" — a cumulative rule cannot be decided early.
  */
 export interface BankMonthlyCondition {
   month: string; // YYYY-MM
@@ -221,11 +212,9 @@ type Cell = string | number | Date | boolean | null | undefined;
 type Role = "date" | "description" | "debit" | "credit" | "amount" | "balance";
 
 /**
- * Header keywords → column role for an Israeli current-account (עו״ש) statement.
- * Matched case-insensitively, substring. Bank exports vary: some split money-out
- * (חובה) and money-in (זכות) into two columns; others use one signed סכום column.
- * We detect whichever layout is present. "balance" (יתרה) is detected both so its
- * column isn't mistaken for the amount and to verify the running balance.
+ * Header keywords → column role (עו״ש), matched case-insensitively as substrings.
+ * Exports vary: some split חובה/זכות into two columns, others use one signed
+ * סכום. יתרה is detected so it can't be mistaken for the amount.
  */
 const HEADER_MATCHERS: Array<{ role: Role; keywords: string[] }> = [
   { role: "date", keywords: ["תאריך", "ת. ערך", "תאריך ערך"] },
@@ -297,9 +286,7 @@ export function parseCellDate(value: Cell): Date | null {
   return null;
 }
 
-// ---------------------------------------------------------------------------
 // Money text normalization — one implementation for every parser path
-// ---------------------------------------------------------------------------
 
 /** Plain decimal, after normalization strips currency/spaces/separators. */
 const PLAIN_NUMBER = /^-?\d+(?:\.\d+)?$/;
@@ -340,13 +327,10 @@ function parseSignedAmount(value: Cell): number | null {
   return null;
 }
 
-// ---------------------------------------------------------------------------
 // Secondary classification: loan principal / interest / overdraft interest
-// ---------------------------------------------------------------------------
 
 /**
- * Loan-related line patterns, most specific first. Labelling only — it never
- * changes the deposit/withdrawal decision, which comes from the physical column.
+ * Loan line patterns, most specific first. Labelling only — never the direction.
  *
  *   הלוואה - תשלום קרן                       → principal (debt reduction)
  *   הלוואה - תשלום ריבית 00965               → interest (financing expense)
@@ -382,12 +366,8 @@ function extractLoanRef(description: string): string | null {
 
 /**
  * Only loan lines carry a loan number; a facility (מסגרת) belongs to the account.
- *
- * `loan_principal` is in this set because a payoff line DOES print the number
- * ("הלוואה - תשלום קרן 108" — a real 87,646.82 ₪ early repayment). Dropping it
- * left every principal row with `loanRef: null`, and with it no way to tell
- * which loan a repayment — least of all a closing one — belonged to.
- * An ordinary monthly principal line has no number and still resolves to null.
+ * `loan_principal` is included because a payoff line prints it ("הלוואה - תשלום
+ * קרן 108"); without it there is no way to tell which loan a repayment closed.
  */
 const KINDS_WITH_LOAN_REF: ReadonlySet<BankLineKind> = new Set<BankLineKind>([
   "loan_principal",
@@ -406,13 +386,9 @@ function classifyLineKind(description: string): { lineKind: BankLineKind; loanRe
   return { lineKind: "standard", loanRef: null };
 }
 
-// ---------------------------------------------------------------------------
-// Post-processing: account-level credits, round-trips, salary candidates
-//
-// Everything here runs AFTER the direction of each row is already fixed by its
-// physical column. Nothing in this block may change `type` — lineKind, text and
-// flags describe *what* the money is, never *which way* it moved.
-// ---------------------------------------------------------------------------
+// Post-processing: account-level credits, round-trips, salary candidates.
+// Runs after each row's direction is fixed by its column — nothing here may
+// change `type`. lineKind and flags say WHAT the money is, never which way.
 
 const INTEREST_KINDS: ReadonlySet<BankLineKind> = new Set<BankLineKind>([
   "loan_interest",
@@ -424,14 +400,11 @@ function isInterestRow(row: ParsedBankRow): boolean {
 }
 
 /**
- * Reconciliation-level classification, derived from the description + physical
- * direction. Extends the parser's lineKind with two buckets the reconciliation
- * flow needs, keeping every Israeli-bank text pattern in this one file:
- *   - credit_card_payment: a credit-card bill settled FROM the account. Already
- *     itemized in the credit module, so it MUST be excluded from spend to avoid
- *     double-counting (CLAUDE.md §4).
- *   - interest_credit: an interest line printed in the credit column — an
- *     account-level interest rebate, never income.
+ * lineKind plus the two buckets reconciliation needs, so every Israeli-bank text
+ * pattern stays in this one file:
+ *   - credit_card_payment: already itemized in the credit module, so it must be
+ *     excluded from spend or it double-counts (CLAUDE.md §4).
+ *   - interest_credit: interest in the credit column — a rebate, never income.
  */
 export type ReconcileLineKind =
   | BankLineKind
@@ -459,11 +432,9 @@ const CREDIT_CARD_PAYMENT_PATTERN = new RegExp(
 );
 
 /**
- * Money RECEIVED from a loan. It arrives in the credit column like any other
- * deposit, so only the wording tells it apart — and getting it wrong is
- * expensive: a drawdown is a new liability, never income (CLAUDE.md §5). Interest
- * lines are already handled above, so anything else naming a loan on the way IN
- * is the loan itself landing in the account.
+ * Money RECEIVED from a loan — a new liability, never income (CLAUDE.md §5).
+ * It lands in the credit column like any deposit, so only the wording tells it
+ * apart. Interest is matched earlier, so a loan named on the way IN is a drawdown.
  */
 const LOAN_DRAWDOWN_PATTERN = /הלוו?אה/;
 
@@ -492,9 +463,8 @@ export function classifyBankLine(
 
 /**
  * Which card a settlement line refers to. The last four digits are the reliable
- * key — they appear on both the bank line ("כרטיסי אשראי לי - 2349") and the
- * credit statement ("ויזה 2349"). The issuer name is only a fallback for lines
- * that name no card at all ("עפ״י הרשאה כאל").
+ * key — they appear on both sides ("כרטיסי אשראי לי - 2349" / "ויזה 2349"). The
+ * issuer name is a fallback for lines naming no card ("עפ״י הרשאה כאל").
  */
 export interface CreditCardRef {
   last4: string | null;
@@ -527,10 +497,9 @@ function monthKey(date: Date): string {
 }
 
 /**
- * Interest credits are account-level. The number printed on such a line is the
- * account reference (REDACTED_ACCOUNT_NUMBER → "03757"), not a loan number, so keeping it as
- * `loanRef` would silently net interest against an unrelated loan. We clear it
- * and mark the row instead: netting is then only possible per account+month.
+ * Interest credits are account-level: the number on the line is the account
+ * (REDACTED_ACCOUNT_NUMBER → "03757"), not a loan. Keeping it as `loanRef` would net interest
+ * against an unrelated loan, so it is cleared and the row marked instead.
  */
 function annotateAccountLevelCredits(rows: ParsedBankRow[]): void {
   const sameDayDebits = new Map<string, number>();
@@ -553,11 +522,9 @@ const ROUND_TRIP_MAX_DAYS = 7;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Flag money that left the account and came back (or the reverse) within a few
- * days for the same amount — a transfer to another account, a cancelled payment.
- * Counting the incoming leg as income would invent money, so both legs are held
- * out of the "confirmed" figures until the user says what it was. Only ordinary
- * rows are paired: financing credits are already handled as financing.
+ * Money that left and came back within days for the same amount — a transfer, a
+ * cancelled payment. Counting the incoming leg as income would invent money, so
+ * both legs stay out of the "confirmed" figures until the user says what it was.
  */
 function annotateRoundTrips(rows: ParsedBankRow[]): BankRoundTrip[] {
   const pairs: BankRoundTrip[] = [];
@@ -628,12 +595,7 @@ function annotateSalaryCandidates(rows: ParsedBankRow[]): ParsedBankRow[] {
   return candidates;
 }
 
-/**
- * Monthly salary-deposit condition (cumulative salary credits ≥ threshold).
- * Decided from salary deposits alone. A month the file does not cover from its
- * first to its last day is "unknown" — the first one and the last one included:
- * a cumulative monthly rule cannot be settled while the month is still running.
- */
+/** Cumulative salary credits ≥ threshold, from salary deposits alone. */
 const SALARY_CONDITION_THRESHOLD = 7000;
 
 function evaluateMonthlyConditions(
@@ -777,9 +739,7 @@ function summarizeMonthFinancing(rows: ParsedBankRow[]): BankMonthFinancing[] {
   return [...byMonth.values()].sort((a, b) => a.month.localeCompare(b.month));
 }
 
-// ---------------------------------------------------------------------------
 // Built-in integrity check: replay the running balance
-// ---------------------------------------------------------------------------
 
 /** Rows scoring below this land in the review queue instead of being trusted. */
 const REVIEW_THRESHOLD = 0.7;
@@ -791,12 +751,10 @@ function signedOf(row: ParsedBankRow): number {
 }
 
 /**
- * Walk the transactions in order, rebuild the running balance and compare it to
- * the balance the bank printed. Statements usually omit the opening balance, so
- * we derive it backwards from the first printed one. Every row is then marked:
- * "printed" (its own balance matched), "chain" (no balance of its own, but a
- * later printed balance confirms the whole segment), "unverified" or "mismatch".
- * A mismatch resyncs the running balance so one bad row can't cascade.
+ * Rebuild the running balance in order and compare it to what the bank printed,
+ * marking each row printed / chain / unverified / mismatch. The opening balance
+ * is derived backwards from the first printed one. A mismatch resyncs, so one
+ * bad row cannot cascade.
  */
 function verifyRollingBalance(rows: ParsedBankRow[]): {
   openingBalance: number | null;
@@ -1063,9 +1021,7 @@ export function parseBankStatement(buffer: Buffer): ParsedBankStatement {
   return buildStatement("excel", "קורא אקסל (עמודות חובה/זכות)", parsed, rejected);
 }
 
-// ---------------------------------------------------------------------------
 // PDF statement parsing
-// ---------------------------------------------------------------------------
 
 /** A date token like 24/07/26 or 24.07.2026 anywhere in a line. */
 const DATE_TOKEN = /(\d{1,2})[./](\d{1,2})[./](\d{2,4})/;
@@ -1102,13 +1058,9 @@ function keywordType(text: string): BankTransactionKind | null {
 }
 
 /**
- * Fallback parser for PDF statements with no recoverable column layout. Works
- * line-by-line, classifying by the change in running balance where the statement
- * prints one, otherwise by an explicit sign or description keywords.
- *
- * A last resort — the positional parser runs first and reads the actual column.
- * Rows classified by keywords alone go to the review queue: a guess must be
- * visible.
+ * Last-resort PDF parser for statements with no recoverable columns: line by
+ * line, classifying by the change in running balance, else by sign or keywords.
+ * Rows classified by keywords alone go to the review queue — a guess must show.
  */
 async function parseBankStatementPdfByText(buffer: Buffer): Promise<ParsedBankStatement> {
   let text: string;
@@ -1486,11 +1438,9 @@ function parseBankStatementPdfByColumns(items: TextItem[]): ParsedBankStatement 
 }
 
 /**
- * Parse an Israeli current-account (עו״ש) statement in PDF form. We first try a
- * positional read that recovers the real debit/credit columns; if the statement
- * doesn't expose that layout we fall back to a line-by-line text heuristic.
- * Output matches the Excel parser, so the import flow (dedup, categorization,
- * balance update) is shared.
+ * Parse a עו״ש statement in PDF form: a positional read that recovers the real
+ * debit/credit columns first, a line-by-line heuristic only if that fails.
+ * Output matches the Excel parser, so the whole import flow is shared.
  */
 export async function parseBankStatementPdf(buffer: Buffer): Promise<ParsedBankStatement> {
   let positioned: ParsedBankStatement | null = null;

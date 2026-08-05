@@ -16,12 +16,9 @@ function activeMonths(trend: TrendRow[]): TrendRow[] {
 }
 
 /**
- * טאב "דוחות" (IA §7): the historical, comparative tab — "what happens over
- * time, and am I improving?". No "right now" metric belongs here, and none of
- * these four KPIs appears as a card on any other tab (§1.1).
- *
- * All four are derived from `GET /reports/trend` + `GET /reports/monthly`, which
- * IA §9.6 explicitly lists as needing no API change.
+ * טאב "דוחות" (IA §7) — the historical tab: "what happens over time, am I
+ * improving?". No "right now" metric belongs here and none of these four KPIs is
+ * a card on another tab (§1.1). All derive from the existing reports endpoints.
  */
 export default function ReportsHubPage() {
   const { monthKey } = useMonth();

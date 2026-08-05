@@ -31,11 +31,9 @@ function DeltaBadge({ value, invert = false }: { value: number; invert?: boolean
 }
 
 /**
- * Monthly report (sub-tab of טאב "דוחות").
- *
- * The הכנסות / הוצאות / מאזן cards moved out — those numbers are KPIs of other
- * tabs and are still visible here inside the delta row and the comparison table
- * (§1.1 / §7.1). Each chart owns its loading, empty and error state (§1.3).
+ * Monthly report (sub-tab of טאב "דוחות"). No הכנסות/הוצאות/מאזן cards — those
+ * are other tabs' KPIs and appear here only in the delta row and comparison
+ * table (§1.1). Each chart owns its loading, empty and error state (§1.3).
  */
 export default function ReportsPage() {
   const { monthKey } = useMonth();

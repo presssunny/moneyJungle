@@ -3,13 +3,9 @@ import { useLocation, useSearchParams } from "react-router-dom";
 import { currentMonthKey } from "../utils/format";
 
 /**
- * Global filters shared by every tab (IA §2).
- *
- * Stage ב' ships the **range only, in month mode**. `custom` range, account and
- * category filters need API support that does not exist yet (IA §9.2: every
- * endpoint takes year+month, none takes from/to or accountId), so the shape is
- * declared here — the UI simply does not offer the controls yet. Declaring them
- * now keeps the storage/URL contract stable when 9.2 lands.
+ * Global filters shared by every tab (IA §2). Only month-mode range ships today;
+ * `custom`, account and category need API support that does not exist yet (§9.2).
+ * They are declared anyway to keep the storage/URL contract stable.
  */
 export type RangeMode = "month" | "custom";
 

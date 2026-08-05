@@ -2,12 +2,9 @@ import type { Loan, LoanSchedule } from "../types/models";
 import { formatCurrency } from "./format";
 
 /**
- * Exporting a loan's amortisation table.
- *
- * One shape, several formats: adding a new one means adding a single function
- * here and one entry to `LOAN_EXPORT_FORMATS` — no screen changes. PDF goes
- * through the browser's own print dialog ("Save as PDF"), which keeps the app
- * free of a PDF dependency while still producing a real file.
+ * Exporting a loan's amortisation table. One shape, several formats: a new one is
+ * a function here plus an entry in `LOAN_EXPORT_FORMATS`, no screen changes. PDF
+ * goes through the browser's print dialog, so the app carries no PDF dependency.
  */
 
 export type LoanExportFormat = "csv" | "text" | "pdf";

@@ -15,11 +15,8 @@ export interface AsyncResource<T> {
 
 /**
  * One loader = one widget = three explicit states (loading / error / data).
- *
- * Replaces the `fetch().then(setState).catch(() => {})` pattern that swallowed
- * network failures and left widgets stuck on a spinner forever — the root of
- * "אי אפשר לראות שום דבר" (IA §1.3). A failure here is *visible* and *retryable*
- * per widget, so one dead endpoint never takes the whole page down.
+ * A failure is visible and retryable PER WIDGET, so one dead endpoint never
+ * takes the page down and nothing gets stuck on a spinner forever (IA §1.3).
  */
 export function useAsync<T>(
   loader: () => Promise<T>,

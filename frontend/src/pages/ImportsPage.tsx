@@ -28,11 +28,9 @@ export default function ImportsPage() {
   const [lastFile, setLastFile] = useState<File | null>(null);
 
   /**
-   * One turn of the import conversation.
-   *
-   * `answers` replies to whatever the previous turn asked. The file is sent
-   * again with them — the server holds no pending upload, so the flow survives a
-   * restart and cannot leak memory.
+   * One turn of the import conversation: `answers` replies to whatever the last
+   * turn asked, and the file is re-sent with them. The server holds no pending
+   * upload, so the flow survives a restart and cannot leak memory.
    */
   async function onSmartFile(file: File, kind?: "bank" | "credit", answers?: AssistantAnswers) {
     setSmartBusy(true);

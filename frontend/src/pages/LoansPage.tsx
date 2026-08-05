@@ -60,12 +60,10 @@ const emptyForm: LoanInput = {
 };
 
 /**
- * Loan management, not a list of loans: summary → upload → active → closed →
- * what the statement itself reports. The 60-row amortisation table lives in a
- * drawer so the screen reads the same with two loans or twenty.
- *
- * Every number is computed by `loans.service` and only rendered here
- * (CLAUDE.md §4), including the freed-up repayment that closed loans exist for.
+ * Loan management, not a list: summary → upload → active → closed → what the
+ * statement reports. The amortisation table lives in a drawer so the screen reads
+ * the same with two loans or twenty. Every number comes from `loans.service`
+ * and is only rendered here (CLAUDE.md §4).
  */
 export default function LoansPage() {
   const loansRes = useAsync(() => listLoans(), [], "לא הצלחנו לטעון את ההלוואות");

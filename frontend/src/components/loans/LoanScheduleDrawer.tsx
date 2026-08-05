@@ -10,11 +10,9 @@ import { exportLoanSchedule, LOAN_EXPORT_FORMATS } from "../../utils/loanExport"
 import { formatCurrency } from "../../utils/format";
 
 /**
- * The full amortisation table, in a side drawer — 30-60 payments would bury the
- * one thing the main list is for: where each loan stands.
- *
- * The header states provenance: the bank's own file and a Spitzer simulation
- * look identical as tables, so the difference must be said in words (IA §1.2).
+ * The full amortisation table in a drawer — 30-60 rows would bury what the main
+ * list is for. The header states provenance: a bank file and a Spitzer
+ * simulation look identical as tables, so the difference must be said (IA §1.2).
  */
 export function LoanScheduleDrawer({ loan, onClose }: { loan: Loan; onClose: () => void }) {
   const schedule = useAsync(

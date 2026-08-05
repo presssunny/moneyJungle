@@ -2,15 +2,11 @@ import crypto from "crypto";
 import * as XLSX from "xlsx";
 
 /**
- * Which kind of statement a user just dropped on the app.
+ * Which kind of statement a user just dropped on the app, so she never has to
+ * know which tab a file belongs to. Answers only that; the parsers read it.
  *
- * The user should not have to know which tab a file belongs to — she has one
- * file and one question ("what is in this?"). This module answers *only* that,
- * from the file's own content; the parsers stay responsible for reading it.
- *
- * Detection reads column headers, never the file name: names are renamed,
- * duplicated and downloaded as "document(3).xlsx", and a wrong guess sends a
- * statement to the wrong parser.
+ * Decided from column headers, never the file name — names get renamed and
+ * downloaded as "document(3).xlsx", and a wrong guess picks the wrong parser.
  */
 export type StatementKind = "bank" | "credit" | "loan_schedule" | "unknown";
 
@@ -27,11 +23,9 @@ export interface StatementDetection {
 }
 
 /**
- * Header words that only one kind of statement has.
- *
- * A running balance (יתרה) and a debit/credit column pair belong to an account;
- * a merchant name and a billing date belong to a card. Words both share
- * (תאריך, סכום) carry no weight — they would only add noise.
+ * Header words only one kind of statement has: יתרה and a חובה/זכות pair mean an
+ * account, a merchant name and a billing date mean a card. Shared words
+ * (תאריך, סכום) carry no weight.
  */
 const BANK_SIGNALS: Array<{ pattern: RegExp; label: string; weight: number }> = [
   { pattern: /יתרה/, label: "יתרה", weight: 3 },
@@ -44,14 +38,9 @@ const BANK_SIGNALS: Array<{ pattern: RegExp; label: string; weight: number }> = 
 ];
 
 /**
- * An amortisation table is NOT a statement, and mistaking one for a statement is
- * expensive: a real upload of `לוח סילוקין` scored 3 on "יתרה" (matching
- * "יתרה לאחר תשלום קרן"), was routed to the bank parser, and wrote 58 future
- * "transactions" dated up to 2031 straight into the account.
- *
- * These markers are checked FIRST and decide on their own, because they are
- * unique to a schedule — no statement has a payment-number column or a balance
- * that is explicitly "after a principal payment".
+ * An amortisation table is NOT a statement: one scored 3 on "יתרה" (from
+ * "יתרה לאחר תשלום קרן"), went to the bank parser and wrote 58 future
+ * "transactions" dated to 2031. These markers are checked FIRST and decide alone.
  */
 const SCHEDULE_SIGNALS: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /לוח\s*סילוקין/, label: "לוח סילוקין" },
