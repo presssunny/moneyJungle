@@ -72,6 +72,7 @@ model User {
   recurringPayments  RecurringPayment[]
   subscriptions      Subscription[]
   loans              Loan[]
+  documents          Document[]
   savingsGoals       SavingsGoal[]
   paymentMethods     PaymentMethod[]
   alerts             Alert[]
@@ -459,6 +460,48 @@ model Loan {
   @@index([userId, status])
   @@index([userId, loanNumber, trackNumber])
   @@map("loans")
+}
+
+/// Every file the user uploaded, and what came of it.
+///
+/// Metadata only — never the bytes. `fileHash` identifies a re-upload of the very
+/// same file and `coverageFrom/To` identifies an overlapping period, which is all
+/// the app needs to answer "did I already import this?". Keeping the files
+/// themselves is a separate product decision.
+model Document {
+  id        Int    @id @default(autoincrement())
+  userId    Int    @map("user_id")
+  fileName  String @map("file_name") @db.VarChar(255)
+  fileHash  String @map("file_hash") @db.VarChar(64)
+  sizeBytes Int    @default(0) @map("size_bytes")
+
+  kind   String @db.VarChar(30) // bank_statement | credit_report | loan_schedule | expense_sheet | unknown
+  status String @default("imported") @db.VarChar(20) // imported | rejected | superseded
+
+  detectedBank String?   @map("detected_bank") @db.VarChar(120)
+  coverageFrom DateTime? @map("coverage_from") @db.Date
+  coverageTo   DateTime? @map("coverage_to") @db.Date
+
+  /// What this document produced, so a row can be traced back to its file.
+  linkedLoanId         Int? @map("linked_loan_id")
+  linkedAccountId      Int? @map("linked_account_id")
+  linkedCreditImportId Int? @map("linked_credit_import_id")
+
+  rowsParsed   Int @default(0) @map("rows_parsed")
+  rowsImported Int @default(0) @map("rows_imported")
+  rowsSkipped  Int @default(0) @map("rows_skipped")
+
+  /// The signals that decided `kind` — a wrong guess can be explained, not argued with.
+  detectionJson String?  @map("detection_json") @db.Text
+  note          String?  @db.VarChar(255)
+  uploadedAt    DateTime @default(now()) @map("uploaded_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, uploadedAt])
+  @@index([userId, fileHash])
+  @@index([userId, kind])
+  @@map("documents")
 }
 
 /// One row of the bank's printed amortisation table (לוח סילוקין).
