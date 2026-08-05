@@ -2,11 +2,9 @@ import type { ReactNode } from "react";
 import { FiltersProvider, useFilters } from "./FiltersContext";
 
 /**
- * Compatibility shim.
- *
- * The month is no longer its own context — it is the `range` slice of the
- * global filters (IA §2.2). `useMonth()` is kept as-is so every existing page
- * keeps working unchanged; new code should read `useFilters()` directly.
+ * Compatibility shim: the month is now the `range` slice of the global filters
+ * (IA §2.2). `useMonth()` is kept so existing pages work unchanged — new code
+ * should read `useFilters()` directly.
  */
 interface MonthContextValue {
   /** Selected month as "YYYY-MM" */

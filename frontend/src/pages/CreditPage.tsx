@@ -32,13 +32,10 @@ import type { CreditImport, CreditImportDetail, CreditTransaction } from "../typ
 import { currentMonthKey, formatCurrency, formatDate, formatMonthKey } from "../utils/format";
 
 /**
- * טאב־משנה "אשראי" (IA §6.2).
- *
- * The KPI row is scoped to the **selected import** — that is the only credit
- * data actually loaded on this screen, so every card says so in its sub-line.
- * Claiming an account-wide number from one file would be a made-up figure.
- * "אשראי מתגלגל" is called out explicitly because CLAUDE.md §5 excludes it from
- * every expense total; without the note the number looks like a missing expense.
+ * טאב־משנה "אשראי" (IA §6.2). The KPI row is scoped to the SELECTED import and
+ * every card says so — an account-wide number from one file would be invented.
+ * "אשראי מתגלגל" is called out because CLAUDE.md §5 excludes it from every
+ * expense total, and unlabelled it reads as a missing expense.
  */
 export default function CreditPage() {
   const confirmDialog = useConfirm();

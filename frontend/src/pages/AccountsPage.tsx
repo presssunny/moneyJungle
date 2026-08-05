@@ -40,13 +40,10 @@ function OverviewChip({ label, amount, tone = "default", loading }: ChipProps) {
 }
 
 /**
- * Accounts and debts hub (IA §6). The three-chip strip is the only figure that
- * crosses the sub-tabs, and is kept lighter than a `SummaryCard` so it does not
- * compete with each sub-tab's own KPI row.
- *
- * Composed from three existing endpoints, reusing figures the backend already
- * computed — no financial rule is re-implemented here. Should consume
- * `GET /accounts/overview` once that exists (§9.4).
+ * Accounts and debts hub (IA §6). The three-chip strip is the only figure
+ * crossing the sub-tabs, kept lighter than a `SummaryCard` so it does not compete
+ * with their own KPI rows. Composed from existing endpoints — no financial rule
+ * is re-implemented. Should consume `GET /accounts/overview` once it exists.
  */
 export default function AccountsPage() {
   const banksRes = useAsync(() => listBankAccounts(), [], "לא הצלחנו לטעון את חשבונות הבנק");

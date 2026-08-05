@@ -12,14 +12,11 @@ import {
 import { buildCreditCoverage } from "./creditCoverage.service";
 
 /**
- * Bank reconciliation. Imported rows are not copied into incomes/loans/expenses —
- * that would double-count against the credit module (CLAUDE.md §4). The resolver
- * decides what each row means, writes it to `resolution` + `reconcileNote`, and
- * creates a record only where the money belongs to an income/expense figure.
+ * Bank reconciliation. Rows are never copied into incomes/loans/expenses — that
+ * would double-count against the credit module (CLAUDE.md §4). The resolver
+ * records what each row MEANS and creates a record only where the money belongs.
  *
- * Every row ends with a resolution: `pending` is invisible in every total, so a
- * row left there silently makes the figures wrong. See BankResolution for the
- * money-meaning rules (CLAUDE.md §5).
+ * Every row must end with a resolution: `pending` is invisible in every total.
  */
 
 // ---------- Income-type guessing (a suggestion; the user can change it) ----------
@@ -186,10 +183,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Wording that means "money moved between accounts". BOTH legs must read like a
- * transfer before a pair is netted out. Amount and date alone are not enough: in
- * the real statement 7,000 left as "העברה מהחשבון" and 7,000 arrived as "זיכוי"
- * five days later, but the verified income for the period includes that credit —
- * a plain "זיכוי" is an ordinary receipt, not the transfer coming back.
+ * transfer before a pair is netted: a plain "זיכוי" five days after a 7,000
+ * transfer out is an ordinary receipt, not the money coming back.
  */
 const INTERNAL_TRANSFER_TEXT = /העברה|העברת|לחשבון|מהחשבון|בין\s*חשבונות|הפקדה\s*לחשבון|מסלקה/;
 
@@ -235,10 +230,9 @@ function findInternalTransferIds(rows: PairRow[]): Set<number> {
 }
 
 /**
- * A credit this many times the typical one is still income — the statement puts
- * it in the credit column — but it is flagged: a one-off wire is what a loan
- * drawdown or a transfer between own accounts looks like when the wording says
- * nothing.
+ * A credit this many times the typical one is still income, but flagged: with no
+ * wording to go on, that is also what a drawdown or an own-account transfer
+ * looks like.
  */
 const ATYPICAL_DEPOSIT_RATIO = 10;
 
@@ -364,13 +358,11 @@ export const reconciliationService = {
   },
 
   /**
-   * Give every imported bank row a financial meaning, and make the records in the
-   * other tables agree with it.
+   * Give every row a meaning and make the other tables agree with it.
    *
-   * Idempotent and self-correcting: when a decision changes — a credit statement
-   * arrives and a card bill that was counted as spend becomes itemized — the
-   * record created earlier is removed. That is what keeps the bank and credit
-   * sources from double-counting. `manual_excluded` rows are never touched.
+   * Idempotent and self-correcting: when a decision changes (a card bill becomes
+   * itemized once its credit statement lands) the earlier record is removed —
+   * that is what stops double-counting. `manual_excluded` rows are never touched.
    */
   async resolveAll(userId: number): Promise<ResolveResult> {
     await this.backfillClassification(userId);
@@ -768,10 +760,9 @@ export const reconciliationService = {
   },
 
   /**
-   * Create a Loan from a detected group (or link its rows to an existing loan).
-   * The stateful fields (original amount, rate, term) come from the user — a
-   * statement line cannot supply them. Rows keep their own resolution: linking
-   * adds the loan they belong to, it never turns them into spending or income.
+   * Create a Loan from a detected group, or link its rows to an existing one.
+   * Original amount, rate and term come from the user — a statement line cannot
+   * supply them. Linking adds the loan; it never re-labels the rows.
    */
   async linkLoan(
     userId: number,
@@ -1043,16 +1034,15 @@ function decideTarget(row: ResolverRow, ctx: DecideContext): ResolutionTarget {
 }
 
 /**
- * Make the database agree with a decision. Returns whether anything changed, so a
- * re-run on settled data is silent. Records that no longer belong are deleted
- * before the right one is created: a row holding two links is how a double count
- * starts.
+ * Make the database agree with a decision; returns whether anything changed, so
+ * a re-run on settled data is silent. Stale records are deleted before the right
+ * one is created — a row holding two links is how a double count starts.
  */
 async function applyTarget(userId: number, row: ResolverRow, target: ResolutionTarget): Promise<boolean> {
   let changed = false;
   const wantedAmount = target.negative ? round2(-row.amount) : row.amount;
 
-  // 1. Drop records the new meaning does not call for.
+  // Drop records the new meaning does not call for.
   if (row.linkedIncomeId !== null && target.record !== "income") {
     await prisma.income.deleteMany({ where: { id: row.linkedIncomeId, userId } });
     row.linkedIncomeId = null;
@@ -1064,7 +1054,7 @@ async function applyTarget(userId: number, row: ResolverRow, target: ResolutionT
     changed = true;
   }
 
-  // 2. Create or correct the record the meaning does call for.
+  // Create or correct the record the meaning does call for.
   if (target.record === "income" && row.linkedIncomeId === null) {
     const income = await prisma.income.create({
       data: {
@@ -1113,7 +1103,7 @@ async function applyTarget(userId: number, row: ResolverRow, target: ResolutionT
     }
   }
 
-  // 3. Record the meaning on the bank row itself.
+  // Record the meaning on the bank row itself.
   if (
     row.reconcileStatus !== target.status ||
     row.resolution !== target.resolution ||

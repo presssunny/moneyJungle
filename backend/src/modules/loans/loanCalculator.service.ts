@@ -65,11 +65,9 @@ export function computeLoan(input: LoanInput): LoanComputed {
 }
 
 /**
- * Where a loan stands in its life. Derived, never stored, so it can never drift
- * from the balance and the status.
- *
- * `ending_soon` exists so the last few months are visible *before* they happen —
- * that is when a user can plan for the payment that is about to free up.
+ * Where a loan stands. Derived, never stored, so it cannot drift from the
+ * balance. `ending_soon` exists so the last months show BEFORE they happen —
+ * that is when the payment about to free up can be planned for.
  */
 export type LoanLifecycle = "active" | "ending_soon" | "closed" | "overdue";
 
@@ -106,11 +104,8 @@ export interface LoanProgress {
 }
 
 /**
- * Progress and lifecycle for one loan.
- *
- * Kept apart from `computeLoan` on purpose: five modules (dashboard, insights,
- * alerts, updates, cashflow) depend on that function's exact shape, so it stays
- * untouched and this is additive.
+ * Progress and lifecycle for one loan. Kept apart from `computeLoan`, whose exact
+ * shape five modules depend on — this is additive, that stays untouched.
  */
 export function loanProgress(loan: LoanProgressInput): LoanProgress {
   const repaid = Math.max(loan.originalAmount - loan.currentBalance, 0);

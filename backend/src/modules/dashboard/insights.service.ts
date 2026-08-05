@@ -258,7 +258,6 @@ export async function buildInsights(userId: number, year: number, month: number)
     });
   }
 
-  // Interest burden
   const monthlyInterest = loanComputed.reduce((sum, l) => sum + l.computed.monthlyInterestPayment, 0);
   if (monthlyInterest >= 100) {
     insights.push({
@@ -268,7 +267,6 @@ export async function buildInsights(userId: number, year: number, month: number)
     });
   }
 
-  // Uncategorized expenses
   const { start, end } = monthRange(year, month);
   const uncategorized = await prisma.expense.count({
     where: { userId, categoryId: null, expenseDate: { gte: start, lt: end } },

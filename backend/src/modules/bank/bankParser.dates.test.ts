@@ -1,14 +1,7 @@
 /**
- * Date handling in the statement parsers.
- *
- * Pure invariants: they encode a RULE about calendar days, carry no figure from
- * any account, and need no fixture — so they run everywhere, always.
- *
- * The rule is worth its own suite because getting it wrong is silent. A date is
- * not just a label: `transactionDate` decides which month a row belongs to, so a
- * one-day slip moves a 1st-of-month payment into the previous month and takes
- * its amount with it. It also breaks import de-duplication, because a row is
- * matched on its date — which is how the same statement could be imported twice.
+ * Date handling in the statement parsers. Fixture-free invariants, because a
+ * one-day slip is silent: `transactionDate` picks the month a row counts in, and
+ * it is also the de-dup key — so a drift can import the same statement twice.
  */
 import { describe, expect, it } from "vitest";
 import { parseCellDate } from "./bankParser.service";
@@ -21,14 +14,9 @@ function utcDay(date: Date | null): string {
 
 describe("parseCellDate — הימים שהבנק הדפיס", () => {
   /**
-   * The regression this suite exists for.
-   *
-   * SheetJS converts an Excel date serial with a sub-minute drift: in the real
-   * statement 28/07/2026 arrives as 2026-07-27T20:59:20Z, i.e. 23:59:20 local on
-   * the 27th. Reading the calendar day off that value — however carefully, in UTC
-   * or in local time — yields the 27th, so EVERY Excel-imported row lost a day.
-   *
-   * Rounding to the nearest midnight is what absorbs the drift.
+   * The regression this suite exists for: SheetJS returns 28/07/2026 as
+   * 2026-07-27T20:59:20Z, so reading the calendar day off it — UTC or local —
+   * gives the 27th and every Excel row lost a day. Rounding to midnight fixes it.
    */
   it("תאריך שהגיע 40 שניות לפני חצות נקרא כיום שהבנק הדפיס, לא כיום שלפניו", () => {
     const drifted = new Date("2026-07-27T20:59:20.000Z"); // = 28/07 בלוח של הבנק (UTC+3)

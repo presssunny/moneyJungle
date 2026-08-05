@@ -4,15 +4,9 @@ import { Input } from "../common/Input";
 import type { AssistantAnswers, AssistantStep } from "../../types/assistant";
 
 /**
- * The app talking, instead of failing.
- *
- * Any flow that returns an `AssistantStep` can be rendered here: it narrates
- * what happened line by line, shows the facts it worked out, and — when it is
- * stuck — asks the one thing it needs rather than throwing a red error.
- *
- * It holds no conversation state of its own. The caller owns the file and
- * re-submits it with the answers, which is what keeps the whole flow stateless
- * and restart-proof.
+ * Renders any `AssistantStep`: what happened, the facts worked out, and — when
+ * stuck — the one question needed, instead of a red error. Holds no conversation
+ * state; the caller owns the file and re-submits it with the answers.
  */
 
 interface AssistantPanelProps {

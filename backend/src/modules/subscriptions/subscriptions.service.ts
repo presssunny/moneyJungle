@@ -56,11 +56,9 @@ export const subscriptionsService = {
   },
 
   /**
-   * Detect likely subscriptions from confirmed credit transactions.
-   * Strong signal: הוראת קבע (standing_order) recurring across ≥2 months.
-   * Weaker signal: a "regular" charge that repeats ~once a month across ≥3
-   * months with a consistent amount (Netflix-style) — groceries are excluded
-   * because they appear many times per month with varying amounts.
+   * Likely subscriptions from confirmed credit transactions. Strong signal:
+   * הוראת קבע across ≥2 months. Weak: a steady monthly amount across ≥3 months.
+   * Groceries are excluded — many charges a month, at varying amounts.
    */
   async detectCandidates(userId: number): Promise<SubscriptionCandidate[]> {
     const [transactions, existing] = await Promise.all([

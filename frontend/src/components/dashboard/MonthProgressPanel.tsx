@@ -5,11 +5,9 @@ import { Button } from "../common/Button";
 import { Input } from "../common/Input";
 
 /**
- * Compact "how is the month going" panel for the Expenses page.
- *
- * Follows budgeting-UX conventions: a spent-vs-target bar with a *pace* marker
- * (where you should be by today), an end-of-month forecast at the current burn
- * rate, and an encouraging status — celebrate on-track, warn early, never shame.
+ * "How is the month going": a spent-vs-target bar with a pace marker (where you
+ * should be today), an end-of-month forecast at the current burn rate, and a
+ * status that celebrates on-track and warns early — never shames.
  */
 export function MonthProgressPanel({
   progress,

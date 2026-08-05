@@ -4,14 +4,9 @@ import { formatCurrency } from "../../utils/format";
 import { chartChrome, tooltipStyle } from "./chartTheme";
 
 /**
- * Grouped "planned vs actual" bars per category (IA §5.2) — the one new chart
- * stage ג' needs.
- *
- * Neither existing chart can say this: `CategoryBarChart` draws a single series
- * and `LoanSplitChart` stacks its two series, which would read as
- * planned+actual summed. The budget question is about the *gap*, so the two
- * bars must sit side by side. Data comes straight from `GET /budgets?month`
- * (`amount` + `spent`) — nothing is recomputed here.
+ * Grouped "planned vs actual" bars per category (IA §5.2). Side by side, not
+ * stacked: the budget question is about the GAP, and stacking would read as
+ * planned+actual summed. Data comes straight from `GET /budgets?month`.
  */
 export function BudgetVsActualChart({ budgets }: { budgets: BudgetItem[] }) {
   const chrome = chartChrome();

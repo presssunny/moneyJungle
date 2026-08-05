@@ -3,12 +3,9 @@ import { decimalToNumber, round2 } from "../../utils/money.utils";
 import { creditCardRefOf } from "./bankParser.service";
 
 /**
- * Is a credit-card settlement drawn from the current account already itemized in
- * the credit module? The answer cuts both ways: an itemized card must have its
- * lump-sum settlement excluded or every purchase is counted twice (CLAUDE.md §4),
- * while excluding an un-imported card deletes money that really left the account.
- * Excluding unconditionally — the previous behaviour — silently lost card 3704
- * here: two settlements, 5,852.85 ₪, with no credit rows behind them.
+ * Is a card settlement already itemized in the credit module? It cuts both ways:
+ * keep it and an itemized card double-counts (CLAUDE.md §4), drop it and an
+ * un-imported card loses money that really left — as card 3704 did, 5,852.85 ₪.
  */
 
 /** The card company's charge date and the bank debit differ by a day or two. */

@@ -1,10 +1,7 @@
 /**
  * The amortisation-schedule parser against the bank's real לוח סילוקין exports.
- *
- * The schedule is the source of truth for a loan's terms (balance, rate, payment,
- * counts, dates) — the statement only reports events against it. A regression
- * here silently rewrites what the app believes a loan costs, so the invariants
- * below are asserted before any recorded number is compared.
+ * The schedule sets a loan's terms, so a regression here silently rewrites what
+ * the app thinks a loan costs — invariants are asserted before any golden number.
  *
  * Without fixtures the suite skips. See tests/fixtures/README.md.
  */
@@ -26,10 +23,8 @@ function scheduleSuite(title: string, fixture: FixtureName, goldenKey: string) {
     });
 
     /**
-     * The decisive check: the principal columns of the remaining rows must add
-     * up to the balance the bank states. If the parser grabbed the wrong column
-     * — interest instead of principal, or the total instead of either — the sum
-     * misses and the loan's whole cost picture is wrong.
+     * The decisive check: grab the wrong column — interest, or the total — and
+     * the sum misses the stated balance, taking the loan's cost picture with it.
      */
     it("Σקרן של השורות הנותרות = יתרת הקרן שהבנק מציין", () => {
       expect(s.checks.principalSumMatchesBalance).toBe(true);

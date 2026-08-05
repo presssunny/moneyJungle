@@ -1,9 +1,7 @@
 /**
- * Human-readable dump of what the amortisation-schedule parser read out of a
- * file. A diagnostic, not a test — it asserts nothing and is meant for eyeballing
- * a NEW export before it becomes a fixture.
- *
- * The assertions live in `loanSchedule.golden.test.ts` (`npm run test`).
+ * Human-readable dump of what the schedule parser read — a diagnostic for
+ * eyeballing a NEW export before it becomes a fixture. It asserts nothing; the
+ * assertions live in `loanSchedule.golden.test.ts`.
  *
  * Run: npx ts-node -T src/modules/loans/loanSchedule.check.ts [file...]
  */

@@ -5,7 +5,7 @@ import { defaultPaymentMethods } from "./defaultPaymentMethods.seed";
 import { fixedPlanRows } from "./fixedPlan.seed";
 
 async function main() {
-  // 1. Primary user + settings
+  // Primary user + settings
   let user = await prisma.user.findFirst();
   if (!user) {
     user = await prisma.user.create({ data: { name: "המשפחה שלי" } });
@@ -18,7 +18,7 @@ async function main() {
     create: { userId: user.id },
   });
 
-  // 2. Default categories (system-wide, userId = null)
+  // Default categories (system-wide, userId = null)
   for (const category of defaultCategories) {
     const existing = await prisma.category.findFirst({
       where: { name: category.name, userId: null },
@@ -36,7 +36,7 @@ async function main() {
   }
   console.log(`Categories seeded (${defaultCategories.length})`);
 
-  // 3. Default payment methods
+  // Default payment methods
   for (const method of defaultPaymentMethods) {
     const existing = await prisma.paymentMethod.findFirst({
       where: { name: method.name, userId: null },
@@ -49,7 +49,7 @@ async function main() {
   }
   console.log(`Payment methods seeded (${defaultPaymentMethods.length})`);
 
-  // 4. Default categorization rules
+  // Default categorization rules
   const categories = await prisma.category.findMany({ where: { userId: null } });
   const categoryByName = new Map(categories.map((c) => [c.name, c.id]));
 
@@ -70,7 +70,7 @@ async function main() {
   }
   console.log(`Category rules seeded (${defaultCategoryRules.length})`);
 
-  // 5. The family's fixed monthly plan (from their Excel) as recurring payments
+  // The family's fixed monthly plan (from their Excel) as recurring payments
   const existingRecurring = await prisma.recurringPayment.count({ where: { userId: user.id } });
   if (existingRecurring === 0) {
     const methods = await prisma.paymentMethod.findMany({ where: { userId: null } });

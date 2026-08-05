@@ -100,11 +100,8 @@ function Fact({ label, value, tone }: { label: string; value: string; tone?: str
 }
 
 /**
- * One loan, as a card rather than a table row.
- *
- * The old screen put nine columns side by side and left the reader to work out
- * which of them mattered. Here the hierarchy is fixed: what it is → where it
- * stands → what it costs → what can be done about it.
+ * One loan as a card, not a table row, with a fixed hierarchy: what it is →
+ * where it stands → what it costs → what can be done about it.
  */
 export function LoanCard({ loan, actions }: { loan: Loan; actions: LoanActions }) {
   const closed = loan.status === "finished";

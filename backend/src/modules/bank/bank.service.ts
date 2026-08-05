@@ -126,11 +126,9 @@ export const bankService = {
   },
 
   /**
-   * Import a current-account (עו״ש) statement file into an account: money-in
-   * rows become deposits, money-out rows become withdrawals. Withdrawals are
-   * auto-categorized via category rules. Rows already present (same date +
-   * amount + type + description) are skipped so re-uploading is safe. The
-   * account balance is adjusted once by the net of everything imported.
+   * Import a עו״ש statement: money-in becomes deposits, money-out withdrawals
+   * (auto-categorized). Rows already present — same date, amount, type and
+   * description — are skipped, so re-uploading is safe.
    */
   async importStatement(userId: number, accountId: number, buffer: Buffer, fileName = "") {
     await requireAccount(userId, accountId);

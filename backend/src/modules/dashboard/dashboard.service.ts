@@ -24,11 +24,10 @@ async function monthTotals(userId: number, year: number, month: number) {
 }
 
 /**
- * Bank rows of one month, totalled by what they mean. Expense-bearing resolutions
- * are deliberately NOT re-added to any spend figure here: their amounts already
- * live in `expenses` (that is what the resolver created), and summing them again
- * would be the double count the whole design exists to prevent. They are reported
- * so the user can see which part of the expense total came from where.
+ * Bank rows of one month, totalled by what they mean. Expense-bearing
+ * resolutions are deliberately NOT re-added to any spend figure — their amounts
+ * are already in `expenses`. They are reported only so the user can see which
+ * part of the total came from where.
  */
 async function bankResolutionTotals(userId: number, year: number, month: number) {
   const { start, end } = monthRange(year, month);
@@ -94,7 +93,6 @@ export const dashboardService = {
   async summary(userId: number, year: number, month: number) {
     const totals = await monthTotals(userId, year, month);
 
-    // Budget status
     const [budgets, spent, categories] = await Promise.all([
       dashboardRepository.budgets(userId, year, month),
       spentByCategory(userId, year, month),
@@ -115,7 +113,6 @@ export const dashboardService = {
     const savingsCategory = categories.find((c) => c.name === SAVINGS_CATEGORY);
     const savingsMonthly = savingsCategory ? (spent.get(savingsCategory.id) ?? 0) : 0;
 
-    // Loans
     const loans = await loansRepository.findActive(userId);
     let loanMonthlyPayment = 0;
     let loanMonthlyInterest = 0;

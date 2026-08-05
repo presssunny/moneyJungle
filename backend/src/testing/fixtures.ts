@@ -1,11 +1,8 @@
 /**
- * Access to the real bank files the parsers are verified against.
- *
- * The fixtures are REAL statements — account numbers, balances, employer names.
- * They are git-ignored on purpose (`backend/.gitignore`), so a fresh clone has
- * none of them. Suites that need one skip themselves instead of failing, and say
- * so; a green run on a machine without fixtures is therefore not proof that the
- * parsers still work. `npm run test:fixtures` reports what is present.
+ * The real bank files the parsers are verified against — account numbers,
+ * balances, employer names, so they are git-ignored and a fresh clone has none.
+ * Suites skip rather than fail, which means a green run without them proves
+ * nothing; `npm run test:fixtures` reports what is present.
  */
 import fs from "fs";
 import path from "path";

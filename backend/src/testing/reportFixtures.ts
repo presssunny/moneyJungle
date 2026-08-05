@@ -1,10 +1,7 @@
 /**
- * Says which real-file fixtures are present.
- *
- *   npm run test:fixtures
- *
- * The golden suites skip silently when a file is missing, so a green run proves
- * nothing about the parsers unless this reports them all present.
+ * Says which real-file fixtures are present (`npm run test:fixtures`). The golden
+ * suites skip silently when one is missing, so a green run proves nothing about
+ * the parsers unless this reports them all present.
  */
 import { FIXTURES, FIXTURES_DIR, FixtureName, hasFixture } from "./fixtures";
 import { GOLDEN_FILE, hasGolden } from "./golden";

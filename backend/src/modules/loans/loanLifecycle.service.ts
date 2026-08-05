@@ -26,11 +26,9 @@ export interface LoanEvent {
 
 export const loanLifecycleService = {
   /**
-   * Re-derive every loan's lifecycle from the bank rows. Safe to call after any
-   * import (statement or schedule) and safe to call repeatedly.
-   *
-   * Returns only the events that are NEW to this run, so the UI can celebrate a
-   * closure once instead of on every page load.
+   * Re-derive every loan's lifecycle from the bank rows — safe to call after any
+   * import, and repeatedly. Returns only events NEW to this run, so a closure is
+   * celebrated once and not on every page load.
    */
   async syncFromStatement(userId: number): Promise<LoanEvent[]> {
     const loans = await prisma.loan.findMany({ where: { userId } });

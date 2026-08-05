@@ -9,11 +9,9 @@ import type { Loan } from "../../types/models";
 import { formatCurrency } from "../../utils/format";
 
 /**
- * "What would it cost me to close this today, and what would I gain?"
- *
- * Read-only — nothing is changed by looking. The interest saving comes from the
- * bank's own schedule; without one we say we cannot tell rather than showing a
- * confident 0 (IA §1.2).
+ * "What would it cost to close this today, and what would I gain?" Read-only.
+ * The saving comes from the bank's own schedule; without one we say we cannot
+ * tell rather than show a confident 0 (IA §1.2).
  */
 export function EarlyRepaymentDialog({
   loan,

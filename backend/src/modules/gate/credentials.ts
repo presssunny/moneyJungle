@@ -2,12 +2,9 @@ import crypto from "crypto";
 import { env } from "../../config/env";
 
 /**
- * The single place that answers "is this who they say they are?". Nothing else
- * reads a credential directly, so moving to JWT, OAuth or a real user table means
- * replacing the body of `verifyCredentials` and nothing else.
- *
- * Today: one development identity from the environment — never hard-coded, never
- * read in a second place.
+ * The single place that answers "is this who they say they are?" — moving to JWT
+ * or a real user table means replacing `verifyCredentials` and nothing else.
+ * Today: one identity from the environment, never hard-coded.
  */
 
 export interface Identity {
@@ -32,12 +29,9 @@ export function currentIdentity(): Identity {
 }
 
 /**
- * Verify a login attempt. Returns the identity on success, `null` on failure —
- * never a reason, so the caller cannot accidentally tell an attacker whether it
- * was the user name or the password that was wrong.
- *
- * `username` is optional for backwards compatibility: sessions created before
- * the login screen gained a user field still authenticate on the password alone.
+ * Identity on success, `null` on failure — never a reason, so the caller cannot
+ * leak whether the user name or the password was wrong. `username` is optional:
+ * clients predating the login screen still authenticate on the password alone.
  */
 export function verifyCredentials(username: string | undefined, password: string): Identity | null {
   const passwordOk = safeEqual(password, env.APP_GATE_PASSWORD);

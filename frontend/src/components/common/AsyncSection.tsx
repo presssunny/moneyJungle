@@ -16,15 +16,10 @@ interface AsyncSectionProps<T> {
 }
 
 /**
- * Renders exactly one of the four widget states: loading → error → empty → data.
- *
- * The states are resolved per widget, never per page (IA §1.3): if the charts
- * endpoint fails while the summary endpoint succeeds, the KPI row still renders
- * and only the chart shows an error.
- *
- * When a reload fails but we still hold previously loaded data, the data stays
- * on screen and the error appears as a thin strip above it — losing a working
- * view because a refresh failed would be a regression, not a fix.
+ * Exactly one of loading → error → empty → data, resolved per widget and never
+ * per page (IA §1.3). A failed RELOAD keeps the data on screen with a thin error
+ * strip above it — losing a working view because a refresh failed is a
+ * regression.
  */
 export function AsyncSection<T>({
   resource,

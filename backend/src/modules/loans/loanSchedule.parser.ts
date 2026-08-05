@@ -2,14 +2,11 @@ import * as XLSX from "xlsx";
 import { round2 } from "../../utils/money.utils";
 
 /**
- * Reader for the bank's printed amortisation table (לוח סילוקין) — the loan's
- * source of truth for its TERMS, but not for what happened: an early repayment
- * is invisible here and only the statement knows about it.
+ * The bank's amortisation table (לוח סילוקין) — source of truth for a loan's
+ * TERMS, never for its events: an early repayment is invisible here.
  *
- * Two enforced properties make the format trustworthy: the principal column sums
- * to the opening balance to the agora (a file that fails is rejected, not
- * stored), and every row satisfies `interest = balanceBefore × r` for a single
- * rate, so the annual rate is recovered exactly.
+ * Two enforced properties: the principal column sums to the balance to the agora
+ * (a file that fails is rejected), and one rate satisfies every row.
  */
 
 /** Header labels, in the order the bank prints them. Matched loosely on words. */
@@ -63,10 +60,9 @@ export interface ParsedSchedule {
   remainingInterest: number;
 
   /**
-   * Opening principal. When the export starts mid-way (the common case — the
-   * bank prints only what is left) this is RECONSTRUCTED backwards and is
-   * therefore a scenario, not a measured figure. `originalAmountSource` says
-   * which, and the UI must mark a reconstructed value accordingly (IA §1.2).
+   * Opening principal. Usually RECONSTRUCTED backwards, because the bank prints
+   * only what is left — a scenario, not a measurement. `originalAmountSource`
+   * says which, and the UI must mark a reconstructed value (IA §1.2).
    */
   originalAmount: number;
   originalAmountSource: "contract" | "reconstructed";

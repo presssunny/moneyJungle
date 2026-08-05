@@ -1,12 +1,7 @@
 /**
- * The slice of parser output that gets recorded and compared.
- *
- * Deliberately narrow: totals, counts and coverage — never the rows themselves.
- * A full row dump would break on every cosmetic change and would put descriptions
- * (employer names, suppliers) into a file that outlives the fixture.
- *
- * Shared by the recorder script and the golden suites, so the two can never
- * compare different things.
+ * The slice of parser output that gets recorded and compared: totals, counts and
+ * coverage, never the rows — a dump would churn on cosmetics and put employer and
+ * supplier names in a file outliving the fixture. Shared by recorder and suites.
  */
 import type { ParsedBankStatement } from "../modules/bank/bankParser.service";
 import type { ParsedSchedule } from "../modules/loans/loanSchedule.parser";

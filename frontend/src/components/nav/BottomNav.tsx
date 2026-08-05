@@ -3,15 +3,9 @@ import { NavLink, useLocation } from "react-router-dom";
 import { MANAGE_NAV, PRIMARY_NAV } from "../../app/navigation";
 
 /**
- * Mobile bottom tab bar (hidden on desktop via CSS).
- *
- * Four daily destinations plus an "עוד" sheet = 5 targets, within the ≤5
- * mobile-nav guideline (IA §8.1). The sheet holds דוחות + הגדרות וניהול.
- *
- * Previously the fifth slot was the manage hub and `דוחות` was dropped with the
- * note "reachable from the manage hub" — it was not: ManagePage has eight tabs
- * and none of them is Reports, so on a phone the whole Reports tab was
- * unreachable. The sheet fixes that dead end.
+ * Mobile bottom tab bar. Four daily destinations plus an "עוד" sheet = 5 targets
+ * (IA §8.1); the sheet holds דוחות + הגדרות וניהול. Reports must stay in the
+ * sheet — it is on no other mobile route, so dropping it strands the tab.
  */
 const PRIMARY_ITEMS = [PRIMARY_NAV[0], PRIMARY_NAV[1], PRIMARY_NAV[2], PRIMARY_NAV[3]];
 const MORE_ITEMS = [PRIMARY_NAV[4], MANAGE_NAV];

@@ -1,19 +1,10 @@
 /**
- * The contract for talking to the user instead of failing at her.
+ * The contract for talking to the user instead of failing at her: a flow that
+ * cannot finish returns what it DID work out (`says`, `facts`) plus the specific
+ * thing it needs (`questions`). No LLM — the parsers' own knowledge, surfaced.
  *
- * The app already knows a great deal at the moment it gives up: the detector can
- * name the header words it matched, the parser knows how many rows it read, the
- * loan importer knows exactly which figure it had to reconstruct. All of that was
- * being thrown away as a 400 with one sentence.
- *
- * A flow that cannot finish now returns what it DID work out (`says`, `facts`)
- * plus the specific thing it needs (`questions`). Nothing here needs an LLM — it
- * is the parsers' own knowledge, surfaced instead of discarded.
- *
- * **Deliberately stateless.** A pending flow keeps no server-side session and no
- * buffered upload: the client re-sends the same file together with `answers`.
- * An in-memory buffer would not survive a restart, and a blob in the database
- * belongs to the document centre, not here.
+ * Deliberately stateless: the client re-sends the file together with `answers`,
+ * so no server-side session or buffered upload has to survive a restart.
  */
 
 export type AssistantAnswerKind = "choice" | "confirm" | "number" | "text";
@@ -48,13 +39,10 @@ export interface AssistantFact {
 }
 
 /**
- * One turn of the conversation.
- *
- * `status` is what the caller branches on:
+ * One turn of the conversation. The caller branches on `status`:
  *  - `done`          — finished, nothing needed.
- *  - `needs_answers` — cannot proceed until the questions are answered.
- *  - `info`          — finished, but something is worth saying or asking
- *                      optionally (e.g. "the opening amount is reconstructed").
+ *  - `needs_answers` — blocked until the questions are answered.
+ *  - `info`          — finished, but something is worth saying.
  */
 export interface AssistantStep {
   status: "done" | "needs_answers" | "info";
