@@ -10,6 +10,7 @@ import {
   YAxis,
 } from "recharts";
 import { AsyncSection } from "../components/common/AsyncSection";
+import { PageShell } from "../components/common/PageShell";
 import { Card } from "../components/common/Card";
 import { EmptyState } from "../components/common/EmptyState";
 import { SkeletonChart } from "../components/common/Skeleton";
@@ -43,7 +44,7 @@ export default function ReportsPage() {
   const chrome = chartChrome();
 
   return (
-    <>
+    <PageShell>
       <AsyncSection
         resource={reportRes}
         errorTitle="לא הצלחנו לטעון את הדוח"
@@ -174,6 +175,6 @@ export default function ReportsPage() {
           </AsyncSection>
         </Card>
       </div>
-    </>
+    </PageShell>
   );
 }

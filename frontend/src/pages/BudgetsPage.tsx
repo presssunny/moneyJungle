@@ -1,5 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { AsyncSection } from "../components/common/AsyncSection";
+import { PageShell } from "../components/common/PageShell";
 import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
 import { useConfirm } from "../components/common/ConfirmDialog";
@@ -189,11 +190,14 @@ export default function BudgetsPage() {
   );
 
   return (
-    <>
-      <div className="page-toolbar">
-        <Button onClick={() => setFormOpen(true)}>+ הגדרת תקציב</Button>
-        <Button variant="outline" onClick={copyFromPrevious}>העתקה מחודש קודם ⧉</Button>
-      </div>
+    <PageShell
+      toolbar={
+        <>
+          <Button onClick={() => setFormOpen(true)}>+ הגדרת תקציב</Button>
+          <Button variant="outline" onClick={copyFromPrevious}>העתקה מחודש קודם ⧉</Button>
+        </>
+      }
+    >
 
       {message && <div className="info-banner">{message}</div>}
 
@@ -371,6 +375,6 @@ export default function BudgetsPage() {
       </Modal>
 
       {confirm.dialog}
-    </>
+    </PageShell>
   );
 }

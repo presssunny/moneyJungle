@@ -8,6 +8,7 @@ import { EmptyState } from "../components/common/EmptyState";
 import { ErrorMessage } from "../components/common/ErrorMessage";
 import { Input } from "../components/common/Input";
 import { Modal } from "../components/common/Modal";
+import { PageShell } from "../components/common/PageShell";
 import { Select } from "../components/common/Select";
 import { SkeletonKpiRow, SkeletonRows } from "../components/common/Skeleton";
 import { Table, type Column } from "../components/common/Table";
@@ -234,16 +235,18 @@ export default function LoansPage() {
   ];
 
   return (
-    <>
-      <div className="page-toolbar">
-        <Button onClick={openCreate}>+ הוספת הלוואה</Button>
-        {closed.length > 0 && (
-          <Button variant="ghost" onClick={() => setShowClosed((v) => !v)}>
-            {showClosed ? "הסתרת" : "הצגת"} הלוואות שנסגרו ({closed.length})
-          </Button>
-        )}
-      </div>
-
+    <PageShell
+      toolbar={
+        <>
+          <Button onClick={openCreate}>+ הוספת הלוואה</Button>
+          {closed.length > 0 && (
+            <Button variant="ghost" onClick={() => setShowClosed((v) => !v)}>
+              {showClosed ? "הסתרת" : "הצגת"} הלוואות שנסגרו ({closed.length})
+            </Button>
+          )}
+        </>
+      }
+    >
       {/* ---------- Summary ---------- */}
       <AsyncSection
         resource={loansRes}
@@ -561,6 +564,6 @@ export default function LoansPage() {
       </Modal>
 
       {confirm.dialog}
-    </>
+    </PageShell>
   );
 }

@@ -1,5 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { AsyncSection } from "../components/common/AsyncSection";
+import { PageShell } from "../components/common/PageShell";
 import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
 import { useConfirm } from "../components/common/ConfirmDialog";
@@ -270,11 +271,14 @@ export default function BankPage() {
   const txFiltersActive = txSearch.trim() !== "" || txTypeFilter !== "";
 
   return (
-    <>
-      <div className="page-toolbar">
-        <Button onClick={() => setAccountOpen(true)}>+ חשבון בנק</Button>
-        {selected && <Button variant="outline" onClick={() => setTxOpen(true)}>+ תנועה</Button>}
-      </div>
+    <PageShell
+      toolbar={
+        <>
+          <Button onClick={() => setAccountOpen(true)}>+ חשבון בנק</Button>
+          {selected && <Button variant="outline" onClick={() => setTxOpen(true)}>+ תנועה</Button>}
+        </>
+      }
+    >
 
       {/* KPI (§6.3) — the selected account, inside the selected month. */}
       <div className="kpi-row">
@@ -543,6 +547,6 @@ export default function BankPage() {
       </Modal>
 
       {confirm.dialog}
-    </>
+    </PageShell>
   );
 }

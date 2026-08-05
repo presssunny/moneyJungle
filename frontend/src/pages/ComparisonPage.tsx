@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { AsyncSection } from "../components/common/AsyncSection";
+import { PageShell } from "../components/common/PageShell";
 import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
 import { EmptyState } from "../components/common/EmptyState";
@@ -49,7 +50,7 @@ export default function ComparisonPage() {
   const sortIndicator = (key: SortKey) => (sort.key === key ? (sort.desc ? " ▼" : " ▲") : "");
 
   return (
-    <>
+    <PageShell>
       <AsyncSection
         resource={reportRes}
         errorTitle="לא הצלחנו לטעון את ההשוואה"
@@ -213,6 +214,6 @@ export default function ComparisonPage() {
           }}
         </AsyncSection>
       </Card>
-    </>
+    </PageShell>
   );
 }

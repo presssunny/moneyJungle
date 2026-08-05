@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AsyncSection } from "../components/common/AsyncSection";
+import { PageShell } from "../components/common/PageShell";
 import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
 import { useConfirm } from "../components/common/ConfirmDialog";
@@ -303,27 +304,30 @@ export default function CreditPage() {
   });
 
   return (
-    <>
-      <div className="page-toolbar">
-        <Button onClick={() => fileRef.current?.click()} disabled={uploading}>
-          {uploading ? "מעלה..." : "ייבוא דוח אשראי 📂"}
-        </Button>
-        <Button variant="outline" onClick={reapplyRules}>סיווג אוטומטי מחדש 🏷️</Button>
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".xlsx,.xls,.csv"
-          hidden
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) onUpload(file);
-            e.target.value = "";
-          }}
-        />
-        <span className="text-muted">
-          מעלים קובץ מכל חברת אשראי (כאל / מקס / ישראכרט...) — העסקאות מפוצלות אוטומטית לפי חודש החיוב, מסווגות לפי חוקים, ותנועות "אשראי מתגלגל" לא נספרות כהוצאה
-        </span>
-      </div>
+    <PageShell
+      toolbar={
+        <>
+          <Button onClick={() => fileRef.current?.click()} disabled={uploading}>
+            {uploading ? "מעלה..." : "ייבוא דוח אשראי 📂"}
+          </Button>
+          <Button variant="outline" onClick={reapplyRules}>סיווג אוטומטי מחדש 🏷️</Button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".xlsx,.xls,.csv"
+            hidden
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) onUpload(file);
+              e.target.value = "";
+            }}
+          />
+          <span className="text-muted">
+            מעלים קובץ מכל חברת אשראי (כאל / מקס / ישראכרט...) — העסקאות מפוצלות אוטומטית לפי חודש החיוב, מסווגות לפי חוקים, ותנועות "אשראי מתגלגל" לא נספרות כהוצאה
+          </span>
+        </>
+      }
+    >
 
       {message && <div className="info-banner">{message}</div>}
       {detailError && (
@@ -567,6 +571,6 @@ export default function CreditPage() {
       </Modal>
 
       {confirmDialog.dialog}
-    </>
+    </PageShell>
   );
 }

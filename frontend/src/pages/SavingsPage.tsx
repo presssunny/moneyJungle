@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { AsyncSection } from "../components/common/AsyncSection";
+import { PageShell } from "../components/common/PageShell";
 import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
 import { useConfirm } from "../components/common/ConfirmDialog";
@@ -112,10 +113,13 @@ export default function SavingsPage() {
   const completion = totalTarget > 0 ? (totalSaved / totalTarget) * 100 : null;
 
   return (
-    <>
-      <div className="page-toolbar">
-        <Button onClick={openCreate}>+ יעד חיסכון</Button>
-      </div>
+    <PageShell
+      toolbar={
+        <>
+          <Button onClick={openCreate}>+ יעד חיסכון</Button>
+        </>
+      }
+    >
 
       {/* KPI (§6.4) */}
       <div className="kpi-row">
@@ -264,6 +268,6 @@ export default function SavingsPage() {
       </Modal>
 
       {confirm.dialog}
-    </>
+    </PageShell>
   );
 }
