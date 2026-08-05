@@ -8,16 +8,14 @@ import {
   type AssistantStep,
 } from "../assistant/assistant.types";
 import { bankService } from "../bank/bank.service";
+import { documentsService } from "../documents/documents.service";
 import { creditService } from "../credit/credit.service";
 import { detectStatement, type StatementKind } from "./statementDetector.service";
 
 /**
- * One upload point for statements: reads the file, decides whether it is a bank
- * or a card statement, routes it to the matching importer and reports what it
- * detected and what went in. The user has a file, not a category.
- *
- * Nothing is imported when detection is unsure — a bank statement parsed as a
- * card statement produces silent nonsense, which is worse than a question.
+ * One upload point: reads the file, decides bank or card, routes it and reports
+ * what it found. The user has a file, not a category. Unsure means nothing is
+ * imported — silent nonsense is worse than a question.
  */
 export interface SmartImportResult {
   kind: StatementKind;
@@ -86,6 +84,8 @@ export const smartImportService = {
     forcedKind?: StatementKind,
     answers?: AssistantAnswers
   ): Promise<SmartImportResult> {
+    // Recorded once the outcome is known — see `record` below.
+    const fileSize = buffer.byteLength;
     const detection = detectStatement(buffer, fileName);
     // An answered question outranks detection: the user has the file in front of
     // her and the app does not.
@@ -128,6 +128,15 @@ export const smartImportService = {
     // to mis-read it. It has its own home, so route the user there instead of
     // parsing it as transactions.
     if (kind === "loan_schedule") {
+      await documentsService.record(userId, {
+        fileName,
+        fileHash: detection.fileHash,
+        sizeBytes: fileSize,
+        kind: "loan_schedule",
+        status: "rejected",
+        detection: { reason: detection.reason, signals: detection.matchedSignals },
+        note: "לוח סילוקין — יש להעלות אותו במסך ההלוואות",
+      });
       return {
         kind: "loan_schedule",
         detectionReason: detection.reason,
@@ -163,6 +172,17 @@ export const smartImportService = {
     if (kind === "credit") {
       const result = await creditService.createImport(userId, fileName, buffer);
       if (result.alreadyImported) {
+        await documentsService.record(userId, {
+          fileName,
+          fileHash: detection.fileHash,
+          sizeBytes: fileSize,
+          kind: "credit_report",
+          status: "superseded",
+          rowsParsed: result.parsedRows,
+          rowsSkipped: result.skippedDuplicates,
+          detection: { reason: detection.reason, signals: detection.matchedSignals },
+          note: "כל העסקאות כבר היו קיימות",
+        });
         return {
           ...base,
           parsedRows: result.parsedRows,
@@ -186,6 +206,17 @@ export const smartImportService = {
           },
         };
       }
+      await documentsService.record(userId, {
+        fileName,
+        fileHash: detection.fileHash,
+        sizeBytes: fileSize,
+        kind: "credit_report",
+        linkedCreditImportId: result.id,
+        rowsParsed: result.parsedRows,
+        rowsImported: result.totalTransactions,
+        rowsSkipped: result.skippedDuplicates,
+        detection: { reason: detection.reason, signals: detection.matchedSignals },
+      });
       return {
         ...base,
         parsedRows: result.parsedRows,
@@ -266,6 +297,21 @@ export const smartImportService = {
         auto.financingCredited.count +
         auto.cardUnitemized.count
       : 0;
+    await documentsService.record(userId, {
+      fileName,
+      fileHash: detection.fileHash,
+      sizeBytes: fileSize,
+      kind: "bank_statement",
+      status: result.imported === 0 && result.parsed > 0 ? "superseded" : "imported",
+      linkedAccountId: account.id,
+      // The parser reports coverage as ISO strings on its own report.
+      coverageFrom: result.report.coverageFrom ? new Date(result.report.coverageFrom) : null,
+      coverageTo: result.report.coverageTo ? new Date(result.report.coverageTo) : null,
+      rowsParsed: result.parsed,
+      rowsImported: result.imported,
+      rowsSkipped: result.skippedDuplicates,
+      detection: { reason: detection.reason, signals: detection.matchedSignals },
+    });
     return {
       ...base,
       parsedRows: result.parsed,
