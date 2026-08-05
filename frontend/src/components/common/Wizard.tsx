@@ -2,15 +2,9 @@ import { useState, type ReactNode } from "react";
 import { Button } from "./Button";
 
 /**
- * One question at a time, with a card that fills in as you answer.
- *
- * A 20-field form asks for everything before it has earned anything; a wizard
- * asks for one thing, shows what it now knows, and asks the next. The running
- * summary is the point — it turns data entry into visible progress instead of a
- * wall of empty inputs.
- *
- * Steps declare their own validity, so "next" is never enabled on a step the
- * user has not actually completed, and optional steps can be skipped outright.
+ * One question at a time, with a running summary card that turns data entry into
+ * visible progress. Steps declare their own validity, so "next" is never enabled
+ * on an incomplete step and optional steps can be skipped outright.
  */
 
 export interface WizardStep {

@@ -1,10 +1,7 @@
 /**
- * End-to-end smoke over the real Express app. Runs without a database on purpose
- * — health, 404/401 shapes, validation and the login throttle are all decided
- * before any query — so it stays runnable anywhere while still proving the app
- * boots with every route and middleware loaded.
- *
- * The DB-backed round trip at the bottom skips itself when MariaDB is not up.
+ * Smoke over the real Express app, without a database: health, 404/401 shapes,
+ * validation and the login throttle are all decided before any query. The
+ * DB-backed round trip at the bottom skips itself when MariaDB is not up.
  */
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";

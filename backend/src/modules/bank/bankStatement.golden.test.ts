@@ -1,10 +1,6 @@
 /**
- * The bank statement parsers, verified against the real exports on disk, in two
- * layers: invariants that hold for any statement and carry no figure from the
- * account (balance replay, bucket partition), and a git-ignored golden snapshot
- * for numeric drift the invariants let through — a row moving from spending to
- * financing keeps both sums balanced but changes what the dashboard reports.
- *
+ * Two layers: invariants that hold for any statement and carry no figure from the
+ * account, plus a git-ignored golden snapshot for numeric drift they let through.
  * Without fixtures the suites skip. See tests/fixtures/README.md.
  */
 import { beforeAll, describe, expect, it } from "vitest";

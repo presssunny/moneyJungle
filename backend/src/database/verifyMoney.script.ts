@@ -102,12 +102,9 @@ async function verifyUser(userId: number) {
       : `רשומה מיותרת ב-${strayRecord.map((r) => r.id).join(", ")}`
   );
 
-  // The records the resolver owns must equal the buckets.
-  //
-  // Only LINKED records are compared. The tables also hold rows the user entered
-  // by hand — `incomes` has no source column at all — and demanding that the
-  // whole table equal the bank buckets would call every manual entry a defect.
-  // What the resolver is answerable for is the rows it created and links to.
+  // Only LINKED records are compared: the tables also hold hand-entered rows, and
+  // `incomes` has no source column, so comparing whole tables would call every
+  // manual entry a defect.
   const linkedIncomeIds = shaped.map((r) => r.linkedIncomeId).filter((id): id is number => id !== null);
   const linkedExpenseIds = shaped.map((r) => r.linkedExpenseId).filter((id): id is number => id !== null);
 
@@ -168,7 +165,7 @@ async function verifyUser(userId: number) {
     );
   }
 
-  // 5. bank ↔ credit: a card counted as spend must not also be itemized.
+  // A card counted as spend must not also be itemized in the credit module.
   const settledCards = shaped.filter((r) => r.resolution === "credit_card_settled").length;
   const unitemizedCards = shaped.filter((r) => r.resolution === "credit_card_unitemized").length;
   const creditRows = await prisma.creditTransaction.count({
