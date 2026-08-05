@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { AsyncSection } from "../components/common/AsyncSection";
+import { PageShell } from "../components/common/PageShell";
 import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
 import { EmptyState } from "../components/common/EmptyState";
@@ -90,173 +91,175 @@ export default function BankReconcilePage() {
   }
 
   return (
-    <div className="reconcile-page">
-      <AsyncSection
-        resource={res}
-        errorTitle="לא הצלחנו לטעון את נתוני ההתאמה"
-        skeleton={<SkeletonRows rows={6} />}
-        isEmpty={(d) => d.summary.total === 0}
-        emptyState={
-          <EmptyState
-            icon="🏦"
-            title="אין תנועות בנק לייבוא"
-            hint="ייבאי דוח עו״ש בטאב הבנק, וכאן תוכלי לשייך כל שורה למקום הנכון."
-          />
-        }
-      >
-        {(data) => (
-          <>
-            <div className="reconcile-summary" aria-label="סיכום התאמה">
-              <SummaryChip label="שורות בדוח" value={data.summary.total} tone="default" />
-              <SummaryChip label="דורש תשומת לב" value={data.summary.needsReview} tone="danger" />
-              <SummaryChip
-                label="ללא סיווג"
-                value={data.summary.unresolved}
-                tone={data.summary.unresolved > 0 ? "danger" : "success"}
-              />
-              <SummaryChip label="מוחרגים (כפל ספירה)" value={data.summary.excluded} tone="default" />
-            </div>
-
-            {/* The whole point of the screen: every shekel in the statement, and
-                which figure in the app it ended up in. A row that is absent from
-                the expense total is listed here saying where it went instead. */}
-            <Card title="לאן הלך כל שקל בדוח">
-              <p className="muted">
-                כל שורה בדוח מקבלת סיווג. סכומים שאינם הוצאה שוטפת — קרן הלוואה, חיוב אשראי שכבר
-                מפורט בטאב אשראי, העברה פנימית — מופיעים כאן בשם שלהם, כדי שהסכומים בדשבורד לא
-                ייראו חסרים.
-              </p>
-              {data.summary.unresolved > 0 && (
-                <p className="tone-danger">
-                  ⚠ {data.summary.unresolved} שורות ללא סיווג — הן אינן נספרות באף מספר במערכת.
-                </p>
-              )}
-              <ResolutionBreakdown data={data} />
-              <div className="row-actions">
-                <Button onClick={runAuto} disabled={busy}>
-                  סווגי מחדש את כל הדוח 🪄
-                </Button>
+    <PageShell>
+      <div className="reconcile-page">
+        <AsyncSection
+          resource={res}
+          errorTitle="לא הצלחנו לטעון את נתוני ההתאמה"
+          skeleton={<SkeletonRows rows={6} />}
+          isEmpty={(d) => d.summary.total === 0}
+          emptyState={
+            <EmptyState
+              icon="🏦"
+              title="אין תנועות בנק לייבוא"
+              hint="ייבאי דוח עו״ש בטאב הבנק, וכאן תוכלי לשייך כל שורה למקום הנכון."
+            />
+          }
+        >
+          {(data) => (
+            <>
+              <div className="reconcile-summary" aria-label="סיכום התאמה">
+                <SummaryChip label="שורות בדוח" value={data.summary.total} tone="default" />
+                <SummaryChip label="דורש תשומת לב" value={data.summary.needsReview} tone="danger" />
+                <SummaryChip
+                  label="ללא סיווג"
+                  value={data.summary.unresolved}
+                  tone={data.summary.unresolved > 0 ? "danger" : "success"}
+                />
+                <SummaryChip label="מוחרגים (כפל ספירה)" value={data.summary.excluded} tone="default" />
               </div>
-              {autoResult && <ResolveReport result={autoResult} />}
-            </Card>
 
-            {/* ----- דורש תשומת לב ----- */}
-            {data.needsReview.length > 0 && (
-              <Card title={`דורש תשומת לב (${data.needsReview.length})`}>
+              {/* The whole point of the screen: every shekel in the statement, and
+                  which figure in the app it ended up in. A row that is absent from
+                  the expense total is listed here saying where it went instead. */}
+              <Card title="לאן הלך כל שקל בדוח">
                 <p className="muted">
-                  השורות האלו סווגו — הכסף נספר או הוחרג במפורש — אבל הסיווג מבוסס על מה שהדוח לא
-                  אומר במלואו. הסיבה רשומה ליד כל שורה, ואפשר לשנות ידנית.
+                  כל שורה בדוח מקבלת סיווג. סכומים שאינם הוצאה שוטפת — קרן הלוואה, חיוב אשראי שכבר
+                  מפורט בטאב אשראי, העברה פנימית — מופיעים כאן בשם שלהם, כדי שהסכומים בדשבורד לא
+                  ייראו חסרים.
                 </p>
-                <div className="reconcile-list">
-                  {data.needsReview.map((row) => (
-                    <ReviewRow key={row.id} row={row} busy={busy} run={run} />
-                  ))}
+                {data.summary.unresolved > 0 && (
+                  <p className="tone-danger">
+                    ⚠ {data.summary.unresolved} שורות ללא סיווג — הן אינן נספרות באף מספר במערכת.
+                  </p>
+                )}
+                <ResolutionBreakdown data={data} />
+                <div className="row-actions">
+                  <Button onClick={runAuto} disabled={busy}>
+                    סווגי מחדש את כל הדוח 🪄
+                  </Button>
                 </div>
+                {autoResult && <ResolveReport result={autoResult} />}
               </Card>
-            )}
 
-            {/* ----- הכנסות שזוהו ----- */}
-            <Card title={`הכנסות שזוהו (${data.incomeCandidates.length})`}>
-              {data.incomeCandidates.length === 0 ? (
-                <p className="muted">אין הפקדות שממתינות לשיוך.</p>
-              ) : (
-                <div className="reconcile-list">
-                  {data.incomeCandidates.map((row) => (
-                    <IncomeRow key={row.id} row={row} busy={busy} run={run} />
-                  ))}
-                </div>
+              {/* ----- דורש תשומת לב ----- */}
+              {data.needsReview.length > 0 && (
+                <Card title={`דורש תשומת לב (${data.needsReview.length})`}>
+                  <p className="muted">
+                    השורות האלו סווגו — הכסף נספר או הוחרג במפורש — אבל הסיווג מבוסס על מה שהדוח לא
+                    אומר במלואו. הסיבה רשומה ליד כל שורה, ואפשר לשנות ידנית.
+                  </p>
+                  <div className="reconcile-list">
+                    {data.needsReview.map((row) => (
+                      <ReviewRow key={row.id} row={row} busy={busy} run={run} />
+                    ))}
+                  </div>
+                </Card>
               )}
-            </Card>
 
-            {/* ----- הלוואות שזוהו ----- */}
-            <Card title={`הלוואות שזוהו (${data.loanGroups.length})`}>
-              {data.loanGroups.length === 0 ? (
-                <p className="muted">לא זוהו תשלומי הלוואה בדוח.</p>
-              ) : (
-                <div className="reconcile-list">
-                  {data.loanGroups.map((group) => (
-                    <LoanGroupCard key={group.loanRef ?? "none"} group={group} busy={busy} run={run} />
-                  ))}
-                </div>
+              {/* ----- הכנסות שזוהו ----- */}
+              <Card title={`הכנסות שזוהו (${data.incomeCandidates.length})`}>
+                {data.incomeCandidates.length === 0 ? (
+                  <p className="muted">אין הפקדות שממתינות לשיוך.</p>
+                ) : (
+                  <div className="reconcile-list">
+                    {data.incomeCandidates.map((row) => (
+                      <IncomeRow key={row.id} row={row} busy={busy} run={run} />
+                    ))}
+                  </div>
+                )}
+              </Card>
+
+              {/* ----- הלוואות שזוהו ----- */}
+              <Card title={`הלוואות שזוהו (${data.loanGroups.length})`}>
+                {data.loanGroups.length === 0 ? (
+                  <p className="muted">לא זוהו תשלומי הלוואה בדוח.</p>
+                ) : (
+                  <div className="reconcile-list">
+                    {data.loanGroups.map((group) => (
+                      <LoanGroupCard key={group.loanRef ?? "none"} group={group} busy={busy} run={run} />
+                    ))}
+                  </div>
+                )}
+              </Card>
+
+              {/* ----- הוצאה שוטפת ----- */}
+              <Card title={`משיכות רגילות → הוצאה שוטפת (${data.standardSpend.length})`}>
+                {data.standardSpend.length === 0 ? (
+                  <p className="muted">אין משיכות רגילות שממתינות לשיוך.</p>
+                ) : (
+                  <div className="reconcile-list">
+                    {data.standardSpend.map((row) => (
+                      <SpendRow
+                        key={row.id}
+                        row={row}
+                        busy={busy}
+                        run={run}
+                        categories={expenseCategories.map((c) => ({ value: String(c.id), label: c.name }))}
+                      />
+                    ))}
+                  </div>
+                )}
+              </Card>
+
+              {/* ----- חיובי אשראי ----- */}
+              {data.creditCardPayments.length > 0 && (
+                <Card title={`חיובי כרטיס אשראי (${data.creditCardPayments.length})`}>
+                  <p className="muted">
+                    חיוב שהכרטיס שלו מיובא לטאב אשראי מוחרג מההוצאות — העסקאות עצמן כבר נספרות שם, וספירה
+                    של שני הצדדים תכפיל את אותו כסף. חיוב של כרטיס שאין לו דוח מיובא כן נספר כהוצאה, אחרת
+                    הכסף פשוט נעלם מהמערכת.
+                  </p>
+                  <div className="reconcile-list">
+                    {data.creditCardPayments.map((row) => (
+                      <ReadonlyRow key={row.id} row={row} />
+                    ))}
+                  </div>
+                </Card>
               )}
-            </Card>
 
-            {/* ----- הוצאה שוטפת ----- */}
-            <Card title={`משיכות רגילות → הוצאה שוטפת (${data.standardSpend.length})`}>
-              {data.standardSpend.length === 0 ? (
-                <p className="muted">אין משיכות רגילות שממתינות לשיוך.</p>
-              ) : (
-                <div className="reconcile-list">
-                  {data.standardSpend.map((row) => (
-                    <SpendRow
-                      key={row.id}
-                      row={row}
-                      busy={busy}
-                      run={run}
-                      categories={expenseCategories.map((c) => ({ value: String(c.id), label: c.name }))}
-                    />
-                  ))}
-                </div>
+              {/* ----- מימון (ריבית) ----- */}
+              {data.financingLines.length > 0 && (
+                <Card title={`הוצאות מימון — ריבית (${data.financingLines.length})`}>
+                  <p className="muted">
+                    ריבית הלוואות ומסגרת וזיכויי ריבית. הוצאה מימונית, לא הוצאה שוטפת — מוצגת לידיעה.
+                  </p>
+                  <div className="reconcile-list">
+                    {data.financingLines.map((row) => (
+                      <ReadonlyRow key={row.id} row={row} />
+                    ))}
+                  </div>
+                </Card>
               )}
-            </Card>
 
-            {/* ----- חיובי אשראי ----- */}
-            {data.creditCardPayments.length > 0 && (
-              <Card title={`חיובי כרטיס אשראי (${data.creditCardPayments.length})`}>
-                <p className="muted">
-                  חיוב שהכרטיס שלו מיובא לטאב אשראי מוחרג מההוצאות — העסקאות עצמן כבר נספרות שם, וספירה
-                  של שני הצדדים תכפיל את אותו כסף. חיוב של כרטיס שאין לו דוח מיובא כן נספר כהוצאה, אחרת
-                  הכסף פשוט נעלם מהמערכת.
-                </p>
-                <div className="reconcile-list">
-                  {data.creditCardPayments.map((row) => (
-                    <ReadonlyRow key={row.id} row={row} />
-                  ))}
-                </div>
-              </Card>
-            )}
-
-            {/* ----- מימון (ריבית) ----- */}
-            {data.financingLines.length > 0 && (
-              <Card title={`הוצאות מימון — ריבית (${data.financingLines.length})`}>
-                <p className="muted">
-                  ריבית הלוואות ומסגרת וזיכויי ריבית. הוצאה מימונית, לא הוצאה שוטפת — מוצגת לידיעה.
-                </p>
-                <div className="reconcile-list">
-                  {data.financingLines.map((row) => (
-                    <ReadonlyRow key={row.id} row={row} />
-                  ))}
-                </div>
-              </Card>
-            )}
-
-            {/* ----- הושלמו ----- */}
-            {data.done.length > 0 && (
-              <Card title={`הושלמו (${data.done.length})`}>
-                <div className="reconcile-list">
-                  {data.done.map((row) => (
-                    <div key={row.id} className="reconcile-row done">
-                      <span className="reconcile-date mono">{formatDate(row.date)}</span>
-                      <span className="reconcile-desc">{row.description}</span>
-                      <span className="reconcile-amount mono">{formatCurrency(row.amount)}</span>
-                      <span className="reconcile-note">{row.resolutionLabel ?? "ללא סיווג"}</span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={busy}
-                        onClick={() => run(() => reconcileReset(row.id), "השיוך בוטל")}
-                      >
-                        בטל שיוך
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            )}
-          </>
-        )}
-      </AsyncSection>
-    </div>
+              {/* ----- הושלמו ----- */}
+              {data.done.length > 0 && (
+                <Card title={`הושלמו (${data.done.length})`}>
+                  <div className="reconcile-list">
+                    {data.done.map((row) => (
+                      <div key={row.id} className="reconcile-row done">
+                        <span className="reconcile-date mono">{formatDate(row.date)}</span>
+                        <span className="reconcile-desc">{row.description}</span>
+                        <span className="reconcile-amount mono">{formatCurrency(row.amount)}</span>
+                        <span className="reconcile-note">{row.resolutionLabel ?? "ללא סיווג"}</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={busy}
+                          onClick={() => run(() => reconcileReset(row.id), "השיוך בוטל")}
+                        >
+                          בטל שיוך
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              )}
+            </>
+          )}
+        </AsyncSection>
+      </div>
+    </PageShell>
   );
 }
 

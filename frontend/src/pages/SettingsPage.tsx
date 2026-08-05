@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Card } from "../components/common/Card";
+import { PageShell } from "../components/common/PageShell";
 import { SkeletonRows } from "../components/common/Skeleton";
 import { WidgetError } from "../components/common/WidgetError";
 import { THEMES, useTheme } from "../context/ThemeContext";
@@ -25,7 +26,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <>
+    <PageShell>
       <Card title="הגדרות · ערכת נושא">
         <p className="settings-hint">הצבע מתחלף מיידית בכל האפליקציה ונשמר גם אחרי רענון</p>
         <div className="theme-grid">
@@ -85,6 +86,6 @@ export default function SettingsPage() {
           </>
         )}
       </Card>
-    </>
+    </PageShell>
   );
 }

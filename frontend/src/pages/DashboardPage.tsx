@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AsyncSection } from "../components/common/AsyncSection";
+import { PageShell } from "../components/common/PageShell";
 import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
 import { EmptyState } from "../components/common/EmptyState";
@@ -158,7 +159,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <>
+    <PageShell>
       <UpdatesTicker key={tickerKey} />
 
       <div className="page-toolbar">
@@ -468,7 +469,7 @@ export default function DashboardPage() {
           reloadAll();
         }}
       />
-    </>
+    </PageShell>
   );
 }
 

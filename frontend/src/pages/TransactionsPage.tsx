@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AsyncSection } from "../components/common/AsyncSection";
+import { PageShell } from "../components/common/PageShell";
 import { Card } from "../components/common/Card";
 import { EmptyState } from "../components/common/EmptyState";
 import { QuickAddBar } from "../components/common/QuickAddBar";
@@ -87,7 +88,7 @@ export default function TransactionsPage() {
   const largest = rows.reduce((max, row) => Math.max(max, Number(row.amount)), 0);
 
   return (
-    <>
+    <PageShell>
       <QuickAddBar onAdded={refreshAll} />
 
       {/* KPI (§4.2) */}
@@ -171,6 +172,6 @@ export default function TransactionsPage() {
           { key: "import", label: "ייבוא אקסל", icon: "📂", element: <ImportsPage /> },
         ]}
       />
-    </>
+    </PageShell>
   );
 }
