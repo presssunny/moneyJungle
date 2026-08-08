@@ -1,0 +1,13 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+
+# Local tooling state
+.claude/settings.local.json
+
+# Never commit real financial documents, exports or screenshots of them.
+*.xlsx
+*.xls
+*.pdf
+storage/

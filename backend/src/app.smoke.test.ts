@@ -156,7 +156,7 @@ describe("מסלול מלא מול בסיס הנתונים", () => {
       request(app)
         .post("/api/gate/login")
         .set("X-Forwarded-For", "10.10.10.3")
-        .send({ username: "REDACTED_USERNAME", password: "definitely-wrong" }),
+        .send({ username: process.env.APP_GATE_USERNAME ?? "admin", password: "definitely-wrong" }),
     ]);
     expect(badUser.status).toBe(badPassword.status);
     expect(badUser.body).toEqual(badPassword.body);

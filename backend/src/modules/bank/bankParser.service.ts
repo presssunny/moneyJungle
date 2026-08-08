@@ -480,7 +480,7 @@ function monthKey(date: Date): string {
 
 /**
  * Interest credits are account-level: the number on the line is the account
- * (REDACTED_ACCOUNT_NUMBER → "03757"), not a loan. Keeping it as `loanRef` would net interest
+ * (the account number, not a loan). Keeping it as `loanRef` would net interest
  * against an unrelated loan, so it is cleared and the row marked instead.
  */
 function annotateAccountLevelCredits(rows: ParsedBankRow[]): void {

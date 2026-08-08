@@ -29,3 +29,6 @@ Thumbs.db
 # Test fixtures = real bank statements (account numbers, balances). Never commit.
 tests/fixtures/*
 !tests/fixtures/README.md
+
+# Stored uploads = the user's real financial documents. Same rule as fixtures.
+storage/
