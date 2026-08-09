@@ -15,7 +15,8 @@
     "test:fixtures": "ts-node -T src/testing/reportFixtures.ts",
     "test:golden:record": "ts-node -T src/testing/recordGolden.ts",
     "typecheck": "tsc --noEmit",
-    "typecheck:test": "tsc --noEmit -p tsconfig.test.json"
+    "typecheck:test": "tsc --noEmit -p tsconfig.test.json",
+    "lint": "oxlint src"
   },
   "keywords": [],
   "author": "",
@@ -40,6 +41,7 @@
     "@types/multer": "^2.2.0",
     "@types/node": "^26.1.0",
     "@types/supertest": "^7.2.1",
+    "oxlint": "^1.77.0",
     "prisma": "^7.8.0",
     "supertest": "^7.2.2",
     "ts-node": "^10.9.2",

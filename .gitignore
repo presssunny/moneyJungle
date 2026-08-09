@@ -11,3 +11,6 @@ Thumbs.db
 *.xls
 *.pdf
 storage/
+
+# Agent tooling — local development aid, not part of the app.
+.claude/
