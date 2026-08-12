@@ -373,9 +373,10 @@ export default function LoansPage() {
             )}
             {summary.hasScenarioProgress && (
               <div className="info-banner state-scenario">
-                <span aria-hidden>≈</span> אחוזי הפירעון מסומנים כ־<UncertaintyBadge level="scenario" />{" "}
-                כי לוח הסילוקין מתחיל באמצע, והסכום המקורי חושב לאחור. הזנת הסכום מהחוזה תהפוך
-                אותם למדויקים.
+                <span aria-hidden>≈</span> אחוזי הפירעון ומספר התשלומים שנותרו מסומנים כ־
+                <UncertaintyBadge level="scenario" /> — או שהסכום המקורי חושב לאחור, או שאין ספירת
+                תשלומים אמיתית והמספר מגיע מסימולציה. הזנת הסכום מהחוזה, או ייבוא לוח סילוקין,
+                יהפכו אותם למדויקים.
               </div>
             )}
             <div className="loan-list">
