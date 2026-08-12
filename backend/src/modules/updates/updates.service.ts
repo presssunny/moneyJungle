@@ -1,6 +1,6 @@
 import { prisma } from "../../config/database";
-import { addDays, daysUntil, monthRange, startOfToday } from "../../utils/date.utils";
-import { decimalToNumber, percent, round2 } from "../../utils/money.utils";
+import { addDays, daysUntil, monthRange, relativeDayLabel, startOfToday } from "../../utils/date.utils";
+import { decimalToNumber, formatILS, percent, round2 } from "../../utils/money.utils";
 import { spentByCategory } from "../dashboard/dashboard.service";
 import { computeLoan } from "../loans/loanCalculator.service";
 import { loansRepository } from "../loans/loans.repository";
@@ -21,18 +21,6 @@ export interface TickerItem {
 const SEVERITY_ORDER: Record<TickerSeverity, number> = { critical: 0, warning: 1, info: 2 };
 const BUDGET_WARN_PERCENT = 85;
 
-function relativeDay(date: Date): string {
-  const days = daysUntil(date);
-  if (days <= 0) return "היום";
-  if (days === 1) return "מחר";
-  if (days <= 7) return `בעוד ${days} ימים`;
-  return date.toLocaleDateString("he-IL", { day: "2-digit", month: "2-digit" });
-}
-
-function formatILS(amount: number): string {
-  return `₪${amount.toLocaleString("he-IL", { maximumFractionDigits: 0 })}`;
-}
-
 export const updatesService = {
   async ticker(userId: number): Promise<TickerItem[]> {
     const items: TickerItem[] = [];
@@ -49,7 +37,7 @@ export const updatesService = {
         id: `reminder-${reminder.id}`,
         type: "reminder",
         icon: reminder.icon ?? "🔔",
-        text: `${relativeDay(reminder.eventDate)}: ${reminder.title}${amount}`,
+        text: `${relativeDayLabel(reminder.eventDate)}: ${reminder.title}${amount}`,
         severity: daysUntil(reminder.eventDate) <= 1 ? "warning" : "info",
         linkTo: "/calendar",
         date: reminder.eventDate.toISOString(),
@@ -71,7 +59,7 @@ export const updatesService = {
         id: `recurring-${payment.id}`,
         type: "recurring_payment",
         icon: "🔁",
-        text: `${relativeDay(payment.nextPaymentDate)}: חיוב ${payment.name} ${formatILS(decimalToNumber(payment.amount))}`,
+        text: `${relativeDayLabel(payment.nextPaymentDate)}: חיוב ${payment.name} ${formatILS(decimalToNumber(payment.amount))}`,
         severity: "info",
         linkTo: "/recurring",
         date: payment.nextPaymentDate.toISOString(),
@@ -82,7 +70,7 @@ export const updatesService = {
         id: `subscription-${subscription.id}`,
         type: "subscription",
         icon: "📺",
-        text: `${relativeDay(subscription.billingDate)}: חיוב מנוי ${subscription.name} ${formatILS(decimalToNumber(subscription.amount))}`,
+        text: `${relativeDayLabel(subscription.billingDate)}: חיוב מנוי ${subscription.name} ${formatILS(decimalToNumber(subscription.amount))}`,
         severity: "info",
         linkTo: "/subscriptions",
         date: subscription.billingDate.toISOString(),
