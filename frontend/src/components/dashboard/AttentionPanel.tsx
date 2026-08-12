@@ -1,19 +1,11 @@
 import { Link } from "react-router-dom";
+import type { AttentionItem } from "../../types/models";
 import { Card } from "../common/Card";
 
-export interface AttentionItem {
-  id: string;
-  icon: string;
-  text: string;
-  to: string;
-  tone: "info" | "warning" | "critical";
-}
-
 /**
- * "מוקדי תשומת לב" (IA §3.3) — replaces the KPI cards that moved to their own
- * tabs. Each line is a sentence plus a link to the tab that can resolve it, so
- * the home tab answers "what needs me?" instead of repeating numbers that are
- * already shown elsewhere (rule §1.1).
+ * "מוקדי תשומת לב" (IA §3.3) — each line is a sentence plus a link to the tab
+ * that resolves it. Arrives already merged and deduped from GET
+ * /dashboard/attention; this component only renders.
  */
 export function AttentionPanel({ items }: { items: AttentionItem[] }) {
   if (items.length === 0) return null;

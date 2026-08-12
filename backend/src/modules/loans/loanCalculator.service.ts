@@ -96,9 +96,9 @@ export interface LoanProgress {
   paymentsRemaining: number | null;
   totalPayments: number | null;
   /**
-   * How sure the progress figures are (IA §1.2). "measured" once the schedule
-   * came from the bank AND the opening amount is known; "scenario" while either
-   * is reconstructed or simulated. Never surfaced as a plain confident number.
+   * How sure the progress figures are (IA §1.2). "measured" needs all three: a
+   * bank schedule, a known opening amount, and real payment counts — otherwise
+   * `paymentsRemaining` is a Spitzer simulation, marked "scenario".
    */
   certainty: "measured" | "scenario";
 }
@@ -124,6 +124,7 @@ export function loanProgress(loan: LoanProgressInput): LoanProgress {
     }).remainingMonths;
   }
 
+  const simulatedRemaining = loan.totalPayments === null || loan.paymentsMade === null;
   const closed = loan.status === "finished" || loan.currentBalance <= 0.005;
   const lifecycle: LoanLifecycle = closed
     ? "closed"
@@ -141,7 +142,9 @@ export function loanProgress(loan: LoanProgressInput): LoanProgress {
     paymentsRemaining: closed ? 0 : remaining,
     totalPayments: loan.totalPayments,
     certainty:
-      loan.scheduleSource === "bank_file" && loan.originalAmountSource !== "reconstructed"
+      loan.scheduleSource === "bank_file" &&
+      loan.originalAmountSource !== "reconstructed" &&
+      !simulatedRemaining
         ? "measured"
         : "scenario",
   };

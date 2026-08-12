@@ -12,4 +12,5 @@ dashboardRoutes.get("/charts", validate({ query: monthQuerySchema }), dashboardC
 dashboardRoutes.get("/recent-transactions", dashboardController.recent);
 dashboardRoutes.get("/insights", validate({ query: monthQuerySchema }), dashboardController.insights);
 dashboardRoutes.get("/achievements", validate({ query: monthQuerySchema }), dashboardController.achievements);
+dashboardRoutes.get("/attention", validate({ query: monthQuerySchema }), dashboardController.attention);
 dashboardRoutes.get("/upcoming", dashboardController.upcoming);

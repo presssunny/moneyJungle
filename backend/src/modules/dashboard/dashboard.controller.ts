@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { MonthQuery, resolveMonth } from "../../utils/validation.utils";
 import { buildAchievements } from "./achievements.service";
+import { buildAttention } from "./attention.service";
 import { buildUpcoming } from "./cashflow.service";
 import { dashboardService } from "./dashboard.service";
 import { buildInsights } from "./insights.service";
@@ -29,6 +30,11 @@ export const dashboardController = {
   achievements: asyncHandler(async (req: Request, res: Response) => {
     const { year, month } = resolveMonth((req.validated?.query ?? {}) as MonthQuery);
     res.json(await buildAchievements(req.userId!, year, month));
+  }),
+
+  attention: asyncHandler(async (req: Request, res: Response) => {
+    const { year, month } = resolveMonth((req.validated?.query ?? {}) as MonthQuery);
+    res.json(await buildAttention(req.userId!, year, month));
   }),
 
   upcoming: asyncHandler(async (req: Request, res: Response) => {

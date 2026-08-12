@@ -1,20 +1,52 @@
 import { prisma } from "../../config/database";
 import { monthRange } from "../../utils/date.utils";
-import { decimalToNumber, percent, round2 } from "../../utils/money.utils";
+import { decimalToNumber, formatILS, percent, round2 } from "../../utils/money.utils";
+import { buildUpcoming, type UpcomingResponse } from "../dashboard/cashflow.service";
 import { spentByCategory } from "../dashboard/dashboard.service";
+import { expensesRepository } from "../expenses/expenses.repository";
 import { computeLoan } from "../loans/loanCalculator.service";
 import { loansRepository } from "../loans/loans.repository";
 import { alertsRepository } from "./alerts.repository";
 
+/** The alert types the app knows how to raise (mirrors the comment on `Alert.type`). */
+export type AlertType =
+  | "budget_overrun"
+  | "high_credit_charge"
+  | "duplicate_transaction"
+  | "unused_subscription"
+  | "upcoming_payment"
+  | "balance_drop"
+  | "uncategorized_expense"
+  | "expensive_loan";
+
+/** Same default window as GET /api/dashboard/upcoming, so the two never disagree. */
+export const UPCOMING_WINDOW_DAYS = 45;
+/** Share of one monthly cycle's outflow that makes a single day worth warning about. */
+export const HEAVY_DAY_SHARE = 0.3;
+/** Below this a missing category is noise, not a habit worth an alert. */
+export const UNCATEGORIZED_MIN_ROWS = 5;
+
 interface DetectedAlert {
-  type: string;
+  type: AlertType;
   title: string;
   message: string;
   severity: "info" | "warning" | "critical";
 }
 
-function formatILS(amount: number): string {
-  return `₪${amount.toLocaleString("he-IL", { maximumFractionDigits: 0 })}`;
+export function formatDayMonth(date: Date): string {
+  return `${date.getUTCDate()}/${date.getUTCMonth() + 1}`;
+}
+
+/**
+ * Concentration, not size — a recurring day appears twice in the 45-day window,
+ * so its share is measured against one monthly cycle, not the whole window.
+ * Exported: the unified attention list asks the same question.
+ */
+export function isHeavyDay(upcoming: UpcomingResponse): boolean {
+  const heaviest = upcoming.heaviestDay;
+  if (!heaviest || upcoming.total <= 0 || heaviest.count < 2) return false;
+  const cycleTotal = (upcoming.total * 30) / UPCOMING_WINDOW_DAYS;
+  return heaviest.total >= cycleTotal * HEAVY_DAY_SHARE;
 }
 
 /**
@@ -85,6 +117,26 @@ export async function scanForAlerts(userId: number): Promise<void> {
     }
   }
 
+  // unused_subscription not implemented: nothing advances `billingDate` on its
+  // own, so a staleness check needs a roll-forward job or bank/credit matching —
+  // banker's call, see docs/roadmap-next-phase.md.
+
+  // Payment pressure ahead: several charges on the same day. Same forecast the
+  // dashboard shows, same threshold as the unified attention list (`isHeavyDay`).
+  const upcoming = await buildUpcoming(userId, UPCOMING_WINDOW_DAYS);
+  const heaviest = upcoming.heaviestDay;
+  if (heaviest && isHeavyDay(upcoming)) {
+    const heaviestDate = new Date(heaviest.date);
+    detected.push({
+      // Title stays static: a date here would defeat the type|title dedupe key
+      // as the heaviest day rolls forward with the window.
+      type: "upcoming_payment",
+      title: "יום עמוס בתשלומים",
+      message: `${heaviest.count} חיובים בסך ${formatILS(heaviest.total)} מתרכזים ב־${formatDayMonth(heaviestDate)} — ${Math.round(percent(heaviest.total, upcoming.total))}% מכל התשלומים הצפויים ב־${UPCOMING_WINDOW_DAYS} הימים הקרובים.`,
+      severity: "warning",
+    });
+  }
+
   // Negative balance this month (expenses above income)
   const [incomes, expenses] = await Promise.all([
     prisma.income.aggregate({ where: { userId, incomeDate: { gte: start, lt: end } }, _sum: { amount: true } }),
@@ -98,6 +150,23 @@ export async function scanForAlerts(userId: number): Promise<void> {
       title: "ההוצאות עברו את ההכנסות החודש",
       message: `הוצאות ${formatILS(expenseTotal)} מול הכנסות ${formatILS(incomeTotal)} — חריגה של ${formatILS(round2(expenseTotal - incomeTotal))}.`,
       severity: "critical",
+    });
+  }
+
+  // Rows with no category, counted over the same merged view the expenses tab
+  // shows (manual + confirmed non-financing credit by billingDate).
+  const [monthExpenses, monthCredit] = await Promise.all([
+    expensesRepository.findByMonth(userId, start, end),
+    expensesRepository.findCreditByMonth(userId, start, end),
+  ]);
+  const uncategorized = [...monthExpenses, ...monthCredit].filter((row) => row.categoryId === null);
+  if (uncategorized.length >= UNCATEGORIZED_MIN_ROWS) {
+    const missingTotal = round2(uncategorized.reduce((sum, row) => sum + decimalToNumber(row.amount), 0));
+    detected.push({
+      type: "uncategorized_expense",
+      title: "הוצאות ללא קטגוריה",
+      message: `${uncategorized.length} הוצאות בסך ${formatILS(missingTotal)} עדיין בלי קטגוריה החודש — בלעדיהן הפילוח והתקציבים חלקיים.`,
+      severity: "info",
     });
   }
 

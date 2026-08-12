@@ -121,16 +121,21 @@ describe("loanProgress", () => {
     const p = loanProgress({ ...base, totalPayments: null, paymentsMade: null });
     expect(p.paymentsRemaining).not.toBeNull();
     expect(p.paymentsRemaining!).toBeGreaterThan(50);
+    // And says so: a simulated count presented as measured is the honesty gap.
+    expect(p.certainty).toBe("scenario");
   });
 
   /**
    * Certainty drives whether the UI shows a number or a hedged scenario. A
-   * reconstructed opening amount can never read as "measured".
+   * reconstructed opening amount can never read as "measured" — and neither can
+   * a payments-remaining figure that came out of the Spitzer simulation.
    */
-  it("is measured only when both the schedule and the opening amount came from the bank", () => {
+  it("is measured only when the schedule, the opening amount and the counts are all real", () => {
     expect(loanProgress(base).certainty).toBe("measured");
     expect(loanProgress({ ...base, originalAmountSource: "reconstructed" }).certainty).toBe("scenario");
     expect(loanProgress({ ...base, scheduleSource: "simulated" }).certainty).toBe("scenario");
+    expect(loanProgress({ ...base, paymentsMade: null }).certainty).toBe("scenario");
+    expect(loanProgress({ ...base, totalPayments: null }).certainty).toBe("scenario");
   });
 });
 

@@ -16,6 +16,11 @@ export function sumDecimals(values: Array<Prisma.Decimal | number | null | undef
   return round2(values.reduce<number>((acc, v) => acc + decimalToNumber(v), 0));
 }
 
+/** Shekels inside a sentence — whole numbers, because agorot only add noise there. */
+export function formatILS(amount: number): string {
+  return `₪${amount.toLocaleString("he-IL", { maximumFractionDigits: 0 })}`;
+}
+
 export function percent(used: number, total: number): number {
   if (total <= 0) return 0;
   return round2((used / total) * 100);

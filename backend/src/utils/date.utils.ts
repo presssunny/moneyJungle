@@ -35,3 +35,12 @@ export function daysUntil(date: Date): number {
   const msPerDay = 24 * 60 * 60 * 1000;
   return Math.ceil((date.getTime() - startOfToday().getTime()) / msPerDay);
 }
+
+/** "היום" / "מחר" / "בעוד 5 ימים" / a date — how near-term events are worded everywhere. */
+export function relativeDayLabel(date: Date): string {
+  const days = daysUntil(date);
+  if (days <= 0) return "היום";
+  if (days === 1) return "מחר";
+  if (days <= 7) return `בעוד ${days} ימים`;
+  return date.toLocaleDateString("he-IL", { day: "2-digit", month: "2-digit" });
+}

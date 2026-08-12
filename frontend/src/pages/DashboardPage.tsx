@@ -8,7 +8,7 @@ import { EmptyState } from "../components/common/EmptyState";
 import { QuickAddBar } from "../components/common/QuickAddBar";
 import { SkeletonCard, SkeletonChart, SkeletonRows } from "../components/common/Skeleton";
 import { AchievementsPanel } from "../components/dashboard/AchievementsPanel";
-import { AttentionPanel, type AttentionItem } from "../components/dashboard/AttentionPanel";
+import { AttentionPanel } from "../components/dashboard/AttentionPanel";
 import { CategoryBarChart } from "../components/dashboard/CategoryBarChart";
 import { InsightsPanel } from "../components/dashboard/InsightsPanel";
 import { MonthlyTrendChart } from "../components/dashboard/MonthlyTrendChart";
@@ -21,14 +21,13 @@ import { useMonth } from "../context/MonthContext";
 import { useAsync } from "../hooks/useAsync";
 import {
   getAchievements,
+  getAttention,
   getCharts,
   getInsights,
   getRecent,
   getSummary,
   getUpcoming,
 } from "../services/dashboard.service";
-import { listCreditImports } from "../services/finance.service";
-import { listAlerts } from "../services/planning.service";
 import type { DashboardSummary } from "../types/dashboard.types";
 import { formatCurrency, formatDate } from "../utils/format";
 
@@ -52,8 +51,7 @@ export default function DashboardPage() {
   const recentRes = useAsync(() => getRecent(), [monthKey], "לא הצלחנו לטעון את התנועות");
   const achievementsRes = useAsync(() => getAchievements(monthKey), [monthKey], "לא הצלחנו לטעון את ההישגים");
   const upcomingRes = useAsync(() => getUpcoming(45), [monthKey], "לא הצלחנו לטעון את התשלומים הקרובים");
-  const alertsRes = useAsync(() => listAlerts(), [monthKey], "לא הצלחנו לטעון את ההתראות");
-  const creditRes = useAsync(() => listCreditImports(), [monthKey], "לא הצלחנו לטעון את ייבואי האשראי");
+  const attentionRes = useAsync(() => getAttention(monthKey), [monthKey], "לא הצלחנו לטעון את מוקדי תשומת הלב");
 
   function reloadAll() {
     summaryRes.reload();
@@ -62,8 +60,7 @@ export default function DashboardPage() {
     recentRes.reload();
     achievementsRes.reload();
     upcomingRes.reload();
-    alertsRes.reload();
-    creditRes.reload();
+    attentionRes.reload();
   }
 
   const summary = summaryRes.data;
@@ -73,64 +70,6 @@ export default function DashboardPage() {
   // a malfunction, so we show one welcome screen instead (§3.5).
   const isBrandNew =
     summary !== null && summary.incomeTotal === 0 && summary.expenseTotal === 0 && summary.creditTotal === 0;
-
-  const attention: AttentionItem[] = [];
-  if (summary && summary.budget.overrunCount > 0) {
-    attention.push({
-      id: "budget",
-      icon: "🎯",
-      text: `חריגה ב־${summary.budget.overrunCount} קטגוריות תקציב`,
-      to: "/budgets",
-      tone: "warning",
-    });
-  }
-  // Money that exists but sits in no total is the one thing the dashboard must
-  // never stay quiet about — so an unresolved row is critical, not a warning.
-  if (summary && summary.bankReview.unresolvedCount > 0) {
-    attention.push({
-      id: "bank-unresolved",
-      icon: "🚧",
-      text: `${summary.bankReview.unresolvedCount} תנועות בנק ללא סיווג — לא נספרות באף מספר`,
-      to: "/accounts?tab=reconcile",
-      tone: "critical",
-    });
-  } else if (summary && summary.bankReview.pendingCount > 0) {
-    attention.push({
-      id: "bank-review",
-      icon: "🏦",
-      text: `${summary.bankReview.pendingCount} תנועות בנק ממתינות לסיווג`,
-      to: "/accounts?tab=reconcile",
-      tone: "warning",
-    });
-  }
-  // Resolved, counted, but coarse: a card bill with no itemized statement behind
-  // it, or a loan received whose terms are unknown. Worth a look, not an alarm.
-  if (summary && summary.bankReview.needsAttention > 0) {
-    attention.push({
-      id: "bank-coarse",
-      icon: "💳",
-      text:
-        summary.bankMonth.unitemizedCard > 0
-          ? `${formatCurrency(summary.bankMonth.unitemizedCard)} חיובי אשראי ללא פירוט — נספרים כהוצאה אחת`
-          : `${formatCurrency(summary.bankMonth.loanDrawdown)} הלוואה שהתקבלה — יש להשלים את תנאי ההלוואה`,
-      to: "/accounts?tab=reconcile",
-      tone: "info",
-    });
-  }
-  const pendingCredit = (creditRes.data ?? []).filter((imp) => imp.status !== "confirmed");
-  if (pendingCredit.length > 0) {
-    const pendingTx = pendingCredit.reduce((sum, imp) => sum + imp.totalTransactions, 0);
-    attention.push({
-      id: "credit",
-      icon: "💳",
-      text: `${pendingTx} עסקאות אשראי ממתינות לאישור`,
-      to: "/accounts?tab=credit",
-      tone: "warning",
-    });
-  }
-  for (const alert of (alertsRes.data ?? []).filter((a) => !a.isRead && a.severity !== "info").slice(0, 2)) {
-    attention.push({ id: `alert-${alert.id}`, icon: "🚨", text: alert.title, to: "/manage?tab=alerts", tone: alert.severity });
-  }
 
   if (isBrandNew) {
     return (
@@ -294,7 +233,20 @@ export default function DashboardPage() {
 
       {insights?.paceAlert && <PaceAlertBanner data={insights.paceAlert} />}
 
-      <AttentionPanel items={attention} />
+      {/* Merged and deduped server-side (dashboard/attention.service.ts): the
+          same heavy day must not appear once as an alert and once as forecast.
+          No skeleton — the panel is absent when there is nothing to say, so a
+          placeholder would announce a problem that may not exist. A failure,
+          though, must be visible: an empty panel reads as "all clear". */}
+      <AsyncSection
+        resource={attentionRes}
+        errorTitle="לא הצלחנו לטעון את מוקדי תשומת הלב"
+        skeleton={null}
+        isEmpty={(data) => data.length === 0}
+        emptyState={null}
+      >
+        {(data) => <AttentionPanel items={data} />}
+      </AsyncSection>
 
       <AsyncSection
         resource={insightsRes}

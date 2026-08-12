@@ -166,6 +166,7 @@ export const loanScheduleService = {
       fileHash: crypto.createHash("sha256").update(buffer).digest("hex"),
       sizeBytes: buffer.byteLength,
       kind: "loan_schedule",
+      buffer,
       linkedLoanId: loan.id,
       // A schedule covers the payments still ahead, not a past period.
       coverageFrom: new Date(parsed.nextPaymentDate),

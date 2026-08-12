@@ -1,8 +1,13 @@
+import { Prisma } from "../../../generated/prisma/client";
 import { ApiError } from "../../utils/ApiError";
 import { decimalToNumber, round2 } from "../../utils/money.utils";
 import { reconciliationService } from "../bank/reconciliation.service";
 import { computeLoan, loanProgress } from "./loanCalculator.service";
-import { loanLifecycleService } from "./loanLifecycle.service";
+import {
+  closureMaxedPaymentsMade,
+  loanLifecycleService,
+  reopenedLoanFields,
+} from "./loanLifecycle.service";
 import { loansRepository } from "./loans.repository";
 import { CreateLoanBody, UpdateLoanBody } from "./loans.validation";
 
@@ -162,12 +167,23 @@ export const loansService = {
   async update(userId: number, id: number, body: UpdateLoanBody) {
     const existing = await loansRepository.findById(userId, id);
     if (!existing) throw ApiError.notFound("ההלוואה לא נמצאה");
-    // Stating the contract amount upgrades the progress figures from a
-    // reconstructed scenario to a measured one.
-    const data =
-      body.originalAmount !== undefined
-        ? { ...body, originalAmountSource: "contract" }
-        : body;
+    // Taking a loan out of `finished` by hand is the same event as undoing the
+    // import that closed it, so it clears the same fields. `overdue` counts too:
+    // it is just as owed as `active`.
+    const reopening =
+      existing.status === "finished" && body.status !== undefined && body.status !== "finished";
+    const data: Prisma.LoanUncheckedUpdateInput = {
+      ...body,
+      // Stating the contract amount upgrades the progress figures from a
+      // reconstructed scenario to a measured one.
+      ...(body.originalAmount !== undefined ? { originalAmountSource: "contract" } : {}),
+      ...(reopening
+        ? reopenedLoanFields({
+            restoredPaymentsMade: null,
+            clearPaymentsMade: closureMaxedPaymentsMade(existing),
+          })
+        : {}),
+    };
     return loansRepository.update(id, data).then(serializeLoan);
   },
 
