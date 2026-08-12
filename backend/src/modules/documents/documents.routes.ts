@@ -17,6 +17,41 @@ documentsRoutes.get(
   })
 );
 
+/**
+ * The stored file itself. 404 with a plain reason when the bytes were never kept —
+ * everything uploaded before file storage existed is metadata only.
+ */
+documentsRoutes.get(
+  "/:id/file",
+  validate({ params: idParamSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.validated?.params as IdParam;
+    const { stream, fileName, contentType } = await documentsService.file(req.userId!, id);
+    res.setHeader("Content-Type", contentType);
+    // RFC 5987 — the names here are Hebrew, which a bare filename= cannot carry.
+    res.setHeader(
+      "Content-Disposition",
+      `inline; filename*=UTF-8''${encodeURIComponent(fileName)}`
+    );
+    stream.pipe(res);
+  })
+);
+
+/**
+ * Undo the IMPORT: deletes the transactions the file created, keeps the
+ * document as a record. Not the same as DELETE below, which only drops the log.
+ * Known limit: an edited bank row (e.g. changed category) is indistinguishable
+ * from an untouched one — only excluded or loan-linked rows survive.
+ */
+documentsRoutes.post(
+  "/:id/rollback",
+  validate({ params: idParamSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.validated?.params as IdParam;
+    res.json(await documentsService.rollback(req.userId!, id));
+  })
+);
+
 /** Removes the LOG ENTRY only — the imported transactions stay. */
 documentsRoutes.delete(
   "/:id",

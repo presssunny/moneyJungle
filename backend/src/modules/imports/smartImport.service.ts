@@ -134,6 +134,7 @@ export const smartImportService = {
         sizeBytes: fileSize,
         kind: "loan_schedule",
         status: "rejected",
+        buffer,
         detection: { reason: detection.reason, signals: detection.matchedSignals },
         note: "לוח סילוקין — יש להעלות אותו במסך ההלוואות",
       });
@@ -178,6 +179,7 @@ export const smartImportService = {
           sizeBytes: fileSize,
           kind: "credit_report",
           status: "superseded",
+          buffer,
           rowsParsed: result.parsedRows,
           rowsSkipped: result.skippedDuplicates,
           detection: { reason: detection.reason, signals: detection.matchedSignals },
@@ -211,6 +213,7 @@ export const smartImportService = {
         fileHash: detection.fileHash,
         sizeBytes: fileSize,
         kind: "credit_report",
+        buffer,
         linkedCreditImportId: result.id,
         rowsParsed: result.parsedRows,
         rowsImported: result.totalTransactions,
@@ -303,7 +306,9 @@ export const smartImportService = {
       sizeBytes: fileSize,
       kind: "bank_statement",
       status: result.imported === 0 && result.parsed > 0 ? "superseded" : "imported",
+      buffer,
       linkedAccountId: account.id,
+      linkedStatementImportId: result.statementImportId,
       // The parser reports coverage as ISO strings on its own report.
       coverageFrom: result.report.coverageFrom ? new Date(result.report.coverageFrom) : null,
       coverageTo: result.report.coverageTo ? new Date(result.report.coverageTo) : null,

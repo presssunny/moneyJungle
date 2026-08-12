@@ -185,6 +185,27 @@ export const bankService = {
       return true;
     });
 
+    // Recorded BEFORE the rows so each row can name its source file — needed to
+    // undo an import without guessing a date range across overlapping statements.
+    // Recorded even for an all-duplicate upload: it still moves the balance anchor.
+    const coverageFrom = new Date(Math.min(...dates));
+    const coverageTo = new Date(Math.max(...dates));
+    const statementImport = await prisma.bankStatementImport.create({
+      data: {
+        userId,
+        bankAccountId: accountId,
+        fileName,
+        fileHash: hashFile(buffer),
+        coverageFrom,
+        coverageTo,
+        openingBalance: report.openingBalance,
+        closingBalance: report.closingBalance,
+        parsedRows: rows.length,
+        importedRows: fresh.length,
+        skippedDuplicates: rows.length - fresh.length,
+      },
+    });
+
     let deposits = 0;
     let withdrawals = 0;
     if (fresh.length > 0) {
@@ -209,34 +230,12 @@ export const bankService = {
               lineKind,
               loanRef,
               reconcileStatus: "pending",
+              statementImportId: statementImport.id,
             };
           }),
         }),
       ]);
     }
-
-    // Record the statement itself: the period it covers and the balance the bank
-    // printed for it. This is what lets the balance be derived rather than
-    // accumulated — without the covered period, an overlapping re-import is
-    // indistinguishable from new money. Recorded even when every row was a
-    // duplicate: a re-upload of a *newer* statement still moves the anchor.
-    const coverageFrom = new Date(Math.min(...dates));
-    const coverageTo = new Date(Math.max(...dates));
-    await prisma.bankStatementImport.create({
-      data: {
-        userId,
-        bankAccountId: accountId,
-        fileName,
-        fileHash: hashFile(buffer),
-        coverageFrom,
-        coverageTo,
-        openingBalance: report.openingBalance,
-        closingBalance: report.closingBalance,
-        parsedRows: rows.length,
-        importedRows: fresh.length,
-        skippedDuplicates: rows.length - fresh.length,
-      },
-    });
 
     // Full recomputation — there is no increment path left that could drift.
     const balance = await accountBalanceService.recompute(userId, accountId);
@@ -263,6 +262,8 @@ export const bankService = {
       withdrawals,
       report,
       autoReconciled,
+      /** What a rollback of this import needs to find its rows again. */
+      statementImportId: statementImport.id,
     };
   },
 

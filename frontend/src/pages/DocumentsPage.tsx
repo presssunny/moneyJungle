@@ -13,7 +13,14 @@ import { Table, type Column } from "../components/common/Table";
 import { SummaryCard } from "../components/dashboard/SummaryCard";
 import { useAsync } from "../hooks/useAsync";
 import { apiErrorMessage } from "../services/api";
-import { deleteDocument, listDocuments, type DocumentRecord } from "../services/documents.service";
+import {
+  deleteDocument,
+  downloadDocumentFile,
+  listDocuments,
+  rollbackDocument,
+  type DocumentRecord,
+  type RollbackResult,
+} from "../services/documents.service";
 import { importLoanSchedule, smartImportFile, type SmartImportResult } from "../services/finance.service";
 import { toast } from "../services/toast";
 import type { AssistantAnswers, AssistantStep } from "../types/assistant";
@@ -23,6 +30,7 @@ const STATUS: Record<DocumentRecord["status"], { icon: string; label: string; to
   imported: { icon: "✅", label: "נקלט", tone: "success" },
   superseded: { icon: "⏭️", label: "כבר היה קיים", tone: "muted" },
   rejected: { icon: "↩️", label: "הופנה למקום אחר", tone: "warning" },
+  rolled_back: { icon: "🚫", label: "הייבוא בוטל", tone: "muted" },
 };
 
 const KIND_ICON: Record<string, string> = {
@@ -39,10 +47,19 @@ function fileSize(bytes: number): string {
   return kb < 1024 ? `${Math.round(kb)} KB` : `${(kb / 1024).toFixed(1)} MB`;
 }
 
+/** Consequences of an undo the user cannot see for herself, and must be told about. */
+function hasRollbackNotice(result: RollbackResult): boolean {
+  return (
+    result.reopenedLoans.length > 0 ||
+    result.unresolvedClosedLoans.length > 0 ||
+    result.overlappingImports.length > 0
+  );
+}
+
 /**
- * One place to drop any file, and the history of everything ever dropped. The
- * other five upload points still work; this is where they become visible. Stores
- * metadata only — the hash catches a re-upload, the dates catch an overlap.
+ * One place to drop any file, and the history of everything ever dropped.
+ * Two destructive actions must not be confused: 🗑️ drops the log entry and
+ * leaves the data, ↺ undoes the import itself.
  */
 export default function DocumentsPage() {
   const docs = useAsync(() => listDocuments(), [], "לא הצלחנו לטעון את המסמכים");
@@ -53,6 +70,8 @@ export default function DocumentsPage() {
   const [lastFile, setLastFile] = useState<File | null>(null);
   const [step, setStep] = useState<AssistantStep | null>(null);
   const [result, setResult] = useState<SmartImportResult | null>(null);
+  /** What the last undo cost. Kept on screen — a toast is gone too fast to act on. */
+  const [undone, setUndone] = useState<RollbackResult | null>(null);
 
   /**
    * One turn of the import conversation. The same file is re-sent with the
@@ -99,10 +118,12 @@ export default function DocumentsPage() {
         title: "מחיקת רישום המסמך",
         message: (
           <>
-            הרישום של <strong>{doc.fileName}</strong> יימחק מההיסטוריה.
+            הרישום של <strong>{doc.fileName}</strong> יימחק מההיסטוריה
+            {doc.hasFile && <>, וגם העותק השמור של הקובץ עצמו</>}.
             <span className="confirm-consequence">
-              הנתונים שיובאו ממנו <strong>יישארו</strong> — נמחק רק התיעוד שהקובץ הועלה. אם המטרה
-              היא להסיר את הנתונים עצמם, יש לעשות זאת במסך שאליו הם נכנסו.
+              הנתונים שיובאו ממנו — התנועות, ההכנסות וההוצאות —{" "}
+              <strong>יישארו</strong> ללא שינוי. אם המטרה היא להסיר גם אותם, יש
+              להשתמש ב״ביטול הייבוא״ (↺) ולא כאן.
             </span>
           </>
         ),
@@ -116,8 +137,68 @@ export default function DocumentsPage() {
         } catch (err) {
           toast.error(apiErrorMessage(err));
         }
-      }
+      },
     );
+  }
+
+  /**
+   * The real undo, as opposed to askRemove above. Two texts because a credit
+   * report and a bank statement genuinely undo differently.
+   */
+  function askRollback(doc: DocumentRecord) {
+    const isCredit = doc.kind === "credit_report";
+    confirm.ask(
+      {
+        title: "ביטול הייבוא",
+        message: isCredit ? (
+          <>
+            כל עסקאות האשראי שיובאו מ<strong>{doc.fileName}</strong> יימחקו.
+            <span className="confirm-consequence">
+              זו <strong>לא</strong> מחיקת הרישום — הנתונים עצמם יימחקו. רישום המסמך יישאר,
+              מסומן כ״הייבוא בוטל״.
+              <br />
+              הסכומים בבית ישתנו בשני כיוונים: העסקאות המפורטות ייעלמו, ובמקומן חיובי הכרטיס
+              בדף הבנק יחזרו להיספר כהוצאה. אין כאן שמירה על עסקאות שערכת ידנית — הכול נמחק
+              יחד עם הייבוא.
+            </span>
+          </>
+        ) : (
+          <>
+            כל התנועות שיובאו מ<strong>{doc.fileName}</strong> יימחקו, וגם ההכנסות וההוצאות
+            שנוצרו מהן.
+            <span className="confirm-consequence">
+              זו <strong>לא</strong> מחיקת הרישום — הנתונים עצמם יימחקו והסכומים בבית ישתנו.
+              רישום המסמך יישאר, מסומן כ״הייבוא בוטל״.
+              <br />
+              שימי לב: המערכת לא מזהה עריכות ידניות שעשית לתנועות (שינוי קטגוריה, למשל) — הן
+              יימחקו יחד עם השאר. יישמרו רק תנועות שהחרגת ידנית או שקישרת ידנית להלוואה.
+              הלוואה שהמערכת סגרה בעצמה בגלל תנועה שתימחק תחזור להיות פעילה; הלוואה שסגרת
+              בעצמך תישאר סגורה.
+            </span>
+          </>
+        ),
+        confirmLabel: "לבטל את הייבוא",
+        tone: "danger",
+      },
+      async () => {
+        try {
+          const result = await rollbackDocument(doc.id);
+          toast.success(result.message);
+          setUndone(result);
+          docs.reload();
+        } catch (err) {
+          toast.error(apiErrorMessage(err));
+        }
+      },
+    );
+  }
+
+  async function openFile(doc: DocumentRecord) {
+    try {
+      await downloadDocumentFile(doc.id, doc.fileName);
+    } catch (err) {
+      toast.error(apiErrorMessage(err));
+    }
   }
 
   const columns: Column<DocumentRecord>[] = [
@@ -181,6 +262,17 @@ export default function DocumentsPage() {
       align: "left",
       render: (row) => (
         <span className="row-actions">
+          {row.hasFile && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => openFile(row)}
+              title="צפייה בקובץ המקורי"
+              aria-label={`צפייה בקובץ המקורי של ${row.fileName}`}
+            >
+              👁️
+            </Button>
+          )}
           {row.linkedLoanId && (
             <Button size="sm" variant="ghost" onClick={() => navigate("/accounts?tab=loans")} title="להלוואה">
               📉
@@ -196,10 +288,22 @@ export default function DocumentsPage() {
               🏦
             </Button>
           )}
+          {row.canRollback && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => askRollback(row)}
+              title="ביטול הייבוא — מוחק את התנועות"
+              aria-label={`ביטול הייבוא של ${row.fileName}`}
+            >
+              ↺
+            </Button>
+          )}
           <Button
             size="sm"
             variant="ghost"
             onClick={() => askRemove(row)}
+            title="מחיקת הרישום בלבד"
             aria-label={`מחיקת הרישום של ${row.fileName}`}
           >
             🗑️
@@ -301,6 +405,37 @@ export default function DocumentsPage() {
       </Card>
 
       <Card title="היסטוריית המסמכים">
+        {undone && hasRollbackNotice(undone) && (
+          <div className="doc-rollback-notice" role="status">
+            <strong>מה שקרה בעקבות ביטול הייבוא:</strong>
+            <ul>
+              {undone.reopenedLoans.map((loan, index) => (
+                <li key={`${loan.loanName}-${index}`}>
+                  ההלוואה <strong>{loan.loanName}</strong> חזרה להיות פעילה עם יתרה של{" "}
+                  {loan.balance.toLocaleString("he-IL")} ₪ — היא נסגרה בגלל שורה שנמחקה עכשיו.
+                </li>
+              ))}
+              {/* No record of which row closed it, so no honest balance to restore. */}
+              {undone.unresolvedClosedLoans.map((loan, index) => (
+                <li key={`unresolved-${loan.loanNumber}-${index}`}>
+                  יש הלוואה סגורה — <strong>{loan.loanName}</strong> (מספר {loan.loanNumber}) —
+                  שאולי קשורה לשורות שנמחקו עכשיו. היא נשארה סגורה; כדאי לבדוק ולעדכן את היתרה
+                  ידנית אם צריך.
+                </li>
+              ))}
+              {/* A row two files carried was stored once, and left with its batch. */}
+              {undone.overlappingImports.map((file) => (
+                <li key={file.fileName}>
+                  התאריכים {formatDate(file.coverageFrom)}–{formatDate(file.coverageTo)} מכוסים גם
+                  בקובץ <strong>{file.fileName}</strong> — כדאי לייבא אותו מחדש כדי לא לאבד תנועות.
+                </li>
+              ))}
+            </ul>
+            <Button size="sm" variant="ghost" onClick={() => setUndone(null)}>
+              הבנתי
+            </Button>
+          </div>
+        )}
         <AsyncSection
           resource={docs}
           errorTitle="לא הצלחנו לטעון את המסמכים"

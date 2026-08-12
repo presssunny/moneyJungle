@@ -240,24 +240,24 @@ model CreditImport {
 }
 
 model CreditTransaction {
-  id              Int      @id @default(autoincrement())
-  creditImportId  Int      @map("credit_import_id")
-  userId          Int      @map("user_id")
-  transactionDate DateTime @map("transaction_date") @db.Date
+  id              Int       @id @default(autoincrement())
+  creditImportId  Int       @map("credit_import_id")
+  userId          Int       @map("user_id")
+  transactionDate DateTime  @map("transaction_date") @db.Date
   // מועד חיוב — the real charge date from the statement (null for in-process/foreign rows)
   chargeDate      DateTime? @map("charge_date") @db.Date
   // Date the expense is attributed to (which month it counts in) = transactionDate,
   // i.e. when the purchase was made — not when the card charges it (see chargeDate).
-  billingDate     DateTime @map("billing_date") @db.Date
-  businessName    String   @map("business_name") @db.VarChar(255)
-  amount          Decimal  @db.Decimal(12, 2)
-  categoryId      Int?     @map("category_id")
-  paymentCount    Int      @default(1) @map("payment_count")
+  billingDate     DateTime  @map("billing_date") @db.Date
+  businessName    String    @map("business_name") @db.VarChar(255)
+  amount          Decimal   @db.Decimal(12, 2)
+  categoryId      Int?      @map("category_id")
+  paymentCount    Int       @default(1) @map("payment_count")
   // "regular" | "standing_order" | "credit" | "refund" — from סוג עסקה
-  transactionType String   @default("regular") @map("transaction_type") @db.VarChar(30)
-  rawData         Json?    @map("raw_data")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  transactionType String    @default("regular") @map("transaction_type") @db.VarChar(30)
+  rawData         Json?     @map("raw_data")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
   creditImport CreditImport @relation(fields: [creditImportId], references: [id], onDelete: Cascade)
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -273,20 +273,20 @@ model CreditTransaction {
 // ---------- Bank (phase 2) ----------
 
 model BankAccount {
-  id             Int      @id @default(autoincrement())
-  userId         Int      @map("user_id")
-  bankName       String   @map("bank_name") @db.VarChar(120)
-  accountName    String   @map("account_name") @db.VarChar(120)
-  initialBalance Decimal  @default(0) @map("initial_balance") @db.Decimal(12, 2)
+  id             Int       @id @default(autoincrement())
+  userId         Int       @map("user_id")
+  bankName       String    @map("bank_name") @db.VarChar(120)
+  accountName    String    @map("account_name") @db.VarChar(120)
+  initialBalance Decimal   @default(0) @map("initial_balance") @db.Decimal(12, 2)
   /// Derived, never accumulated — a cached copy of accountBalance.derive().
-  currentBalance Decimal  @default(0) @map("current_balance") @db.Decimal(12, 2)
+  currentBalance Decimal   @default(0) @map("current_balance") @db.Decimal(12, 2)
   /// Balance the user states from the bank itself, as of `anchorDate`. Used when
   /// no statement carries a printed balance column. Competes with statement
   /// anchors on date: whichever is more recent wins.
-  anchorBalance  Decimal? @map("anchor_balance") @db.Decimal(12, 2)
+  anchorBalance  Decimal?  @map("anchor_balance") @db.Decimal(12, 2)
   anchorDate     DateTime? @map("anchor_date") @db.Date
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
 
   user         User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   transactions BankTransaction[]
@@ -303,67 +303,77 @@ model BankAccount {
 /// the covered period stored, an overlapping re-import cannot be told apart
 /// from new money.
 model BankStatementImport {
-  id            Int      @id @default(autoincrement())
-  userId        Int      @map("user_id")
-  bankAccountId Int      @map("bank_account_id")
-  fileName      String   @map("file_name") @db.VarChar(255)
+  id                Int      @id @default(autoincrement())
+  userId            Int      @map("user_id")
+  bankAccountId     Int      @map("bank_account_id")
+  fileName          String   @map("file_name") @db.VarChar(255)
   /// SHA-256 of the uploaded bytes — the same file re-uploaded is recognised.
-  fileHash      String   @map("file_hash") @db.VarChar(64)
+  fileHash          String   @map("file_hash") @db.VarChar(64)
   /// Period the statement covers, from its own transaction dates.
-  coverageFrom  DateTime @map("coverage_from") @db.Date
-  coverageTo    DateTime @map("coverage_to") @db.Date
+  coverageFrom      DateTime @map("coverage_from") @db.Date
+  coverageTo        DateTime @map("coverage_to") @db.Date
   /// Balances the bank printed. Null when the file carries no balance column —
   /// such a statement can never anchor the account balance.
-  openingBalance Decimal? @map("opening_balance") @db.Decimal(12, 2)
-  closingBalance Decimal? @map("closing_balance") @db.Decimal(12, 2)
+  openingBalance    Decimal? @map("opening_balance") @db.Decimal(12, 2)
+  closingBalance    Decimal? @map("closing_balance") @db.Decimal(12, 2)
   parsedRows        Int      @default(0) @map("parsed_rows")
   importedRows      Int      @default(0) @map("imported_rows")
   skippedDuplicates Int      @default(0) @map("skipped_duplicates")
   createdAt         DateTime @default(now()) @map("created_at")
 
-  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  account BankAccount @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account      BankAccount       @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+  transactions BankTransaction[]
 
-  @@index([userId, bankAccountId, coverageTo])
+  // Name pinned to what the original migration created — renaming a live index
+  // is churn this change has no reason to cause.
+  @@index([userId, bankAccountId, coverageTo], map: "bank_statement_imports_user_account_coverage_idx")
   @@index([userId, fileHash])
   @@map("bank_statement_imports")
 }
 
 model BankTransaction {
-  id              Int      @id @default(autoincrement())
-  userId          Int      @map("user_id")
-  bankAccountId   Int      @map("bank_account_id")
-  transactionDate DateTime @map("transaction_date") @db.Date
-  description     String?  @db.VarChar(255)
-  amount          Decimal  @db.Decimal(12, 2)
-  type            String   @db.VarChar(30) // deposit | withdrawal | transfer | fee | other
-  categoryId      Int?     @map("category_id")
+  id                Int      @id @default(autoincrement())
+  userId            Int      @map("user_id")
+  bankAccountId     Int      @map("bank_account_id")
+  transactionDate   DateTime @map("transaction_date") @db.Date
+  description       String?  @db.VarChar(255)
+  amount            Decimal  @db.Decimal(12, 2)
+  type              String   @db.VarChar(30) // deposit | withdrawal | transfer | fee | other
+  categoryId        Int?     @map("category_id")
   // Parser classification, persisted so the reconciliation flow (and every read)
   // knows *what kind* of money each row is — not just its direction. Written on
   // import and back-filled from the description for pre-existing rows.
-  lineKind        String   @default("standard") @map("line_kind") @db.VarChar(30) // standard | loan_principal | loan_interest | overdraft_interest | loan_mixed | credit_card_payment | interest_credit
-  loanRef         String?  @map("loan_ref") @db.VarChar(20)
+  lineKind          String   @default("standard") @map("line_kind") @db.VarChar(30) // standard | loan_principal | loan_interest | overdraft_interest | loan_mixed | credit_card_payment | interest_credit
+  loanRef           String?  @map("loan_ref") @db.VarChar(20)
   // Reconciliation: has this bank row been surfaced into the right tab yet?
-  reconcileStatus String   @default("pending") @map("reconcile_status") @db.VarChar(20) // pending | done | excluded
+  reconcileStatus   String   @default("pending") @map("reconcile_status") @db.VarChar(20) // pending | done | excluded
   // *How* it was resolved — the financial meaning, not just "handled". Every row
   // ends with one of these, and `reconcileNote` says why in Hebrew, so no row can
   // sit outside the figures without a stated reason. See BankResolution.
-  resolution      String?  @map("resolution") @db.VarChar(30)
-  reconcileNote   String?  @map("reconcile_note") @db.VarChar(255)
-  linkedIncomeId  Int?     @map("linked_income_id")
-  linkedLoanId    Int?     @map("linked_loan_id")
-  linkedExpenseId Int?     @map("linked_expense_id")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  resolution        String?  @map("resolution") @db.VarChar(30)
+  reconcileNote     String?  @map("reconcile_note") @db.VarChar(255)
+  linkedIncomeId    Int?     @map("linked_income_id")
+  linkedLoanId      Int?     @map("linked_loan_id")
+  linkedExpenseId   Int?     @map("linked_expense_id")
+  /// Which statement file this row came in on — the only way to undo one import
+  /// without guessing by date range, since statements overlap freely. SetNull, not
+  /// Cascade: deleting the batch row must never silently take money rows with it.
+  /// Null for rows imported before this column existed.
+  statementImportId Int?     @map("statement_import_id")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
 
-  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  bankAccount BankAccount @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
-  category    Category?   @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  user            User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bankAccount     BankAccount          @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+  category        Category?            @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  statementImport BankStatementImport? @relation(fields: [statementImportId], references: [id], onDelete: SetNull)
 
   @@index([userId, transactionDate])
   @@index([bankAccountId])
   @@index([userId, reconcileStatus])
   @@index([userId, resolution])
+  @@index([statementImportId])
   @@map("bank_transactions")
 }
 
@@ -464,10 +474,10 @@ model Loan {
 
 /// Every file the user uploaded, and what came of it.
 ///
-/// Metadata only — never the bytes. `fileHash` identifies a re-upload of the very
-/// same file and `coverageFrom/To` identifies an overlapping period, which is all
-/// the app needs to answer "did I already import this?". Keeping the files
-/// themselves is a separate product decision.
+/// `fileHash` identifies a re-upload of the very same file and `coverageFrom/To`
+/// identifies an overlapping period, which is what answers "did I already import
+/// this?". `storagePath` holds the bytes on disk when they were kept; it is
+/// nullable because everything uploaded before file storage existed has none.
 model Document {
   id        Int    @id @default(autoincrement())
   userId    Int    @map("user_id")
@@ -476,16 +486,24 @@ model Document {
   sizeBytes Int    @default(0) @map("size_bytes")
 
   kind   String @db.VarChar(30) // bank_statement | credit_report | loan_schedule | expense_sheet | unknown
-  status String @default("imported") @db.VarChar(20) // imported | rejected | superseded
+  status String @default("imported") @db.VarChar(20) // imported | rejected | superseded | rolled_back
+
+  /// Path of the stored bytes, relative to DOCUMENT_STORAGE_DIR. Relative on
+  /// purpose: the storage root moves between machines, the file inside it does not.
+  storagePath String? @map("storage_path") @db.VarChar(500)
 
   detectedBank String?   @map("detected_bank") @db.VarChar(120)
   coverageFrom DateTime? @map("coverage_from") @db.Date
   coverageTo   DateTime? @map("coverage_to") @db.Date
 
-  /// What this document produced, so a row can be traced back to its file.
-  linkedLoanId         Int? @map("linked_loan_id")
-  linkedAccountId      Int? @map("linked_account_id")
-  linkedCreditImportId Int? @map("linked_credit_import_id")
+  /// What this document produced, so a row can be traced back to its file — and
+  /// so an import can be undone. Plain ints, no FK, deliberately: a rollback
+  /// deletes the batch it points at while the Document itself must survive as
+  /// the audit trail.
+  linkedLoanId            Int? @map("linked_loan_id")
+  linkedAccountId         Int? @map("linked_account_id")
+  linkedCreditImportId    Int? @map("linked_credit_import_id")
+  linkedStatementImportId Int? @map("linked_statement_import_id")
 
   rowsParsed   Int @default(0) @map("rows_parsed")
   rowsImported Int @default(0) @map("rows_imported")
