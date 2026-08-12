@@ -446,6 +446,19 @@ export interface Upcoming {
   heaviestDay: { date: string; total: number; count: number } | null;
 }
 
+/**
+ * One line of "מוקדי תשומת לב". Merged on the server from alerts, reminders, the
+ * forward forecast and the review counters — mirrors backend
+ * `dashboard/attention.service.ts`, which is where the dedupe lives.
+ */
+export interface AttentionItem {
+  id: string;
+  icon: string;
+  text: string;
+  to: string;
+  tone: "info" | "warning" | "critical";
+}
+
 export interface ImportExpensesResult {
   parsed: number;
   created: number;

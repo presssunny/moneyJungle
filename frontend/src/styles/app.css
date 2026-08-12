@@ -2517,6 +2517,27 @@
   white-space: nowrap;
 }
 
+/* What an undone import took with it. Stays on screen — a toast disappears
+   before the user has read which other file now needs re-importing. */
+.doc-rollback-notice {
+  border: 1px solid color-mix(in srgb, var(--warning) 45%, transparent);
+  border-inline-start: 3px solid var(--warning);
+  background: color-mix(in srgb, var(--warning) 8%, transparent);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+
+.doc-rollback-notice ul {
+  margin: 6px 0 0;
+  padding-inline-start: 18px;
+}
+
+.doc-rollback-notice li {
+  margin-top: 4px;
+}
+
 /* ---------- Wizard ----------
    One question at a time, with a card that fills in as the user answers. */
 
