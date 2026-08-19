@@ -22,7 +22,7 @@ const drawdownCases: Case[] = [
 
 const financingCases: Case[] = [
   {
-    description: "הלוואה - תשלום ריבית 03757",
+    description: "הלוואה - תשלום ריבית 00000",
     type: "deposit",
     expected: "interest_credit",
     why: "ריבית בזכות היא זיכוי ריבית, לא הכנסה",
@@ -200,7 +200,7 @@ describe("העמודה הפיזית קובעת — לא הטקסט", () => {
   });
 
   it("תיאור ריבית בזכות אינו הופך להוצאת ריבית", () => {
-    expect(classifyBankLine("הלוואה - תשלום ריבית 03757", "deposit").lineKind).toBe("interest_credit");
-    expect(classifyBankLine("הלוואה - תשלום ריבית 03757", "withdrawal").lineKind).toBe("loan_interest");
+    expect(classifyBankLine("הלוואה - תשלום ריבית 00000", "deposit").lineKind).toBe("interest_credit");
+    expect(classifyBankLine("הלוואה - תשלום ריבית 00000", "withdrawal").lineKind).toBe("loan_interest");
   });
 });
