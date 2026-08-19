@@ -450,6 +450,10 @@ model Loan {
   closedAt      DateTime? @map("closed_at") @db.Date
   closureReason String?   @map("closure_reason") @db.VarChar(30) // early_repayment | scheduled | refinanced
   closureCost   Decimal?  @map("closure_cost") @db.Decimal(12, 2)
+  // Written only by the automatic-close path, at the moment it matches a bank
+  // row. A manual closure never sets it — that absence is what distinguishes
+  // the two, since closureReason alone can't (see the migration for why).
+  autoClosedTransactionId Int? @map("auto_closed_transaction_id")
 
   // ---- Schedule-derived ----
   // `scheduleSource` says whether the numbers came from the bank's own
