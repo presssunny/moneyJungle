@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: finance_planner_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      DATABASE_URL: mysql://root:root@127.0.0.1:3306/finance_planner_test
+      NODE_ENV: test
+      APP_GATE_USERNAME: ci
+      APP_GATE_PASSWORD: ci_only_password
+      GATE_SESSION_DAYS: "30"
+      CORS_ORIGIN: ""
+      AI_PROVIDER: claude
+      ANTHROPIC_API_KEY: ""
+      ANTHROPIC_MODEL: claude-sonnet-5
+      DOCUMENT_STORAGE_DIR: storage/documents
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - working-directory: backend
+        run: npm ci
+      - working-directory: backend
+        run: npx prisma migrate deploy
+      - working-directory: backend
+        run: npm run typecheck
+      - working-directory: backend
+        run: npm run typecheck:test
+      - working-directory: backend
+        run: npm run lint
+      # Golden tests need real bank-statement fixtures, which are git-ignored
+      # on purpose (see tests/fixtures/README.md) — they self-skip here.
+      - working-directory: backend
+        run: npm test
+      - working-directory: backend
+        run: npm run build
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - working-directory: frontend
+        run: npm ci
+      - working-directory: frontend
+        run: npm run lint
+      - working-directory: frontend
+        run: npm run build

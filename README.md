@@ -1,5 +1,12 @@
 # Monthly Finance Planner (CYBER_BUDGET) 💰
 
+> **English summary** — A full-stack monthly finance planner for a single family: bank/credit
+> statement import and parsing, budgets, loans with amortization schedules, subscriptions,
+> recurring payments, and a reporting dashboard. React + TypeScript frontend (RTL, Hebrew UI, 3
+> themes), Express + TypeScript + Prisma backend, MySQL/MariaDB. See **Stack** below for the full
+> list, and **אבטחה והיקף** near the bottom for the auth/security model — the rest of this README
+> is in Hebrew, the language of the app itself and its intended users.
+
 אפליקציית Fullstack לניהול ותכנון חודשי של הוצאות והכנסות למשפחה.
 עברית מלאה · RTL · עיצוב כהה בסגנון סייבר עם 3 ערכות נושא.
 
@@ -90,6 +97,9 @@ cd frontend && npm run dev     # http://localhost:5173
 
 בדיקות הפרסרים רצות מול **דפי חשבון אמיתיים** שאינם ב־git (`backend/tests/fixtures/`,
 ראה ה־README שם). בלעדיהם הן מדלגות — ריצה ירוקה בלי fixtures אינה מוכיחה שהפרסרים עובדים.
+
+`npm test` דורש DB זמין (סעיף 1 למעלה) — חלק מהבדיקות עוברות דרך Prisma אמיתי, לא Mock.
+ב־CI (`.github/workflows/ci.yml`) הוא רץ מול MySQL זמני; ה־golden suites מדולגים שם באותו אופן.
 
 ## אבטחה והיקף
 
