@@ -19,11 +19,6 @@ import {
 } from "./bank.validation";
 import { describeResolveResult, reconciliationService } from "./reconciliation.service";
 
-/** Deposits raise the balance; every other transaction type lowers it. */
-function signedAmount(type: string, amount: number): number {
-  return type === "deposit" ? amount : -amount;
-}
-
 async function requireAccount(userId: number, id: number) {
   const account = await prisma.bankAccount.findFirst({ where: { id, userId } });
   if (!account) throw ApiError.notFound("חשבון הבנק לא נמצא");

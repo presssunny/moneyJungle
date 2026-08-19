@@ -1,6 +1,6 @@
 import { prisma } from "../../config/database";
 import { monthRange } from "../../utils/date.utils";
-import { decimalToNumber, percent, round2 } from "../../utils/money.utils";
+import { decimalToNumber, round2 } from "../../utils/money.utils";
 import { computeLoan } from "../loans/loanCalculator.service";
 import { loansRepository } from "../loans/loans.repository";
 import { dashboardRepository } from "./dashboard.repository";

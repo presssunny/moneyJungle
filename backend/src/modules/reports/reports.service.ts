@@ -86,7 +86,7 @@ export const reportsService = {
 
     // Cumulative daily spending across the month (manual + confirmed credit)
     const daysInMonth = new Date(year, month, 0).getDate();
-    const perDay = new Array<number>(daysInMonth).fill(0);
+    const perDay = Array.from({ length: daysInMonth }, () => 0);
     for (const expense of expenses) {
       perDay[expense.expenseDate.getUTCDate() - 1] += decimalToNumber(expense.amount);
     }

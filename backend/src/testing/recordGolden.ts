@@ -28,7 +28,11 @@ async function main() {
 
   const note = (ok: boolean, key: string, detail: string) => {
     console.log(`${ok ? "✓" : "⊘"} ${key.padEnd(20)} ${detail}`);
-    ok ? (recorded += 1) : (skipped += 1);
+    if (ok) {
+      recorded += 1;
+    } else {
+      skipped += 1;
+    }
   };
 
   for (const { key, fixture } of bankExcel) {
