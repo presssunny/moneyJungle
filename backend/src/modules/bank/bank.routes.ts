@@ -4,7 +4,7 @@ import { gateAuth } from "../../middlewares/gateAuth.middleware";
 import { validate } from "../../middlewares/validation.middleware";
 import { ApiError } from "../../utils/ApiError";
 import { asyncHandler } from "../../utils/asyncHandler";
-import { IdParam, idParamSchema } from "../../utils/validation.utils";
+import { IdParam, idParamSchema, validatedBody, validatedParams } from "../../utils/validation.utils";
 import { accountBalanceService } from "./accountBalance.service";
 import { bankService } from "./bank.service";
 import { reconciliationService } from "./reconciliation.service";
@@ -46,7 +46,7 @@ bankRoutes.get(
   "/accounts/:id/statements",
   validate({ params: idParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.validated?.params as IdParam;
+    const { id } = validatedParams<IdParam>(req);
     res.json(await bankService.listStatements(req.userId!, id));
   })
 );
@@ -59,8 +59,8 @@ bankRoutes.post(
   "/accounts/:id/anchor",
   validate({ params: idParamSchema, body: setAnchorSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.validated?.params as IdParam;
-    const body = req.validated?.body as SetAnchorBody;
+    const { id } = validatedParams<IdParam>(req);
+    const body = validatedBody<SetAnchorBody>(req);
     res.json(await bankService.setAnchor(req.userId!, id, body.balance, body.asOf));
   })
 );
@@ -70,7 +70,7 @@ bankRoutes.post(
   "/accounts/:id/recompute",
   validate({ params: idParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.validated?.params as IdParam;
+    const { id } = validatedParams<IdParam>(req);
     res.json(await accountBalanceService.recompute(req.userId!, id));
   })
 );
@@ -79,7 +79,7 @@ bankRoutes.post(
   "/accounts",
   validate({ body: createBankAccountSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const body = req.validated?.body as CreateBankAccountBody;
+    const body = validatedBody<CreateBankAccountBody>(req);
     res.status(201).json(await bankService.createAccount(req.userId!, body));
   })
 );
@@ -88,8 +88,8 @@ bankRoutes.patch(
   "/accounts/:id",
   validate({ params: idParamSchema, body: updateBankAccountSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.validated?.params as IdParam;
-    const body = req.validated?.body as UpdateBankAccountBody;
+    const { id } = validatedParams<IdParam>(req);
+    const body = validatedBody<UpdateBankAccountBody>(req);
     res.json(await bankService.updateAccount(req.userId!, id, body));
   })
 );
@@ -98,7 +98,7 @@ bankRoutes.delete(
   "/accounts/:id",
   validate({ params: idParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.validated?.params as IdParam;
+    const { id } = validatedParams<IdParam>(req);
     await bankService.removeAccount(req.userId!, id);
     res.json({ ok: true });
   })
@@ -108,7 +108,7 @@ bankRoutes.get(
   "/accounts/:id/transactions",
   validate({ params: idParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.validated?.params as IdParam;
+    const { id } = validatedParams<IdParam>(req);
     res.json(await bankService.listTransactions(req.userId!, id));
   })
 );
@@ -117,8 +117,8 @@ bankRoutes.post(
   "/accounts/:id/transactions",
   validate({ params: idParamSchema, body: createBankTransactionSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.validated?.params as IdParam;
-    const body = req.validated?.body as CreateBankTransactionBody;
+    const { id } = validatedParams<IdParam>(req);
+    const body = validatedBody<CreateBankTransactionBody>(req);
     res.status(201).json(await bankService.createTransaction(req.userId!, id, body));
   })
 );
@@ -129,7 +129,7 @@ bankRoutes.post(
   validate({ params: idParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
     if (!req.file) throw ApiError.badRequest("יש לצרף קובץ אקסל או PDF של דף החשבון");
-    const { id } = req.validated?.params as IdParam;
+    const { id } = validatedParams<IdParam>(req);
     res
       .status(201)
       .json(await bankService.importStatement(req.userId!, id, req.file.buffer, req.file.originalname));
@@ -140,7 +140,7 @@ bankRoutes.delete(
   "/transactions/:id",
   validate({ params: idParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.validated?.params as IdParam;
+    const { id } = validatedParams<IdParam>(req);
     await bankService.removeTransaction(req.userId!, id);
     res.json({ ok: true });
   })
@@ -184,8 +184,8 @@ bankRoutes.post(
   "/reconciliation/:id/income",
   validate({ params: idParamSchema, body: reconcileIncomeSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.validated?.params as IdParam;
-    const body = req.validated?.body as ReconcileIncomeBody;
+    const { id } = validatedParams<IdParam>(req);
+    const body = validatedBody<ReconcileIncomeBody>(req);
     res.status(201).json(await reconciliationService.linkIncome(req.userId!, id, body));
   })
 );
@@ -194,8 +194,8 @@ bankRoutes.post(
   "/reconciliation/:id/expense",
   validate({ params: idParamSchema, body: reconcileExpenseSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.validated?.params as IdParam;
-    const body = req.validated?.body as ReconcileExpenseBody;
+    const { id } = validatedParams<IdParam>(req);
+    const body = validatedBody<ReconcileExpenseBody>(req);
     res.status(201).json(await reconciliationService.linkExpense(req.userId!, id, body));
   })
 );
@@ -204,7 +204,7 @@ bankRoutes.post(
   "/reconciliation/loan",
   validate({ body: reconcileLoanSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const body = req.validated?.body as ReconcileLoanBody;
+    const body = validatedBody<ReconcileLoanBody>(req);
     res.status(201).json(await reconciliationService.linkLoan(req.userId!, body));
   })
 );
@@ -213,7 +213,7 @@ bankRoutes.post(
   "/reconciliation/:id/exclude",
   validate({ params: idParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.validated?.params as IdParam;
+    const { id } = validatedParams<IdParam>(req);
     res.json(await reconciliationService.exclude(req.userId!, id));
   })
 );
@@ -222,7 +222,7 @@ bankRoutes.post(
   "/reconciliation/:id/reset",
   validate({ params: idParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.validated?.params as IdParam;
+    const { id } = validatedParams<IdParam>(req);
     await reconciliationService.reset(req.userId!, id);
     res.json({ ok: true });
   })

@@ -2,7 +2,7 @@ import { Request, Response, Router } from "express";
 import { gateAuth } from "../../middlewares/gateAuth.middleware";
 import { validate } from "../../middlewares/validation.middleware";
 import { asyncHandler } from "../../utils/asyncHandler";
-import { IdParam, idParamSchema } from "../../utils/validation.utils";
+import { IdParam, idParamSchema, validatedBody, validatedParams } from "../../utils/validation.utils";
 import { familyService } from "./family.service";
 import {
   CreateFamilyMemberBody,
@@ -26,7 +26,7 @@ familyRoutes.post(
   "/",
   validate({ body: createFamilyMemberSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const body = req.validated?.body as CreateFamilyMemberBody;
+    const body = validatedBody<CreateFamilyMemberBody>(req);
     res.status(201).json(await familyService.create(body));
   })
 );
@@ -35,8 +35,8 @@ familyRoutes.patch(
   "/:id",
   validate({ params: idParamSchema, body: updateFamilyMemberSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.validated?.params as IdParam;
-    const body = req.validated?.body as UpdateFamilyMemberBody;
+    const { id } = validatedParams<IdParam>(req);
+    const body = validatedBody<UpdateFamilyMemberBody>(req);
     res.json(await familyService.update(id, body));
   })
 );
@@ -45,7 +45,7 @@ familyRoutes.delete(
   "/:id",
   validate({ params: idParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.validated?.params as IdParam;
+    const { id } = validatedParams<IdParam>(req);
     await familyService.remove(id, req.userId!);
     res.json({ ok: true });
   })

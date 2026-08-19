@@ -2,7 +2,7 @@ import { Request, Response, Router } from "express";
 import { gateAuth } from "../../middlewares/gateAuth.middleware";
 import { validate } from "../../middlewares/validation.middleware";
 import { asyncHandler } from "../../utils/asyncHandler";
-import { IdParam, idParamSchema } from "../../utils/validation.utils";
+import { IdParam, idParamSchema, validatedBody, validatedParams } from "../../utils/validation.utils";
 import { subscriptionsService } from "./subscriptions.service";
 import {
   CreateSubscriptionBody,
@@ -33,7 +33,7 @@ subscriptionsRoutes.post(
   "/",
   validate({ body: createSubscriptionSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const body = req.validated?.body as CreateSubscriptionBody;
+    const body = validatedBody<CreateSubscriptionBody>(req);
     res.status(201).json(await subscriptionsService.create(req.userId!, body));
   })
 );
@@ -42,8 +42,8 @@ subscriptionsRoutes.patch(
   "/:id",
   validate({ params: idParamSchema, body: updateSubscriptionSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.validated?.params as IdParam;
-    const body = req.validated?.body as UpdateSubscriptionBody;
+    const { id } = validatedParams<IdParam>(req);
+    const body = validatedBody<UpdateSubscriptionBody>(req);
     res.json(await subscriptionsService.update(req.userId!, id, body));
   })
 );
@@ -52,7 +52,7 @@ subscriptionsRoutes.delete(
   "/:id",
   validate({ params: idParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.validated?.params as IdParam;
+    const { id } = validatedParams<IdParam>(req);
     await subscriptionsService.remove(req.userId!, id);
     res.json({ ok: true });
   })

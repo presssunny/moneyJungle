@@ -4,7 +4,7 @@ import { gateAuth } from "../../middlewares/gateAuth.middleware";
 import { validate } from "../../middlewares/validation.middleware";
 import { ApiError } from "../../utils/ApiError";
 import { asyncHandler } from "../../utils/asyncHandler";
-import { IdParam, idParamSchema } from "../../utils/validation.utils";
+import { IdParam, idParamSchema, validatedBody, validatedParams } from "../../utils/validation.utils";
 import { creditService } from "./credit.service";
 import {
   UpdateCreditTransactionBody,
@@ -35,7 +35,7 @@ creditRoutes.post(
   validate({ body: uploadImportSchema }),
   asyncHandler(async (req: Request, res: Response) => {
     if (!req.file) throw ApiError.badRequest("יש לצרף קובץ אקסל");
-    const body = req.validated?.body as UploadImportBody;
+    const body = validatedBody<UploadImportBody>(req);
     const result = await creditService.createImport(
       req.userId!,
       Buffer.from(req.file.originalname, "latin1").toString("utf8"),
@@ -50,7 +50,7 @@ creditRoutes.get(
   "/imports/:id",
   validate({ params: idParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.validated?.params as IdParam;
+    const { id } = validatedParams<IdParam>(req);
     res.json(await creditService.getImport(req.userId!, id));
   })
 );
@@ -59,7 +59,7 @@ creditRoutes.patch(
   "/imports/:id/confirm",
   validate({ params: idParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.validated?.params as IdParam;
+    const { id } = validatedParams<IdParam>(req);
     res.json(await creditService.confirmImport(req.userId!, id));
   })
 );
@@ -68,7 +68,7 @@ creditRoutes.delete(
   "/imports/:id",
   validate({ params: idParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.validated?.params as IdParam;
+    const { id } = validatedParams<IdParam>(req);
     await creditService.removeImport(req.userId!, id);
     res.json({ ok: true });
   })
@@ -85,8 +85,8 @@ creditRoutes.patch(
   "/transactions/:id",
   validate({ params: idParamSchema, body: updateCreditTransactionSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.validated?.params as IdParam;
-    const { categoryId } = req.validated?.body as UpdateCreditTransactionBody;
+    const { id } = validatedParams<IdParam>(req);
+    const { categoryId } = validatedBody<UpdateCreditTransactionBody>(req);
     res.json(await creditService.updateTransaction(req.userId!, id, categoryId));
   })
 );

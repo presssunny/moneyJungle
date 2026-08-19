@@ -2,7 +2,7 @@ import { Request, Response, Router } from "express";
 import { gateAuth } from "../../middlewares/gateAuth.middleware";
 import { validate } from "../../middlewares/validation.middleware";
 import { asyncHandler } from "../../utils/asyncHandler";
-import { IdParam, idParamSchema } from "../../utils/validation.utils";
+import { IdParam, idParamSchema, validatedParams } from "../../utils/validation.utils";
 import { documentsService } from "./documents.service";
 
 export const documentsRoutes = Router();
@@ -25,7 +25,7 @@ documentsRoutes.get(
   "/:id/file",
   validate({ params: idParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.validated?.params as IdParam;
+    const { id } = validatedParams<IdParam>(req);
     const { stream, fileName, contentType } = await documentsService.file(req.userId!, id);
     res.setHeader("Content-Type", contentType);
     // RFC 5987 — the names here are Hebrew, which a bare filename= cannot carry.
@@ -47,7 +47,7 @@ documentsRoutes.post(
   "/:id/rollback",
   validate({ params: idParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.validated?.params as IdParam;
+    const { id } = validatedParams<IdParam>(req);
     res.json(await documentsService.rollback(req.userId!, id));
   })
 );
@@ -57,7 +57,7 @@ documentsRoutes.delete(
   "/:id",
   validate({ params: idParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.validated?.params as IdParam;
+    const { id } = validatedParams<IdParam>(req);
     await documentsService.remove(req.userId!, id);
     res.json({ ok: true });
   })

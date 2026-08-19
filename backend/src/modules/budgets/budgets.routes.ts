@@ -2,7 +2,7 @@ import { Request, Response, Router } from "express";
 import { gateAuth } from "../../middlewares/gateAuth.middleware";
 import { validate } from "../../middlewares/validation.middleware";
 import { asyncHandler } from "../../utils/asyncHandler";
-import { IdParam, MonthQuery, idParamSchema, monthQuerySchema, resolveMonth } from "../../utils/validation.utils";
+import { IdParam, MonthQuery, idParamSchema, monthQuerySchema, resolveMonth, validatedBody, validatedParams } from "../../utils/validation.utils";
 import { budgetsService } from "./budgets.service";
 import {
   CopyBudgetsBody,
@@ -28,7 +28,7 @@ budgetsRoutes.put(
   "/",
   validate({ body: upsertBudgetSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const body = req.validated?.body as UpsertBudgetBody;
+    const body = validatedBody<UpsertBudgetBody>(req);
     res.json(await budgetsService.upsert(req.userId!, body));
   })
 );
@@ -37,7 +37,7 @@ budgetsRoutes.post(
   "/copy-previous",
   validate({ body: copyBudgetsSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const body = req.validated?.body as CopyBudgetsBody;
+    const body = validatedBody<CopyBudgetsBody>(req);
     res.json(await budgetsService.copyFromPrevious(req.userId!, body));
   })
 );
@@ -46,7 +46,7 @@ budgetsRoutes.delete(
   "/:id",
   validate({ params: idParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.validated?.params as IdParam;
+    const { id } = validatedParams<IdParam>(req);
     await budgetsService.remove(req.userId!, id);
     res.json({ ok: true });
   })

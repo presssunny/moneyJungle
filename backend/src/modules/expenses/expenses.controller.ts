@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { asyncHandler } from "../../utils/asyncHandler";
-import { IdParam, resolveMonth } from "../../utils/validation.utils";
+import { IdParam, resolveMonth, validatedBody, validatedParams } from "../../utils/validation.utils";
 import { expensesService } from "./expenses.service";
 import { quickAddService } from "./quickAdd.service";
 import { CreateExpenseBody, ListExpensesQuery, QuickAddBody, UpdateExpenseBody } from "./expenses.validation";
@@ -13,23 +13,23 @@ export const expensesController = {
   }),
 
   create: asyncHandler(async (req: Request, res: Response) => {
-    const body = req.validated?.body as CreateExpenseBody;
+    const body = validatedBody<CreateExpenseBody>(req);
     res.status(201).json(await expensesService.create(req.userId!, body));
   }),
 
   quickAdd: asyncHandler(async (req: Request, res: Response) => {
-    const { text } = req.validated?.body as QuickAddBody;
+    const { text } = validatedBody<QuickAddBody>(req);
     res.status(201).json(await quickAddService.add(req.userId!, text));
   }),
 
   update: asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.validated?.params as IdParam;
-    const body = req.validated?.body as UpdateExpenseBody;
+    const { id } = validatedParams<IdParam>(req);
+    const body = validatedBody<UpdateExpenseBody>(req);
     res.json(await expensesService.update(req.userId!, id, body));
   }),
 
   remove: asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.validated?.params as IdParam;
+    const { id } = validatedParams<IdParam>(req);
     await expensesService.remove(req.userId!, id);
     res.json({ ok: true });
   }),

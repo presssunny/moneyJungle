@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { asyncHandler } from "../../utils/asyncHandler";
-import { IdParam } from "../../utils/validation.utils";
+import { IdParam, validatedParams } from "../../utils/validation.utils";
 import { alertsService } from "./alerts.service";
 
 export const alertsController = {
@@ -10,7 +10,7 @@ export const alertsController = {
   }),
 
   markRead: asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.validated?.params as IdParam;
+    const { id } = validatedParams<IdParam>(req);
     res.json(await alertsService.markRead(req.userId!, id));
   }),
 
@@ -20,7 +20,7 @@ export const alertsController = {
   }),
 
   remove: asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.validated?.params as IdParam;
+    const { id } = validatedParams<IdParam>(req);
     await alertsService.remove(req.userId!, id);
     res.json({ ok: true });
   }),

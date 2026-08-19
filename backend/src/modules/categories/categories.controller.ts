@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { asyncHandler } from "../../utils/asyncHandler";
-import { IdParam } from "../../utils/validation.utils";
+import { IdParam, validatedBody, validatedParams } from "../../utils/validation.utils";
 import { categoriesService } from "./categories.service";
 import {
   CreateCategoryBody,
@@ -16,18 +16,18 @@ export const categoriesController = {
   }),
 
   create: asyncHandler(async (req: Request, res: Response) => {
-    const body = req.validated?.body as CreateCategoryBody;
+    const body = validatedBody<CreateCategoryBody>(req);
     res.status(201).json(await categoriesService.create(req.userId!, body));
   }),
 
   update: asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.validated?.params as IdParam;
-    const body = req.validated?.body as UpdateCategoryBody;
+    const { id } = validatedParams<IdParam>(req);
+    const body = validatedBody<UpdateCategoryBody>(req);
     res.json(await categoriesService.update(req.userId!, id, body));
   }),
 
   remove: asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.validated?.params as IdParam;
+    const { id } = validatedParams<IdParam>(req);
     await categoriesService.remove(req.userId!, id);
     res.json({ ok: true });
   }),
@@ -37,18 +37,18 @@ export const categoriesController = {
   }),
 
   createRule: asyncHandler(async (req: Request, res: Response) => {
-    const body = req.validated?.body as CreateRuleBody;
+    const body = validatedBody<CreateRuleBody>(req);
     res.status(201).json(await categoriesService.createRule(req.userId!, body));
   }),
 
   updateRule: asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.validated?.params as IdParam;
-    const body = req.validated?.body as UpdateRuleBody;
+    const { id } = validatedParams<IdParam>(req);
+    const body = validatedBody<UpdateRuleBody>(req);
     res.json(await categoriesService.updateRule(req.userId!, id, body));
   }),
 
   removeRule: asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.validated?.params as IdParam;
+    const { id } = validatedParams<IdParam>(req);
     await categoriesService.removeRule(req.userId!, id);
     res.json({ ok: true });
   }),
