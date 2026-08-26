@@ -17,8 +17,8 @@ familyRoutes.use(gateAuth);
 
 familyRoutes.get(
   "/",
-  asyncHandler(async (_req: Request, res: Response) => {
-    res.json(await familyService.list());
+  asyncHandler(async (req: Request, res: Response) => {
+    res.json(await familyService.list(req.userId!));
   })
 );
 
@@ -27,7 +27,7 @@ familyRoutes.post(
   validate({ body: createFamilyMemberSchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const body = validatedBody<CreateFamilyMemberBody>(req);
-    res.status(201).json(await familyService.create(body));
+    res.status(201).json(await familyService.create(req.userId!, body));
   })
 );
 
@@ -37,7 +37,7 @@ familyRoutes.patch(
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = validatedParams<IdParam>(req);
     const body = validatedBody<UpdateFamilyMemberBody>(req);
-    res.json(await familyService.update(id, body));
+    res.json(await familyService.update(req.userId!, id, body));
   })
 );
 
@@ -46,7 +46,7 @@ familyRoutes.delete(
   validate({ params: idParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = validatedParams<IdParam>(req);
-    await familyService.remove(id, req.userId!);
+    await familyService.remove(req.userId!, id);
     res.json({ ok: true });
   })
 );
