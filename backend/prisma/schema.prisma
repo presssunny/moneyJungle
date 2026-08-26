@@ -50,14 +50,43 @@ enum AlertSeverity {
   critical
 }
 
+/// ADMIN: full CRM access (view/create/edit users, change roles/status).
+/// USER: normal MoneyJungle account — owns their own data, no CRM access.
+/// VIEWER: read-only CRM access — can see everything ADMIN sees, can mutate nothing.
+enum UserRole {
+  ADMIN
+  USER
+  VIEWER
+}
+
+/// An inactive account can no longer authenticate (checked at login and on
+/// every gateAuth request) — the account and its data are preserved, not deleted.
+enum UserStatus {
+  active
+  inactive
+}
+
 // ---------- Core ----------
 
+/// The authenticatable account and the owner of every domain record in the
+/// app (incomes.userId, expenses.userId, ... all point here). `email` and
+/// `passwordHash` are nullable at the DB level only because the migration
+/// that adds them cannot retroactively invent credentials for rows that
+/// existed before this change — see the backfill script referenced in the
+/// migration. Every account created going forward must have both (enforced
+/// by the CRM/registration Zod schema, not by the column itself).
 model User {
-  id        Int      @id @default(autoincrement())
-  name      String   @db.VarChar(120)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id           Int        @id @default(autoincrement())
+  name         String     @db.VarChar(120)
+  email        String?    @unique @db.VarChar(255)
+  passwordHash String?    @map("password_hash") @db.VarChar(255)
+  role         UserRole   @default(USER)
+  status       UserStatus @default(active)
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
 
+  familyMembers      FamilyMember[]
+  sessions           GateSession[]
   settings           Settings?
   incomes            Income[]
   expenses           Expense[]
@@ -81,12 +110,37 @@ model User {
   @@map("users")
 }
 
+/// A household member associated with an account — NOT a login/account of its
+/// own (see FamilyMemberWizard.tsx / family.service.ts). Deliberately separate
+/// from User: the product has always distinguished "who is signed in" from
+/// "who this household's money is being tracked for by name", and collapsing
+/// the two would silently turn every family member into an independent
+/// authenticated account, which nothing in the product asks for.
+model FamilyMember {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  name      String   @db.VarChar(120)
+  /// spouse | child | parent | other — matches FamilyMemberWizard.tsx's options.
+  relation  String?  @db.VarChar(20)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("family_members")
+}
+
 model GateSession {
   id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
   tokenHash String   @unique @map("token_hash") @db.VarChar(64)
   expiresAt DateTime @map("expires_at")
   createdAt DateTime @default(now()) @map("created_at")
 
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
   @@map("gate_sessions")
 }
 
