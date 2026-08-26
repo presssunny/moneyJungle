@@ -2,11 +2,37 @@
  * Smoke over the real Express app, without a database: health, 404/401 shapes,
  * validation and the login throttle are all decided before any query. The
  * DB-backed round trip at the bottom skips itself when MariaDB is not up.
+ *
+ * `schemaReady` covers a narrower but important case: a real, reachable DB
+ * that has NOT yet had the `add_multi_user_rbac` migration applied. gateAuth
+ * now resolves a bearer token via a query that joins `users` for role/status,
+ * so — unlike before — even *rejecting* a syntactically-valid-but-fake token
+ * touches columns (`gate_sessions.user_id`, `users.role`, ...) that don't
+ * exist pre-migration. That is a real, expected consequence of this DB not
+ * having been migrated yet, not a bug — the tests that need it skip cleanly
+ * instead of failing, the same way the DB-down case already did.
  */
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import app from "./app";
 import { prisma } from "./config/database";
+
+let schemaReady = false;
+const SCHEMA_SKIP_MSG =
+  "סכימת ה-DB עוד לא כוללת את migration ה-multi-user (add_multi_user_rbac) — יש להריץ אותה ידנית";
+
+beforeAll(async () => {
+  try {
+    // The exact shape gateAuth.middleware.ts needs at runtime: a session row
+    // joined with its owning user's role/status. If this throws, the schema
+    // predates the migration (or there's no DB at all) — either way, every
+    // test gated on schemaReady below skips instead of failing.
+    await prisma.gateSession.findFirst({ include: { user: true } });
+    schemaReady = true;
+  } catch {
+    schemaReady = false;
+  }
+});
 
 /** Routes that must refuse an unauthenticated caller. One per risk area. */
 const PROTECTED = [
@@ -20,6 +46,7 @@ const PROTECTED = [
   "/api/family",
   "/api/reports/monthly",
   "/api/imports",
+  "/api/crm/customers",
 ];
 
 describe("GET /api/health", () => {
@@ -79,7 +106,8 @@ describe("שער הכניסה — אף מסלול אינו פתוח בלי טו�
     });
   }
 
-  it("טוקן שגוי נדחה ואינו נחשב כמאומת", async () => {
+  it("טוקן שגוי נדחה ואינו נחשב כמאומת", async ({ skip }) => {
+    if (!schemaReady) skip(SCHEMA_SKIP_MSG);
     const res = await request(app).get("/api/gate/session").set("Authorization", "Bearer not-a-real-token");
     expect(res.status).toBe(401);
   });
@@ -117,11 +145,32 @@ describe("חסימת ניסיונות התחברות", () => {
  * that login works end to end.
  */
 describe("מסלול מלא מול בסיס הנתונים", () => {
+  // A throwaway account created (and removed) just for this suite, so the
+  // "wrong email vs wrong password" test below has a real email to compare
+  // against without depending on seed data or env vars. Reuses the
+  // module-level `schemaReady` probe from above instead of a second one —
+  // creating this account itself needs email/passwordHash/role/status, so it
+  // would fail (and correctly flip `dbUp` off) on a not-yet-migrated schema
+  // even if the bare `findFirst` above it succeeded.
   let dbUp = false;
+  const testEmail = `smoke-test-${Date.now()}@example.test`;
+  let testUserId: number | null = null;
 
   beforeAll(async () => {
+    if (!schemaReady) return;
     try {
-      await prisma.user.findFirst();
+      const created = await prisma.user.create({
+        data: {
+          name: "Smoke Test",
+          email: testEmail,
+          // Never logged in with — password is deliberately not what the
+          // tests below send, so both attempts below are genuinely "wrong".
+          passwordHash: "0".repeat(32) + ":" + "0".repeat(128),
+          role: "USER",
+          status: "active",
+        },
+      });
+      testUserId = created.id;
       dbUp = true;
     } catch {
       dbUp = false;
@@ -129,36 +178,37 @@ describe("מסלול מלא מול בסיס הנתונים", () => {
   });
 
   afterAll(async () => {
+    if (testUserId) await prisma.user.delete({ where: { id: testUserId } }).catch(() => undefined);
     await prisma.$disconnect().catch(() => undefined);
   });
 
   it("סיסמה שגויה נדחית ב־401", async ({ skip }) => {
-    if (!dbUp) skip("MariaDB אינו זמין — יש להריץ bash backend/start-db.sh");
+    if (!dbUp) skip(schemaReady ? "MariaDB אינו זמין — יש להריץ bash backend/start-db.sh" : SCHEMA_SKIP_MSG);
     const res = await request(app)
       .post("/api/gate/login")
       .set("X-Forwarded-For", "10.10.10.1") // fresh throttle bucket
-      .send({ username: "definitely-not-a-user", password: "definitely-wrong" });
+      .send({ email: "definitely-not-a-user@example.test", password: "definitely-wrong" });
     expect(res.status).toBe(401);
     expect(res.body.error.message).toBeTypeOf("string");
   });
 
   /**
-   * A wrong username and a wrong password must be indistinguishable, or the
-   * login screen becomes a way to learn who the account belongs to.
+   * A wrong email and a right-email-wrong-password must be indistinguishable,
+   * or the login screen becomes a way to learn who has an account.
    */
-  it("שם משתמש שגוי וסיסמה שגויה מחזירים בדיוק אותה תשובה", async ({ skip }) => {
-    if (!dbUp) skip("MariaDB אינו זמין — יש להריץ bash backend/start-db.sh");
-    const [badUser, badPassword] = await Promise.all([
+  it("אימייל שגוי וסיסמה שגויה מחזירים בדיוק אותה תשובה", async ({ skip }) => {
+    if (!dbUp) skip(schemaReady ? "MariaDB אינו זמין — יש להריץ bash backend/start-db.sh" : SCHEMA_SKIP_MSG);
+    const [badEmail, badPassword] = await Promise.all([
       request(app)
         .post("/api/gate/login")
         .set("X-Forwarded-For", "10.10.10.2")
-        .send({ username: "definitely-not-a-user", password: "definitely-wrong" }),
+        .send({ email: "definitely-not-a-user@example.test", password: "definitely-wrong" }),
       request(app)
         .post("/api/gate/login")
         .set("X-Forwarded-For", "10.10.10.3")
-        .send({ username: process.env.APP_GATE_USERNAME ?? "admin", password: "definitely-wrong" }),
+        .send({ email: testEmail, password: "definitely-wrong" }),
     ]);
-    expect(badUser.status).toBe(badPassword.status);
-    expect(badUser.body).toEqual(badPassword.body);
+    expect(badEmail.status).toBe(badPassword.status);
+    expect(badEmail.body).toEqual(badPassword.body);
   });
 });

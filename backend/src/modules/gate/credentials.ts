@@ -1,42 +1,42 @@
-import crypto from "crypto";
-import { env } from "../../config/env";
+import { prisma } from "../../config/database";
+import { verifyPassword } from "../../utils/password.utils";
 
-/**
- * The single place that answers "is this who they say they are?" — moving to JWT
- * or a real user table means replacing `verifyCredentials` and nothing else.
- * Today: one identity from the environment, never hard-coded.
- */
+export type Role = "ADMIN" | "USER" | "VIEWER";
+export type AccountStatus = "active" | "inactive";
 
 export interface Identity {
-  username: string;
-  /** Shown in the UI; separate from `username` so a real name can differ later. */
+  id: number;
+  email: string;
+  /** Shown in the UI; separate from `email` so a display name can differ later. */
   displayName: string;
+  role: Role;
+  status: AccountStatus;
 }
 
 /**
- * Constant-time comparison. Hashing first keeps `timingSafeEqual` happy with
- * different-length inputs while still leaking nothing about the real value.
+ * The single place that answers "is this who they say they are?" — real,
+ * per-account credentials now (replaces the old single shared env password;
+ * see git history for that version). Multi-user, DB-backed.
+ *
+ * Identity on success, `null` on failure — never a reason, so the caller
+ * cannot learn whether the email exists, whether the password was wrong, or
+ * whether the account is disabled. A disabled (status !== "active") account
+ * fails the same way a wrong password does — both `user.email` presence and
+ * `status` are checked before the password compare, but the *response* never
+ * distinguishes the reasons.
  */
-function safeEqual(a: string, b: string): boolean {
-  const hashA = crypto.createHash("sha256").update(a).digest();
-  const hashB = crypto.createHash("sha256").update(b).digest();
-  return crypto.timingSafeEqual(hashA, hashB);
-}
+export async function verifyCredentials(email: string, password: string): Promise<Identity | null> {
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user || !user.email || user.status !== "active") return null;
 
-/** The identity this installation authenticates as. Single-user for now. */
-export function currentIdentity(): Identity {
-  return { username: env.APP_GATE_USERNAME, displayName: env.APP_GATE_USERNAME };
-}
+  const ok = await verifyPassword(password, user.passwordHash);
+  if (!ok) return null;
 
-/**
- * Identity on success, `null` on failure — never a reason, so the caller cannot
- * leak whether the user name or the password was wrong. `username` is optional:
- * clients predating the login screen still authenticate on the password alone.
- */
-export function verifyCredentials(username: string | undefined, password: string): Identity | null {
-  const passwordOk = safeEqual(password, env.APP_GATE_PASSWORD);
-  const usernameOk = username === undefined || safeEqual(username, env.APP_GATE_USERNAME);
-  // Both comparisons always run, so a wrong user name costs the same as a wrong
-  // password and the failure mode reveals nothing by timing.
-  return passwordOk && usernameOk ? currentIdentity() : null;
+  return {
+    id: user.id,
+    email: user.email,
+    displayName: user.name,
+    role: user.role as Role,
+    status: user.status as AccountStatus,
+  };
 }

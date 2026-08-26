@@ -5,9 +5,14 @@ const envSchema = z.object({
   PORT: z.coerce.number().default(3000),
   NODE_ENV: z.string().default("development"),
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
-  // Login identity. Read only by modules/gate/credentials.ts — never anywhere else.
-  APP_GATE_USERNAME: z.string().min(1).default("admin"),
-  APP_GATE_PASSWORD: z.string().min(1, "APP_GATE_PASSWORD is required"),
+  // Pre-multi-user shared login identity. No longer read by the running app
+  // (modules/gate/credentials.ts now checks per-account email/passwordHash in
+  // the DB) — kept optional, not removed, because
+  // prisma/scripts/backfillMultiUserAuth.ts reads these to give the ONE
+  // pre-existing account (created before this change) real login credentials
+  // that match what its owner already knows, instead of a guessed value.
+  APP_GATE_USERNAME: z.string().optional(),
+  APP_GATE_PASSWORD: z.string().optional(),
   GATE_SESSION_DAYS: z.coerce.number().default(30),
   // Comma-separated allow-list of browser origins. Empty → allow all (dev only).
   CORS_ORIGIN: z.string().default(""),

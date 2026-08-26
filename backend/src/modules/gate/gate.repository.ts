@@ -1,12 +1,17 @@
 import { prisma } from "../../config/database";
 
 export const gateRepository = {
-  createSession(tokenHash: string, expiresAt: Date) {
-    return prisma.gateSession.create({ data: { tokenHash, expiresAt } });
+  createSession(userId: number, tokenHash: string, expiresAt: Date) {
+    return prisma.gateSession.create({ data: { userId, tokenHash, expiresAt } });
   },
 
+  /**
+   * Joins the owning user in one round trip — this is what lets gateAuth
+   * resolve identity + role + status from the token alone, without a second
+   * query, and without ever trusting anything the client supplied.
+   */
   findByTokenHash(tokenHash: string) {
-    return prisma.gateSession.findUnique({ where: { tokenHash } });
+    return prisma.gateSession.findUnique({ where: { tokenHash }, include: { user: true } });
   },
 
   deleteByTokenHash(tokenHash: string) {

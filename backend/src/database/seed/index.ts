@@ -5,11 +5,15 @@ import { defaultPaymentMethods } from "./defaultPaymentMethods.seed";
 import { fixedPlanRows } from "./fixedPlan.seed";
 
 async function main() {
-  // Primary user + settings
+  // Bootstrap account + settings. role: ADMIN because on a fresh install this
+  // is the first (and only) account, and someone has to be able to reach the
+  // CRM. email/passwordHash are left unset here — seeding cannot invent real
+  // login credentials; run prisma/scripts/backfillMultiUserAuth.ts (existing
+  // installs) or create a real account through the CRM/signup flow to log in.
   let user = await prisma.user.findFirst();
   if (!user) {
-    user = await prisma.user.create({ data: { name: "המשפחה שלי" } });
-    console.log("Created primary user");
+    user = await prisma.user.create({ data: { name: "המשפחה שלי", role: "ADMIN", status: "active" } });
+    console.log("Created bootstrap account (no login credentials yet — see comment above)");
   }
 
   await prisma.settings.upsert({
