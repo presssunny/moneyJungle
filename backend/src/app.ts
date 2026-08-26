@@ -9,6 +9,7 @@ import { bankRoutes } from "./modules/bank/bank.routes";
 import { budgetsRoutes } from "./modules/budgets/budgets.routes";
 import { categoriesRoutes } from "./modules/categories/categories.routes";
 import { creditRoutes } from "./modules/credit/credit.routes";
+import { crmRoutes } from "./modules/crm/crm.routes";
 import { dashboardRoutes } from "./modules/dashboard/dashboard.routes";
 import { expensesRoutes } from "./modules/expenses/expenses.routes";
 import { familyRoutes } from "./modules/family/family.routes";
@@ -68,6 +69,10 @@ app.use("/api/savings", savingsRoutes);
 app.use("/api/family", familyRoutes);
 app.use("/api/imports", importsRoutes);
 app.use("/api/documents", documentsRoutes);
+// The CRM's own namespace — read-only aggregation across every domain above,
+// plus customer create/update/delete delegated to familyService. Kept
+// separate from the customer-facing routes on purpose (see crm.routes.ts).
+app.use("/api/crm", crmRoutes);
 
 app.use("/api", notFoundMiddleware);
 app.use(errorMiddleware);
