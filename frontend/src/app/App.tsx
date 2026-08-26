@@ -2,9 +2,10 @@ import { lazy, Suspense, type ReactNode } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { Loading } from "../components/common/Loading";
 import { ThemeProvider } from "../context/ThemeContext";
+import { CrmLayout } from "../crm/CrmLayout";
 import { AppLayout } from "../layouts/AppLayout";
 import LoginPage from "../pages/LoginPage";
-import { isLoggedIn } from "../services/gate.service";
+import { currentUser, isLoggedIn } from "../services/gate.service";
 import { RequireOnboarding } from "./RequireOnboarding";
 
 // Route-level code splitting: each page is its own chunk, fetched on first
@@ -18,6 +19,8 @@ const CalendarPage = lazy(() => import("../pages/CalendarPage"));
 const CategoriesRulesPage = lazy(() => import("../pages/CategoriesRulesPage"));
 const ComparisonPage = lazy(() => import("../pages/ComparisonPage"));
 const CreditPage = lazy(() => import("../pages/CreditPage"));
+const CrmCustomersPage = lazy(() => import("../crm/pages/CrmCustomersPage"));
+const CrmCustomerDetailPage = lazy(() => import("../crm/pages/CrmCustomerDetailPage"));
 const DashboardPage = lazy(() => import("../pages/DashboardPage"));
 const DocumentsPage = lazy(() => import("../pages/DocumentsPage"));
 const ExpensesPage = lazy(() => import("../pages/ExpensesPage"));
@@ -38,6 +41,20 @@ const TransactionsPage = lazy(() => import("../pages/TransactionsPage"));
 /** Every route below the login screen is behind this. */
 function RequireGate({ children }: { children: ReactNode }) {
   if (!isLoggedIn()) return <Navigate to="/login" replace />;
+  return <>{children}</>;
+}
+
+/**
+ * Frontend-side gate for the CRM: hides it from a plain USER account. This is
+ * UX only — the real enforcement is `requireRole("ADMIN", "VIEWER")` on the
+ * Backend routes (see crm.routes.ts); a USER who somehow lands here still
+ * gets 403s from every /api/crm/* call, this just avoids showing them a
+ * screen that can't work for them.
+ */
+function RequireCrmAccess({ children }: { children: ReactNode }) {
+  if (!isLoggedIn()) return <Navigate to="/login" replace />;
+  const user = currentUser();
+  if (!user || (user.role !== "ADMIN" && user.role !== "VIEWER")) return <Navigate to="/" replace />;
   return <>{children}</>;
 }
 
@@ -93,6 +110,21 @@ export default function App() {
             <Route path="/imports" element={<ImportsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
+
+          {/* CRM — internal tool, own layout (no Sidebar/BottomNav from the
+              customer-facing app), same gate login. See CrmLayout.tsx. */}
+          <Route
+            path="/crm"
+            element={
+              <RequireCrmAccess>
+                <CrmLayout />
+              </RequireCrmAccess>
+            }
+          >
+            <Route index element={<Navigate to="customers" replace />} />
+            <Route path="customers" element={<CrmCustomersPage />} />
+            <Route path="customers/:id" element={<CrmCustomerDetailPage />} />
           </Route>
         </Routes>
       </Suspense>

@@ -1,6 +1,7 @@
 @import "./themes.css";
 @import "./app.css";
 @import "./dashboard.css";
+@import "./crm.css";
 
 * {
   margin: 0;
