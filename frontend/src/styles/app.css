@@ -2182,12 +2182,23 @@
   display: flex;
   flex-direction: column;
   gap: 18px;
+  /* A column-flex item's cross-axis (width) minimum defaults to its content's
+     min-content size, not 0 — direct children (the ticker, charts, tables...)
+     could force .page-shell itself wider than the viewport on narrow screens,
+     leaking a horizontal scrollbar onto the whole page. min-width: 0 lets
+     `width: 100%`/flex actually shrink it, same reasoning as the `> section`
+     rule below. */
+  min-width: 0;
 }
 
 .page-shell > section {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  /* See .page-shell above — same fix, one level down (a chart card's intrinsic
+     width was the concrete case that surfaced this: recharts' ResponsiveContainer
+     was pushing .page-shell-charts wider than the viewport on mobile). */
+  min-width: 0;
 }
 
 /* The toolbar sits tighter to the content it acts on. */

@@ -9,6 +9,10 @@
   border-radius: 6px;
   padding: 8px 10px;
   overflow: hidden;
+  /* Direct child of .page-shell's flex-column — see the min-width: 0 comment
+     there for why this needs it too (belt-and-suspenders for the marquee
+     specifically, which is the widest intrinsic content on the page). */
+  min-width: 0;
 }
 
 .ticker.severity-critical {
