@@ -8,14 +8,14 @@ export function useGateAuth() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function login(username: string, password: string) {
+  async function login(email: string, password: string) {
     setLoading(true);
     setError(null);
     try {
-      await gateService.login(username, password);
+      await gateService.login(email, password);
       navigate("/", { replace: true });
     } catch (err) {
-      setError(apiErrorMessage(err, "שם המשתמש או הסיסמה שגויים"));
+      setError(apiErrorMessage(err, "האימייל או הסיסמה שגויים"));
     } finally {
       setLoading(false);
     }

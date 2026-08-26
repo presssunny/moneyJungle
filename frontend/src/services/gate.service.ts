@@ -1,9 +1,13 @@
 import { api, TOKEN_KEY } from "./api";
 
+export type UserRole = "ADMIN" | "USER" | "VIEWER";
+
 /** Who is signed in. Mirrors the backend `Identity` (modules/gate/credentials.ts). */
 export interface AuthUser {
-  username: string;
+  id: number;
+  email: string;
   displayName: string;
+  role: UserRole;
 }
 
 const USER_KEY = "gate_user";
@@ -14,7 +18,8 @@ export function isLoggedIn(): boolean {
 
 /**
  * The signed-in user as last known, without a round-trip — so the header can
- * greet by name on first paint. `checkSession` refreshes it from the server.
+ * greet by name (and the CRM entry point/routes can gate on role) on first
+ * paint. `checkSession` refreshes it from the server.
  */
 export function currentUser(): AuthUser | null {
   const raw = localStorage.getItem(USER_KEY);
@@ -30,9 +35,9 @@ function storeUser(user: AuthUser | undefined): void {
   if (user) localStorage.setItem(USER_KEY, JSON.stringify(user));
 }
 
-export async function login(username: string, password: string): Promise<AuthUser | null> {
+export async function login(email: string, password: string): Promise<AuthUser | null> {
   const { data } = await api.post<{ token: string; user?: AuthUser }>("/gate/login", {
-    username,
+    email,
     password,
   });
   localStorage.setItem(TOKEN_KEY, data.token);

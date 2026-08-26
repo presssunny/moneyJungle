@@ -1,41 +1,41 @@
 import { useState, type FormEvent } from "react";
 
 interface LoginFormProps {
-  onSubmit: (username: string, password: string) => void;
+  onSubmit: (email: string, password: string) => void;
   loading: boolean;
   error: string | null;
 }
 
 /**
- * User name + password. The reveal toggle is a real `<button type="button">` so
+ * Email + password. The reveal toggle is a real `<button type="button">` so
  * it never submits, and announces its state via `aria-pressed` — swapping an
  * icon alone says nothing to a screen reader.
  */
 export function LoginForm({ onSubmit, loading, error }: LoginFormProps) {
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [revealed, setRevealed] = useState(false);
 
-  const canSubmit = username.trim().length > 0 && password.length > 0 && !loading;
+  const canSubmit = email.trim().length > 0 && password.length > 0 && !loading;
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    if (canSubmit) onSubmit(username.trim(), password);
+    if (canSubmit) onSubmit(email.trim(), password);
   }
 
   return (
     <form className="gate-form" onSubmit={handleSubmit} noValidate>
       <div>
-        <label className="gate-field-label" htmlFor="login-username">
-          שם משתמש
+        <label className="gate-field-label" htmlFor="login-email">
+          אימייל
         </label>
         <div className="gate-field-control">
           <input
-            id="login-username"
+            id="login-email"
             className="gate-input"
-            type="text"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             autoComplete="username"
             autoCapitalize="none"
             autoCorrect="off"
