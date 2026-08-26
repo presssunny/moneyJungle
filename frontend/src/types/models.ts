@@ -355,11 +355,19 @@ export interface SavingsGoal {
   targetDate: string | null;
 }
 
+export type FamilyRelation = "spouse" | "child" | "parent" | "other";
+
+/**
+ * A household member associated with the signed-in account — not a login of
+ * its own, and not an owner of financial records (those all belong to the
+ * account itself). See backend/prisma/schema.prisma's FamilyMember model.
+ */
 export interface FamilyMember {
   id: number;
   name: string;
+  relation: FamilyRelation | null;
   createdAt: string;
-  _count?: { expenses: number; incomes: number; loans: number };
+  updatedAt: string;
 }
 
 export interface MonthlyReport {

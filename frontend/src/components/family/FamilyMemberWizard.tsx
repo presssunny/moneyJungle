@@ -6,6 +6,7 @@ import { Wizard, type WizardStep } from "../common/Wizard";
 import { apiErrorMessage } from "../../services/api";
 import { createIncome } from "../../services/finance.service";
 import { createFamilyMember } from "../../services/planning.service";
+import type { FamilyRelation } from "../../types/models";
 import { formatCurrency } from "../../utils/format";
 
 const INCOME_TYPES = [
@@ -125,9 +126,10 @@ export function FamilyMemberWizard({
     setBusy(true);
     setError(null);
     try {
-      await createFamilyMember(name.trim());
-      // The income belongs to the household's books either way; creating it here
-      // is what saves the trip to another screen.
+      await createFamilyMember(name.trim(), relation ? (relation as FamilyRelation) : undefined);
+      // The income belongs to the account's own books either way (family members
+      // don't own financial records — see the FamilyMember model); creating it
+      // here just saves the trip to another screen.
       if (wantsIncome) {
         await createIncome({
           amount,

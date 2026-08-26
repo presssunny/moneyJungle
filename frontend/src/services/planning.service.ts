@@ -9,6 +9,7 @@ import type {
   Category,
   CategoryRule,
   FamilyMember,
+  FamilyRelation,
   PaymentMethod,
   RecurringPayment,
   SavingsGoal,
@@ -453,13 +454,17 @@ export async function listFamily(): Promise<FamilyMember[]> {
   return data;
 }
 
-export async function createFamilyMember(name: string): Promise<FamilyMember> {
-  const { data } = await api.post("/family", { name });
+export async function createFamilyMember(name: string, relation?: FamilyRelation): Promise<FamilyMember> {
+  const { data } = await api.post("/family", { name, relation });
   return data;
 }
 
-export async function updateFamilyMember(id: number, name: string): Promise<FamilyMember> {
-  const { data } = await api.patch(`/family/${id}`, { name });
+export async function updateFamilyMember(
+  id: number,
+  name: string,
+  relation?: FamilyRelation
+): Promise<FamilyMember> {
+  const { data } = await api.patch(`/family/${id}`, { name, relation });
   return data;
 }
 

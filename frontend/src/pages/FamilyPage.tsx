@@ -8,6 +8,7 @@ import { ErrorMessage } from "../components/common/ErrorMessage";
 import { Input } from "../components/common/Input";
 import { Modal } from "../components/common/Modal";
 import { PageShell } from "../components/common/PageShell";
+import { Select } from "../components/common/Select";
 import { SkeletonKpiRow, SkeletonRows } from "../components/common/Skeleton";
 import { Table, type Column } from "../components/common/Table";
 import { SummaryCard } from "../components/dashboard/SummaryCard";
@@ -21,18 +22,20 @@ import {
   listFamily,
   updateFamilyMember,
 } from "../services/planning.service";
-import type { FamilyMember } from "../types/models";
+import type { FamilyMember, FamilyRelation } from "../types/models";
 import { formatDate } from "../utils/format";
 
-/** What a member is linked to — used to say what a deletion would take with it. */
-function linkedSummary(member: FamilyMember): string | null {
-  if (!member._count) return null;
-  const parts: string[] = [];
-  if (member._count.expenses) parts.push(`${member._count.expenses} הוצאות`);
-  if (member._count.incomes) parts.push(`${member._count.incomes} הכנסות`);
-  if (member._count.loans) parts.push(`${member._count.loans} הלוואות`);
-  return parts.length > 0 ? parts.join(" · ") : null;
-}
+const RELATION_LABELS: Record<FamilyRelation, string> = {
+  spouse: "בן/בת זוג",
+  child: "ילד/ה",
+  parent: "הורה",
+  other: "אחר",
+};
+
+const RELATION_OPTIONS = (Object.keys(RELATION_LABELS) as FamilyRelation[]).map((value) => ({
+  value,
+  label: RELATION_LABELS[value],
+}));
 
 export default function FamilyPage() {
   const members = useAsync(() => listFamily(), [], "לא הצלחנו לטעון את בני המשפחה");
@@ -41,6 +44,7 @@ export default function FamilyPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<FamilyMember | null>(null);
   const [name, setName] = useState("");
+  const [relation, setRelation] = useState<string>("");
   const [error, setError] = useState("");
 
   function openCreate() {
@@ -50,6 +54,7 @@ export default function FamilyPage() {
   function openEdit(member: FamilyMember) {
     setEditing(member);
     setName(member.name);
+    setRelation(member.relation ?? "");
     setError("");
     setFormOpen(true);
   }
@@ -58,8 +63,9 @@ export default function FamilyPage() {
     e.preventDefault();
     setError("");
     try {
-      if (editing) await updateFamilyMember(editing.id, name);
-      else await createFamilyMember(name);
+      const rel = relation ? (relation as FamilyRelation) : undefined;
+      if (editing) await updateFamilyMember(editing.id, name, rel);
+      else await createFamilyMember(name, rel);
       setFormOpen(false);
       members.reload();
     } catch (err) {
@@ -68,19 +74,14 @@ export default function FamilyPage() {
   }
 
   function askRemove(member: FamilyMember) {
-    const linked = linkedSummary(member);
     confirm.ask(
       {
         title: `מחיקת ${member.name}`,
-        // Say what is actually about to be lost — "are you sure?" alone gives the
-        // user nothing to decide with.
         message: (
           <>
             <strong>{member.name}</strong> יימחק מהמערכת.
             <span className="confirm-consequence">
-              {linked
-                ? `יימחקו יחד איתו גם: ${linked}. הפעולה אינה הפיכה.`
-                : "לא משויכים אליו נתונים כספיים. הפעולה אינה הפיכה."}
+              זהו רק רישום שיוך משפחתי — לא נמחקים נתונים כספיים. הפעולה אינה הפיכה.
             </span>
           </>
         ),
@@ -97,9 +98,11 @@ export default function FamilyPage() {
   const columns: Column<FamilyMember>[] = [
     { key: "name", header: "שם", render: (row) => <strong>👤 {row.name}</strong> },
     {
-      key: "activity",
-      header: "פעילות",
-      render: (row) => <span className="text-muted">{linkedSummary(row) ?? "—"}</span>,
+      key: "relation",
+      header: "קשר",
+      render: (row) => (
+        <span className="text-muted">{row.relation ? RELATION_LABELS[row.relation] : "—"}</span>
+      ),
     },
     { key: "since", header: "נוצר", render: (row) => formatDate(row.createdAt) },
     {
@@ -120,10 +123,7 @@ export default function FamilyPage() {
   ];
 
   const members_ = members.data ?? [];
-  // Counts only — no money is derived here (CLAUDE.md §4).
-  const withActivity = members_.filter(
-    (m) => (m._count?.expenses ?? 0) + (m._count?.incomes ?? 0) + (m._count?.loans ?? 0) > 0
-  ).length;
+  const withRelation = members_.filter((m) => m.relation).length;
 
   return (
     <PageShell
@@ -132,21 +132,16 @@ export default function FamilyPage() {
         <AsyncSection
           resource={members}
           errorTitle="לא הצלחנו לטעון את סיכום המשפחה"
-          skeleton={<SkeletonKpiRow count={3} label="טוען סיכום" />}
+          skeleton={<SkeletonKpiRow count={2} label="טוען סיכום" />}
         >
           {(rows) => (
             <div className="kpi-row">
               <SummaryCard label="בני משפחה" value={String(rows.length)} icon="👨‍👩‍👧" />
               <SummaryCard
-                label="עם נתונים משויכים"
-                value={String(withActivity)}
+                label="עם קשר מוגדר"
+                value={String(withRelation)}
                 icon="🔗"
-                sub={withActivity < rows.length ? `${rows.length - withActivity} ללא נתונים` : undefined}
-              />
-              <SummaryCard
-                label="הלוואות משויכות"
-                value={String(rows.reduce((sum, m) => sum + (m._count?.loans ?? 0), 0))}
-                icon="📉"
+                sub={withRelation < rows.length ? `${rows.length - withRelation} ללא קשר מוגדר` : undefined}
               />
             </div>
           )}
@@ -165,21 +160,24 @@ export default function FamilyPage() {
               rows={rows}
               rowKey={(row) => row.id}
               emptyState={
-                <EmptyState
-                  icon="👨‍👩‍👧"
-                  title="אין בני משפחה"
-                  hint="הוסיפי בן משפחה כדי לשייך אליו הכנסות, הוצאות והלוואות"
-                />
+                <EmptyState icon="👨‍👩‍👧" title="אין בני משפחה" hint="הוסיפי בן משפחה לרישום הבית שלך" />
               }
             />
           )}
         </AsyncSection>
       </Card>
 
-      <Modal title={editing ? "עריכת שם" : "בן משפחה חדש"} open={formOpen} onClose={() => setFormOpen(false)}>
+      <Modal title={editing ? "עריכת בן משפחה" : "בן משפחה חדש"} open={formOpen} onClose={() => setFormOpen(false)}>
         <form onSubmit={submit}>
           {error && <ErrorMessage message={error} />}
           <Input label="שם" required value={name} onChange={(e) => setName(e.target.value)} />
+          <Select
+            label="קשר"
+            options={RELATION_OPTIONS}
+            placeholder="לא לציין"
+            value={relation}
+            onChange={(e) => setRelation(e.target.value)}
+          />
           <div className="modal-actions">
             <Button type="submit">{editing ? "עדכון" : "הוספה"}</Button>
             <Button type="button" variant="ghost" onClick={() => setFormOpen(false)}>
