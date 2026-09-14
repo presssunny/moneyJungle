@@ -1,5 +1,5 @@
 import { prisma } from "../../config/database";
-import { verifyPassword } from "../../utils/password.utils";
+import { dummyPasswordHash, hashPassword, needsPasswordRehash, verifyPassword } from "../../utils/password.utils";
 
 export type Role = "ADMIN" | "USER" | "VIEWER";
 export type AccountStatus = "active" | "inactive";
@@ -27,10 +27,17 @@ export interface Identity {
  */
 export async function verifyCredentials(email: string, password: string): Promise<Identity | null> {
   const user = await prisma.user.findUnique({ where: { email } });
-  if (!user || !user.email || user.status !== "active") return null;
+  if (!user || !user.email || user.status !== "active" || !user.passwordHash) {
+    await verifyPassword(password, dummyPasswordHash);
+    return null;
+  }
 
   const ok = await verifyPassword(password, user.passwordHash);
   if (!ok) return null;
+  if (needsPasswordRehash(user.passwordHash)) {
+    const updated = await prisma.user.updateMany({ where: { id: user.id, passwordHash: user.passwordHash }, data: { passwordHash: await hashPassword(password) } });
+    if (!updated.count) return null;
+  }
 
   return {
     id: user.id,
