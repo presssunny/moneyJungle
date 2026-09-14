@@ -94,6 +94,7 @@ model User {
   categoryRules      CategoryRule[]
   budgets            Budget[]
   creditImports      CreditImport[]
+  creditCards        CreditCard[]
   creditTransactions CreditTransaction[]
   bankAccounts       BankAccount[]
   bankTransactions   BankTransaction[]
@@ -294,6 +295,9 @@ model CreditImport {
 }
 
 model CreditTransaction {
+  cardId          Int?      @map("card_id")
+  card            CreditCard? @relation(fields: [cardId], references: [id], onDelete: SetNull)
+  @@index([cardId])
   id              Int       @id @default(autoincrement())
   creditImportId  Int       @map("credit_import_id")
   userId          Int       @map("user_id")
@@ -322,6 +326,21 @@ model CreditTransaction {
   @@index([creditImportId])
   @@index([categoryId])
   @@map("credit_transactions")
+}
+
+model CreditCard {
+  id           Int      @id @default(autoincrement())
+  userId       Int      @map("user_id")
+  name         String   @db.VarChar(80)
+  issuer       String   @db.VarChar(80)
+  lastFour     String   @map("last_four") @db.VarChar(4)
+  billingDay   Int?     @map("billing_day")
+  createdAt    DateTime @default(now()) @map("created_at")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions CreditTransaction[]
+
+  @@index([userId])
+  @@map("credit_cards")
 }
 
 // ---------- Bank (phase 2) ----------

@@ -103,8 +103,11 @@ export const creditService = {
     userId: number,
     fileName: string,
     buffer: Buffer,
-    override?: { importMonth?: number; importYear?: number }
+    override?: { importMonth?: number; importYear?: number; cardId?: number }
   ) {
+    if (override?.cardId !== undefined && !await prisma.creditCard.findFirst({ where: { id: override.cardId, userId } })) {
+      throw ApiError.notFound("הכרטיס לא נמצא");
+    }
     const parsedRows = parseCreditFile(buffer);
     const fileHash = hashFile(buffer);
 
@@ -113,17 +116,27 @@ export const creditService = {
       where: { userId, fileHash },
       select: { id: true, fileName: true, createdAt: true, totalTransactions: true, status: true },
     });
+    if (sameFile) {
+      return { alreadyImported: true, skippedDuplicates: parsedRows.length, parsedRows: parsedRows.length,
+        previousImport: { id: sameFile.id, fileName: sameFile.fileName, createdAt: sameFile.createdAt } } as const;
+    }
 
     // Keep only transactions not already stored, so re-uploading a statement
     // that overlaps last month's adds the new days and nothing else. Matching
     // is on the statement's own identifying fields — a card re-issues the same
     // business/amount pair often, so the date must take part.
     const existing = await prisma.creditTransaction.findMany({
-      where: { userId },
-      select: { transactionDate: true, businessName: true, amount: true, paymentCount: true },
+      where: { userId, ...(override?.cardId !== undefined ? { OR: [{ cardId: override.cardId }, { cardId: null }] } : {}) },
+      select: { transactionDate: true, businessName: true, amount: true, paymentCount: true, cardId: true },
     });
     const keyOf = (date: Date, business: string, amount: number, payments: number) =>
       `${date.toISOString().slice(0, 10)}|${business.trim()}|${round2(amount)}|${payments}`;
+    if (override?.cardId !== undefined) {
+      const unassigned = new Set(existing.filter((row) => row.cardId === null).map((row) => keyOf(row.transactionDate, row.businessName, Number(row.amount), row.paymentCount)));
+      if (parsedRows.some((row) => unassigned.has(keyOf(row.transactionDate, row.businessName, row.amount, row.paymentCount)))) {
+        throw ApiError.badRequest("נמצאו עסקאות זהות שעדיין לא משויכות לכרטיס. שייכו קודם את העסקאות או הדוח הקודם לכרטיס הנכון, ואז העלו שוב — כדי למנוע ספירה כפולה או השמטה.");
+      }
+    }
     const seen = new Set(
       existing.map((t) => keyOf(t.transactionDate, t.businessName, Number(t.amount), t.paymentCount))
     );
@@ -142,9 +155,7 @@ export const creditService = {
         alreadyImported: true,
         skippedDuplicates,
         parsedRows: parsedRows.length,
-        previousImport: sameFile
-          ? { id: sameFile.id, fileName: sameFile.fileName, createdAt: sameFile.createdAt }
-          : null,
+        previousImport: null,
       } as const;
     }
 
@@ -177,6 +188,7 @@ export const creditService = {
       await tx.creditTransaction.createMany({
         data: rows.map((row) => ({
           creditImportId: creditImport.id,
+          cardId: override?.cardId ?? null,
           userId,
           transactionDate: row.transactionDate,
           chargeDate: row.chargeDate,
@@ -198,9 +210,7 @@ export const creditService = {
       /** Rows this file shared with data already stored — taken in only once. */
       skippedDuplicates,
       parsedRows: parsedRows.length,
-      previousImport: sameFile
-        ? { id: sameFile.id, fileName: sameFile.fileName, createdAt: sameFile.createdAt }
-        : null,
+      previousImport: null,
     };
   },
 

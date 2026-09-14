@@ -48,7 +48,7 @@ function monthlyOccurrences(anchor: Date, from: Date, to: Date): Date[] {
   for (let i = 0; i < 18; i++) {
     const daysInMonth = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
     const d = new Date(Date.UTC(y, m, Math.min(day, daysInMonth)));
-    if (d >= from && d <= to) res.push(d);
+    if (d >= from && d >= anchor && d <= to) res.push(d);
     m += 1;
     if (m > 11) {
       m = 0;
@@ -62,8 +62,9 @@ function monthlyOccurrences(anchor: Date, from: Date, to: Date): Date[] {
 function yearlyOccurrences(anchor: Date, from: Date, to: Date): Date[] {
   const res: Date[] = [];
   for (let y = from.getUTCFullYear(); y <= to.getUTCFullYear() + 1; y++) {
-    const d = new Date(Date.UTC(y, anchor.getUTCMonth(), anchor.getUTCDate()));
-    if (d >= from && d <= to) res.push(d);
+    const lastDay = new Date(Date.UTC(y, anchor.getUTCMonth() + 1, 0)).getUTCDate();
+    const d = new Date(Date.UTC(y, anchor.getUTCMonth(), Math.min(anchor.getUTCDate(), lastDay)));
+    if (d >= from && d >= anchor && d <= to) res.push(d);
   }
   return res;
 }
@@ -72,11 +73,8 @@ function yearlyOccurrences(anchor: Date, from: Date, to: Date): Date[] {
 function weeklyOccurrences(anchor: Date, from: Date, to: Date): Date[] {
   const res: Date[] = [];
   const d = new Date(anchor);
+  if (d < from) d.setUTCDate(d.getUTCDate() + Math.ceil((from.getTime() - d.getTime()) / (7 * 86400000)) * 7);
   let guard = 0;
-  while (d < from && guard < 400) {
-    d.setUTCDate(d.getUTCDate() + 7);
-    guard += 1;
-  }
   while (d <= to && guard < 400) {
     res.push(new Date(d));
     d.setUTCDate(d.getUTCDate() + 7);
@@ -93,7 +91,7 @@ export async function buildUpcoming(userId: number, windowDays: number): Promise
   const [recurrings, subscriptions, loans, reminders] = await Promise.all([
     prisma.recurringPayment.findMany({ where: { userId } }),
     prisma.subscription.findMany({ where: { userId, status: "active" } }),
-    prisma.loan.findMany({ where: { userId, status: "active" } }),
+    prisma.loan.findMany({ where: { userId, status: "active" }, include: { schedule: { where: { paymentDate: { gte: from, lte: to } }, orderBy: { paymentDate: "asc" } } } }),
     prisma.reminder.findMany({
       where: { userId, isActive: true, eventDate: { gte: from, lte: to } },
     }),
@@ -125,6 +123,14 @@ export async function buildUpcoming(userId: number, windowDays: number): Promise
   }
 
   for (const loan of loans) {
+    // Bank schedules carry final/variable payments; repeating monthlyPayment would invent extra debt.
+    if (loan.scheduleSource === "bank_file") {
+      for (const entry of loan.schedule) {
+        events.push({ date: entry.paymentDate.toISOString(), kind: "loan", name: loan.loanName,
+          amount: decimalToNumber(entry.total), icon: KIND_ICON.loan });
+      }
+      continue;
+    }
     const amount = decimalToNumber(loan.monthlyPayment);
     if (amount <= 0) continue;
     const balance = decimalToNumber(loan.currentBalance);

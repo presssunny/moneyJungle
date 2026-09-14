@@ -45,6 +45,8 @@ const PROTECTED = [
   "/api/settings",
   "/api/family",
   "/api/reports/monthly",
+  "/api/reports/forecast",
+  "/api/credit/wallet",
   "/api/imports",
   "/api/crm/customers",
 ];

@@ -2,6 +2,7 @@ import { z } from "zod";
 
 /** Multer puts multipart text fields on req.body as strings. */
 export const uploadImportSchema = z.object({
+  cardId: z.coerce.number().int().positive().optional(),
   importMonth: z.coerce.number().int().min(1).max(12).optional(),
   importYear: z.coerce.number().int().min(2000).max(2100).optional(),
 });
