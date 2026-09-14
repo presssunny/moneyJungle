@@ -13,7 +13,11 @@ const envSchema = z.object({
   // that match what its owner already knows, instead of a guessed value.
   APP_GATE_USERNAME: z.string().optional(),
   APP_GATE_PASSWORD: z.string().optional(),
-  GATE_SESSION_DAYS: z.coerce.number().default(30),
+  GATE_SESSION_DAYS: z.coerce.number().int().min(1).max(30).default(7),
+  SESSION_IDLE_MINUTES: z.coerce.number().int().min(5).max(1440).default(120),
+  PUBLIC_ORIGIN: z.string().default(""),
+  TRUST_PROXY: z.string().default("false"),
+  HOST: z.string().default("127.0.0.1"),
   // Comma-separated allow-list of browser origins. Empty → allow all (dev only).
   CORS_ORIGIN: z.string().default(""),
   // Which AI vendor to talk to. Read only by modules/ai/ai.service.ts.
@@ -28,6 +32,16 @@ const envSchema = z.object({
   // Read only by modules/documents/documentStorage.service.ts. Relative paths
   // resolve under backend/ so the value stays portable across machines.
   DOCUMENT_STORAGE_DIR: z.string().default("storage/documents"),
+}).superRefine((value, ctx) => {
+  if (value.NODE_ENV === "production") {
+    try {
+      const url = new URL(value.PUBLIC_ORIGIN);
+      if (url.protocol !== "https:" || url.origin !== value.PUBLIC_ORIGIN) throw new Error();
+    } catch { ctx.addIssue({ code: "custom", path: ["PUBLIC_ORIGIN"], message: "Production requires an exact HTTPS origin" }); }
+  }
+  if (!["false", "loopback"].includes(value.TRUST_PROXY)) {
+    ctx.addIssue({ code: "custom", path: ["TRUST_PROXY"], message: "Use false for direct access or loopback for the local reverse proxy" });
+  }
 });
 
 const parsed = envSchema.safeParse(process.env);

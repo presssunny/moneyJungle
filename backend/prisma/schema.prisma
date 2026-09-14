@@ -133,6 +133,7 @@ model FamilyMember {
 }
 
 model GateSession {
+  lastSeenAt DateTime @default(now()) @map("last_seen_at")
   id        Int      @id @default(autoincrement())
   userId    Int      @map("user_id")
   tokenHash String   @unique @map("token_hash") @db.VarChar(64)

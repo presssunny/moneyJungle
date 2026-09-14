@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { apiErrorMessage } from "../services/api";
+import { apiErrorMessage, toastApiError } from "../services/api";
 import * as gateService from "../services/gate.service";
 
 export function useGateAuth() {
@@ -22,8 +22,10 @@ export function useGateAuth() {
   }
 
   async function logout() {
-    await gateService.logout();
-    navigate("/login", { replace: true });
+    try {
+      await gateService.logout();
+      navigate("/login", { replace: true });
+    } catch (err) { toastApiError(err, "היציאה לא הושלמה. נסי שוב."); }
   }
 
   return {

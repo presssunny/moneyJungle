@@ -9,6 +9,7 @@ import { walletService } from "./wallet.service";
 import { reportsService } from "../reports/reports.service";
 import { creditService } from "./credit.service";
 import * as XLSX from "xlsx";
+import { csrfForSession, sessionCookieName } from "../gate/sessionCookie";
 
 const userIds: number[] = [];
 let userId: number;
@@ -63,17 +64,17 @@ describe("wallet with real credit fixture and authenticated API", () => {
     }
   });
   it("creates a card and associates the fixture without copying money rows", async () => {
-    const result = await request(app).post("/api/credit/cards").set("Authorization", `Bearer ${token}`).send({ name: "test card", issuer: "test", lastFour: "1234", billingDay: 15 });
+    const result = await request(app).post("/api/credit/cards").set("Cookie", `${sessionCookieName}=${token}`).set("X-CSRF-Token", csrfForSession(token)).set("Origin", "http://localhost:5173").send({ name: "test card", issuer: "test", lastFour: "1234", billingDay: 15 });
     expect(result.status).toBe(201); cardId = result.body.id as number;
     const count = await prisma.creditTransaction.count({ where: { userId } });
-    const assigned = await request(app).patch(`/api/credit/imports/${importId}/card`).set("Authorization", `Bearer ${token}`).send({ cardId });
+    const assigned = await request(app).patch(`/api/credit/imports/${importId}/card`).set("Cookie", `${sessionCookieName}=${token}`).set("X-CSRF-Token", csrfForSession(token)).set("Origin", "http://localhost:5173").send({ cardId });
     expect(assigned.status).toBe(200);
     expect(await prisma.creditTransaction.count({ where: { userId, cardId } })).toBe(count);
     expect(await prisma.expense.count({ where: { userId } })).toBe(0);
   });
   it("rejects another user's card and leaves the original association intact", async () => {
     const foreign = await walletService.create(otherId, { name: "foreign", issuer: "test", lastFour: "9999" });
-    const response = await request(app).patch(`/api/credit/imports/${importId}/card`).set("Authorization", `Bearer ${token}`).send({ cardId: foreign.id });
+    const response = await request(app).patch(`/api/credit/imports/${importId}/card`).set("Cookie", `${sessionCookieName}=${token}`).set("X-CSRF-Token", csrfForSession(token)).set("Origin", "http://localhost:5173").send({ cardId: foreign.id });
     expect(response.status).toBe(404);
     expect(await prisma.creditTransaction.count({ where: { userId, cardId: foreign.id } })).toBe(0);
     await expect(walletService.assign(otherId, importId, foreign.id)).rejects.toThrow();
@@ -81,13 +82,13 @@ describe("wallet with real credit fixture and authenticated API", () => {
     await expect(walletService.assignTransaction(otherId, transaction.id, foreign.id)).rejects.toThrow();
   });
   it("validates card identity and scenario input", async () => {
-    const invalidCard = await request(app).post("/api/credit/cards").set("Authorization", `Bearer ${token}`).send({ name: "test", issuer: "test", lastFour: "1234567890123456" });
+    const invalidCard = await request(app).post("/api/credit/cards").set("Cookie", `${sessionCookieName}=${token}`).set("X-CSRF-Token", csrfForSession(token)).set("Origin", "http://localhost:5173").send({ name: "test", issuer: "test", lastFour: "1234567890123456" });
     expect(invalidCard.status).toBe(400);
-    const invalidForecast = await request(app).get("/api/reports/forecast?oneTimeMonth=13").set("Authorization", `Bearer ${token}`);
+    const invalidForecast = await request(app).get("/api/reports/forecast?oneTimeMonth=13").set("Cookie", `${sessionCookieName}=${token}`).set("X-CSRF-Token", csrfForSession(token)).set("Origin", "http://localhost:5173");
     expect(invalidForecast.status).toBe(400);
   });
   it("returns a 12-month forecast through the authenticated route", async () => {
-    const response = await request(app).get("/api/reports/forecast").set("Authorization", `Bearer ${token}`);
+    const response = await request(app).get("/api/reports/forecast").set("Cookie", `${sessionCookieName}=${token}`).set("X-CSRF-Token", csrfForSession(token)).set("Origin", "http://localhost:5173");
     expect(response.status).toBe(200);
     expect(response.body.months).toHaveLength(12);
     expect(response.body.annualBalance).toBeNull();
@@ -127,9 +128,10 @@ describe("wallet with real credit fixture and authenticated API", () => {
   });
   it("edits owned card details and refuses another account", async () => {
     const details = { name: "updated", issuer: "test", lastFour: "4321", billingDay: 28 };
-    const response = await request(app).patch(`/api/credit/cards/${cardId}`).set("Authorization", `Bearer ${token}`).send(details);
+    const response = await request(app).patch(`/api/credit/cards/${cardId}`).set("Cookie", `${sessionCookieName}=${token}`).set("X-CSRF-Token", csrfForSession(token)).set("Origin", "http://localhost:5173").send(details);
     expect(response.status).toBe(200);
     await expect(walletService.update(otherId, cardId, details)).rejects.toThrow();
     expect((await prisma.creditCard.findUniqueOrThrow({ where: { id: cardId } })).name).toBe("updated");
   });
 });
+

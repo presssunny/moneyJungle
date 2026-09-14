@@ -1,11 +1,11 @@
-import { lazy, Suspense, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { Loading } from "../components/common/Loading";
 import { ThemeProvider } from "../context/ThemeContext";
 import { CrmLayout } from "../crm/CrmLayout";
 import { AppLayout } from "../layouts/AppLayout";
 import LoginPage from "../pages/LoginPage";
-import { currentUser, isLoggedIn } from "../services/gate.service";
+import { checkSession, currentUser, isLoggedIn } from "../services/gate.service";
 import { RequireOnboarding } from "./RequireOnboarding";
 
 // Route-level code splitting: each page is its own chunk, fetched on first
@@ -59,6 +59,15 @@ function RequireCrmAccess({ children }: { children: ReactNode }) {
 }
 
 export default function App() {
+  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    checkSession().then(() => { if (alive) setStatus("ready"); }).catch(() => { if (alive) setStatus("error"); });
+    return () => { alive = false; };
+  }, [attempt]);
+  if (status === "loading") return <Loading />;
+  if (status === "error") return <main className="gate-page"><div className="gate-card" role="alert"><p>לא הצלחנו לבדוק את החיבור לחשבון.</p><button className="btn btn-primary" onClick={() => { setStatus("loading"); setAttempt((n) => n + 1); }}>ניסיון נוסף</button></div></main>;
   return (
     <ThemeProvider>
       <Suspense fallback={<Loading />}>

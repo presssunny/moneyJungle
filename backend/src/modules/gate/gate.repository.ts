@@ -1,6 +1,9 @@
 import { prisma } from "../../config/database";
 
 export const gateRepository = {
+  touchSession(id: number, lastSeenAt: Date) {
+    return prisma.gateSession.updateMany({ where: { id }, data: { lastSeenAt } });
+  },
   createSession(userId: number, tokenHash: string, expiresAt: Date) {
     return prisma.gateSession.create({ data: { userId, tokenHash, expiresAt } });
   },

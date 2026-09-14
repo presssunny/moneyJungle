@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { asyncHandler } from "../../utils/asyncHandler";
-import { extractBearerToken } from "../../middlewares/gateAuth.middleware";
+import { clearSessionCookie, csrfForSession, readSessionCookie, setSessionCookie } from "./sessionCookie";
 import { validatedBody } from "../../utils/validation.utils";
 import { gateService } from "./gate.service";
 import { LoginBody } from "./gate.validation";
@@ -9,12 +9,16 @@ export const gateController = {
   login: asyncHandler(async (req: Request, res: Response) => {
     const { email, password } = validatedBody<LoginBody>(req);
     const result = await gateService.login(email, password);
-    res.json(result);
+    const oldToken = readSessionCookie(req);
+    if (oldToken) await gateService.logout(oldToken);
+    setSessionCookie(res, result.token, result.expiresAt);
+    res.json({ user: result.user, expiresAt: result.expiresAt, csrfToken: csrfForSession(result.token) });
   }),
 
   logout: asyncHandler(async (req: Request, res: Response) => {
-    const token = extractBearerToken(req);
+    const token = readSessionCookie(req);
     if (token) await gateService.logout(token);
+    clearSessionCookie(res);
     res.json({ ok: true });
   }),
 
@@ -25,6 +29,7 @@ export const gateController = {
   session: asyncHandler(async (req: Request, res: Response) => {
     res.json({
       authenticated: true,
+      csrfToken: csrfForSession(readSessionCookie(req)!),
       user: {
         id: req.userId,
         email: req.userEmail,

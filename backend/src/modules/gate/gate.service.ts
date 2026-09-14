@@ -43,10 +43,12 @@ export const gateService = {
    */
   async resolveSession(token: string): Promise<Identity | null> {
     const session = await gateRepository.findByTokenHash(hashToken(token));
-    if (!session || session.expiresAt.getTime() <= Date.now()) return null;
+    const now = Date.now();
+    if (!session || session.expiresAt.getTime() <= now || now - session.lastSeenAt.getTime() >= env.SESSION_IDLE_MINUTES * 60000) return null;
 
     const user = session.user;
     if (!user.email || user.status !== "active") return null;
+    if (now - session.lastSeenAt.getTime() >= 60000) await gateRepository.touchSession(session.id, new Date(now));
 
     return {
       id: user.id,

@@ -77,7 +77,7 @@ describe("צורת השגיאה אחידה בכל המערכת", () => {
   });
 
   it("גוף לא תקין → 400 עם details לכל שדה", async () => {
-    const res = await request(app).post("/api/gate/login").send({});
+    const res = await request(app).post("/api/gate/login").set("Origin", "http://localhost:5173").send({});
     expect(res.status).toBe(400);
     expect(res.body.error.message).toBeTypeOf("string");
     expect(Array.isArray(res.body.error.details)).toBe(true);
@@ -89,7 +89,7 @@ describe("צורת השגיאה אחידה בכל המערכת", () => {
     const responses = await Promise.all([
       request(app).get("/api/no-such-route"),
       request(app).get("/api/dashboard"),
-      request(app).post("/api/gate/login").send({}),
+      request(app).post("/api/gate/login").set("Origin", "http://localhost:5173").send({}),
     ]);
     for (const res of responses) {
       expect(res.status).toBeGreaterThanOrEqual(400);
@@ -119,25 +119,6 @@ describe("שער הכניסה — אף מסלול אינו פתוח בלי טו�
       const res = await request(app).get("/api/dashboard").set("Authorization", header);
       expect(res.status).toBe(401);
     }
-  });
-});
-
-/**
- * Last on purpose: the throttle counts every request to the login route from the
- * start of the process, so an earlier test's login attempt is already in the
- * bucket. Runs with an invalid body, so nothing here reaches the database.
- */
-describe("חסימת ניסיונות התחברות", () => {
-  it("חוסם ב־429 אחרי יותר מדי ניסיונות מאותו מקור", async () => {
-    let sawTooMany = false;
-    for (let attempt = 0; attempt < 20 && !sawTooMany; attempt += 1) {
-      const res = await request(app).post("/api/gate/login").send({ password: "wrong-on-purpose" });
-      if (res.status === 429) {
-        expect(res.body.error.message).toBeTypeOf("string");
-        sawTooMany = true;
-      }
-    }
-    expect(sawTooMany).toBe(true);
   });
 });
 
@@ -187,7 +168,7 @@ describe("מסלול מלא מול בסיס הנתונים", () => {
   it("סיסמה שגויה נדחית ב־401", async ({ skip }) => {
     if (!dbUp) skip(schemaReady ? "MariaDB אינו זמין — יש להריץ bash backend/start-db.sh" : SCHEMA_SKIP_MSG);
     const res = await request(app)
-      .post("/api/gate/login")
+      .post("/api/gate/login").set("Origin", "http://localhost:5173")
       .set("X-Forwarded-For", "10.10.10.1") // fresh throttle bucket
       .send({ email: "definitely-not-a-user@example.test", password: "definitely-wrong" });
     expect(res.status).toBe(401);
@@ -202,11 +183,11 @@ describe("מסלול מלא מול בסיס הנתונים", () => {
     if (!dbUp) skip(schemaReady ? "MariaDB אינו זמין — יש להריץ bash backend/start-db.sh" : SCHEMA_SKIP_MSG);
     const [badEmail, badPassword] = await Promise.all([
       request(app)
-        .post("/api/gate/login")
+        .post("/api/gate/login").set("Origin", "http://localhost:5173")
         .set("X-Forwarded-For", "10.10.10.2")
         .send({ email: "definitely-not-a-user@example.test", password: "definitely-wrong" }),
       request(app)
-        .post("/api/gate/login")
+        .post("/api/gate/login").set("Origin", "http://localhost:5173")
         .set("X-Forwarded-For", "10.10.10.3")
         .send({ email: testEmail, password: "definitely-wrong" }),
     ]);
@@ -214,3 +195,25 @@ describe("מסלול מלא מול בסיס הנתונים", () => {
     expect(badEmail.body).toEqual(badPassword.body);
   });
 });
+
+
+/**
+ * Last on purpose: the throttle counts every request to the login route from the
+ * start of the process, so an earlier test's login attempt is already in the
+ * bucket. Runs with an invalid body, so nothing here reaches the database.
+ */
+describe("חסימת ניסיונות התחברות", () => {
+  it("חוסם ב־429 אחרי יותר מדי ניסיונות מאותו מקור", async () => {
+    let sawTooMany = false;
+    for (let attempt = 0; attempt < 20 && !sawTooMany; attempt += 1) {
+      const res = await request(app).post("/api/gate/login").set("Origin", "http://localhost:5173").send({ password: "wrong-on-purpose" });
+      if (res.status === 429) {
+        expect(res.body.error.message).toBeTypeOf("string");
+        sawTooMany = true;
+      }
+    }
+    expect(sawTooMany).toBe(true);
+  });
+});
+
+

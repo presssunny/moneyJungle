@@ -1,15 +1,15 @@
 import axios from "axios";
 import { toast } from "./toast";
-
-export const TOKEN_KEY = "gate_token";
+import { clearSession, sessionCsrf } from "./sessionState";
 
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL ?? "http://localhost:3000/api",
+  baseURL: "/api",
+  withCredentials: true,
 });
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem(TOKEN_KEY);
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+  const token = sessionCsrf();
+  if (token) config.headers["X-CSRF-Token"] = token;
   return config;
 });
 
@@ -19,8 +19,8 @@ api.interceptors.response.use(
     const status = error.response?.status;
     const url: string = error.config?.url ?? "";
     if (status === 401 && !url.includes("/gate/login")) {
-      localStorage.removeItem(TOKEN_KEY);
-      if (window.location.pathname !== "/login") {
+      clearSession();
+      if (!url.includes("/gate/session") && window.location.pathname !== "/login") {
         window.location.href = "/login";
       }
     }

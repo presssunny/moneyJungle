@@ -1,6 +1,7 @@
 import cors from "cors";
 import express from "express";
 import { env } from "./config/env";
+import { allowedOrigin, checkOrigin } from "./middlewares/origin.middleware";
 import { errorMiddleware, notFoundMiddleware } from "./middlewares/error.middleware";
 import { rateLimit } from "./middlewares/rateLimit.middleware";
 import { securityHeaders } from "./middlewares/securityHeaders.middleware";
@@ -30,15 +31,13 @@ import { updatesRoutes } from "./modules/updates/updates.routes";
 const app = express();
 
 // Trust the reverse-proxy hop so req.ip reflects the real client (rate limiting).
-app.set("trust proxy", 1);
+app.set("trust proxy", env.TRUST_PROXY === "loopback" ? "loopback" : false);
 
 // CORS: restrict to an explicit allow-list when CORS_ORIGIN is set, else allow all (dev).
-const allowedOrigins = env.CORS_ORIGIN.split(",")
-  .map((o) => o.trim())
-  .filter(Boolean);
-app.use(cors(allowedOrigins.length > 0 ? { origin: allowedOrigins } : {}));
+app.use(cors({ origin: (origin, callback) => callback(null, !origin || allowedOrigin(origin)), credentials: true }));
 
 app.use(securityHeaders);
+app.use("/api", checkOrigin);
 app.use(express.json({ limit: "1mb" }));
 
 app.get("/api/health", (_req, res) => {

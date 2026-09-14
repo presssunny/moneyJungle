@@ -2,7 +2,7 @@ import app from "./app";
 import { env } from "./config/env";
 import { prisma } from "./config/database";
 
-const server = app.listen(env.PORT, () => {
+const server = app.listen(env.PORT, env.HOST, () => {
   console.log(`API running on http://localhost:${env.PORT}`);
 });
 

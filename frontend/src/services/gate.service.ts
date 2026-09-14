@@ -1,67 +1,35 @@
-import { api, TOKEN_KEY } from "./api";
+import axios from "axios";
+import { api } from "./api";
+import { clearSession, sessionUser, setSession, type AuthUser } from "./sessionState";
 
-export type UserRole = "ADMIN" | "USER" | "VIEWER";
+export type { AuthUser } from "./sessionState";
+export type UserRole = AuthUser["role"];
 
-/** Who is signed in. Mirrors the backend `Identity` (modules/gate/credentials.ts). */
-export interface AuthUser {
-  id: number;
-  email: string;
-  displayName: string;
-  role: UserRole;
-}
+export function isLoggedIn(): boolean { return sessionUser() !== null; }
+export function currentUser(): AuthUser | null { return sessionUser(); }
 
-const USER_KEY = "gate_user";
-
-export function isLoggedIn(): boolean {
-  return localStorage.getItem(TOKEN_KEY) !== null;
-}
-
-/**
- * The signed-in user as last known, without a round-trip — so the header can
- * greet by name (and the CRM entry point/routes can gate on role) on first
- * paint. `checkSession` refreshes it from the server.
- */
-export function currentUser(): AuthUser | null {
-  const raw = localStorage.getItem(USER_KEY);
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as AuthUser;
-  } catch {
-    return null;
-  }
-}
-
-function storeUser(user: AuthUser | undefined): void {
-  if (user) localStorage.setItem(USER_KEY, JSON.stringify(user));
-}
-
-export async function login(email: string, password: string): Promise<AuthUser | null> {
-  const { data } = await api.post<{ token: string; user?: AuthUser }>("/gate/login", {
-    email,
-    password,
-  });
-  localStorage.setItem(TOKEN_KEY, data.token);
-  storeUser(data.user);
-  return data.user ?? null;
+export async function login(email: string, password: string): Promise<AuthUser> {
+  const { data } = await api.post<{ user: AuthUser; csrfToken: string }>("/gate/login", { email, password });
+  clearSession();
+  setSession(data.user, data.csrfToken);
+  return data.user;
 }
 
 export async function logout(): Promise<void> {
-  try {
-    await api.post("/gate/logout");
-  } finally {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
-  }
+  await api.post("/gate/logout");
+  clearSession();
 }
 
-/** Validates the stored token against the server (used on app boot). */
-export async function checkSession(): Promise<boolean> {
-  if (!isLoggedIn()) return false;
-  try {
-    const { data } = await api.get<{ authenticated: boolean; user?: AuthUser }>("/gate/session");
-    storeUser(data.user);
-    return true;
-  } catch {
-    return false;
-  }
+let checking: Promise<boolean> | null = null;
+export function checkSession(): Promise<boolean> {
+  if (checking) return checking;
+  clearSession();
+  checking = api.get<{ user: AuthUser; csrfToken: string }>("/gate/session")
+    .then(({ data }) => { setSession(data.user, data.csrfToken); return true; })
+    .catch((error: unknown) => {
+      if (axios.isAxiosError(error) && error.response?.status === 401) return false;
+      throw error;
+    })
+    .finally(() => { checking = null; });
+  return checking;
 }

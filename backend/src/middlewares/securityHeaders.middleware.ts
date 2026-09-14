@@ -5,6 +5,7 @@ import { NextFunction, Request, Response } from "express";
  * dependency. This is a JSON API, so a strict, resource-light policy is enough.
  */
 export function securityHeaders(_req: Request, res: Response, next: NextFunction) {
+  res.setHeader("Cache-Control", "no-store");
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Referrer-Policy", "no-referrer");
