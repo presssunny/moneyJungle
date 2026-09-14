@@ -102,6 +102,7 @@ export default function DashboardPage() {
       <UpdatesTicker key={tickerKey} />
 
       <div className="page-toolbar">
+        <Button variant="outline" onClick={() => navigate("/reports?tab=forecast")}>מבט קדימה · תחזית לשנה</Button>
         <Button onClick={() => navigate("/transactions?tab=expenses", { state: { openForm: true } })}>
           + הוספת הוצאה
         </Button>

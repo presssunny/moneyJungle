@@ -9,6 +9,8 @@ import type { TrendRow } from "../types/models";
 import { formatCurrency, formatMonthKey } from "../utils/format";
 import ComparisonPage from "./ComparisonPage";
 import ReportsPage from "./ReportsPage";
+import ForecastPage from "./ForecastPage";
+import { useSearchParams } from "react-router-dom";
 
 /** Months that actually have activity — averaging over empty months would understate. */
 function activeMonths(trend: TrendRow[]): TrendRow[] {
@@ -21,13 +23,14 @@ function activeMonths(trend: TrendRow[]): TrendRow[] {
  * a card on another tab (§1.1). All derive from the existing reports endpoints.
  */
 export default function ReportsHubPage() {
+  const [params] = useSearchParams();
   const { monthKey } = useMonth();
   const trendRes = useAsync(() => getTrendReport(monthKey), [monthKey], "לא הצלחנו לטעון את הדוח");
   const reportRes = useAsync(() => getMonthlyReport(monthKey), [monthKey], "לא הצלחנו לטעון את הדוח");
 
   return (
     <>
-      <div className="kpi-row">
+      {params.get("tab") !== "forecast" && <div className="kpi-row">
         <AsyncSection
           resource={trendRes}
           errorTitle="לא הצלחנו לטעון את הדוח"
@@ -88,12 +91,13 @@ export default function ReportsHubPage() {
             />
           )}
         </AsyncSection>
-      </div>
+      </div>}
 
       <TabbedHub
         tabs={[
           { key: "monthly", label: "דוח חודשי", icon: "📈", element: <ReportsPage /> },
           { key: "comparison", label: "השוואת חודשים", icon: "⚖️", element: <ComparisonPage /> },
+          { key: "forecast", label: "מבט קדימה", icon: "🔭", element: <ForecastPage /> },
         ]}
       />
     </>

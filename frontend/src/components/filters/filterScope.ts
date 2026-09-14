@@ -26,6 +26,8 @@ export function filterScope(pathname: string, tab: string | null): FilterScope {
     case "/budgets":
       return { range: true, account: false, category: true, monthOnly: true };
     case "/reports":
+      if (tab === "forecast") return NONE;
+      return { range: true, account: false, category: true, monthOnly: false };
     case "/comparison":
       return { range: true, account: false, category: true, monthOnly: false };
     case "/accounts":

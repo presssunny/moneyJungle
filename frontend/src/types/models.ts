@@ -474,3 +474,62 @@ export interface ImportExpensesResult {
   totalAmount: number;
   months?: string[];
 }
+export interface ForecastScenario {
+  monthlyIncomeChange: number;
+  monthlyExpenseChange: number;
+  oneTimeExpense: number;
+  oneTimeMonth: number;
+}
+
+export interface ForecastResponse {
+  backtest: { monthsTested: number; meanAbsoluteExpenseError: number | null };
+  generatedAt: string;
+  anchorMonth: string;
+  sufficient: boolean;
+  baselineMonths: string[];
+  history: TrendRow[];
+  months: Array<{ monthKey: string; incomeTotal: number | null; expenseTotal: number | null; balance: number | null; scenarioBalance: number | null }>;
+  annualBalance: number | null;
+  scenarioAnnualBalance: number | null;
+  commitments: Array<{ monthKey: string; total: number; events: Array<{ date: string; name: string; amount: number; kind: string }> }>;
+  heaviest: { monthKey: string; total: number } | null;
+}
+
+export interface WalletTransaction {
+  id: number;
+  cardId: number | null;
+  businessName: string;
+  amount: number;
+  billingDate: string;
+  transactionDate: string;
+  chargeDate: string | null;
+  categoryName: string;
+  transactionType: string;
+  paymentCount: number;
+}
+
+export interface WalletSummary {
+  total: number;
+  previousTotal: number | null;
+  delta: number | null;
+  nextCharge: { date: string; amount: number } | null;
+  categories: Array<{ name: string; amount: number }>;
+  transactions: WalletTransaction[];
+  financingTotal: number;
+}
+
+export interface CreditCardInput {
+  name: string;
+  issuer: string;
+  lastFour: string;
+  billingDay: number | null;
+}
+
+export interface WalletResponse {
+  lastConfirmedImportAt: string | null;
+  updatedAt: string;
+  pendingCount: number;
+  cards: Array<CreditCardInput & WalletSummary & { id: number }>;
+  all: WalletSummary;
+  unassigned: WalletSummary;
+}

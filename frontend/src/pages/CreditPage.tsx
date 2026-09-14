@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { CreditWallet } from "../components/credit/CreditWallet";
+import { listCreditCards } from "../services/future.service";
 import { useNavigate } from "react-router-dom";
 import { AsyncSection } from "../components/common/AsyncSection";
 import { PageShell } from "../components/common/PageShell";
@@ -53,9 +55,12 @@ export default function CreditPage() {
   const [message, setMessage] = useState("");
   const [uploading, setUploading] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [uploadCardId, setUploadCardId] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+  const importPanelRef = useRef<HTMLDetailsElement>(null);
 
   const importsRes = useAsync(() => listCreditImports(), [reloadKey], "לא הצלחנו לטעון את ייבואי האשראי");
+  const cardsRes = useAsync(() => listCreditCards(), [reloadKey], "לא הצלחנו לטעון את הכרטיסים לייבוא");
   const chartsRes = useAsync(() => getCharts(monthKey), [monthKey, reloadKey], "לא הצלחנו לטעון את פילוח האשראי");
   const imports = importsRes.data;
 
@@ -87,10 +92,11 @@ export default function CreditPage() {
   }, [imports, selected]);
 
   async function onUpload(file: File) {
+    if (importPanelRef.current) importPanelRef.current.open = true;
     setUploading(true);
     setMessage("");
     try {
-      const detail = await uploadCreditImport(file, monthKey);
+      const detail = await uploadCreditImport(file, monthKey, uploadCardId ? Number(uploadCardId) : undefined);
       setMonthFilter(null);
       // Nothing new in the file: no import was created, so there is nothing to
       // select or approve — say so instead of showing an empty import.
@@ -160,6 +166,7 @@ export default function CreditPage() {
 
   async function setTransactionCategory(tx: CreditTransaction, categoryId: number | null) {
     await updateCreditTransaction(tx.id, categoryId);
+    load();
     if (selected) setSelected(await getCreditImport(selected.id));
     // Offer to learn: create a rule so similar businesses classify automatically
     if (categoryId !== null) {
@@ -303,10 +310,9 @@ export default function CreditPage() {
     return true;
   });
 
-  return (
-    <PageShell
-      toolbar={
+  const importToolbar = (
         <>
+          <Select label="כרטיס בדוח שמעלים" value={uploadCardId} disabled={uploading || cardsRes.loading} onChange={(e) => setUploadCardId(e.target.value)} options={[{ value: "", label: "ללא שיוך / דוח עם כמה כרטיסים" }, ...(cardsRes.data ?? []).map((card) => ({ value: String(card.id), label: `${card.name} · ${card.lastFour}` }))]} />
           <Button onClick={() => fileRef.current?.click()} disabled={uploading}>
             {uploading ? "מעלה..." : "ייבוא דוח אשראי 📂"}
           </Button>
@@ -326,14 +332,27 @@ export default function CreditPage() {
             מעלים קובץ מכל חברת אשראי (כאל / מקס / ישראכרט...) — העסקאות מפוצלות אוטומטית לפי חודש החיוב, מסווגות לפי חוקים, ותנועות "אשראי מתגלגל" לא נספרות כהוצאה
           </span>
         </>
-      }
-    >
+  );
+
+  return (
+    <PageShell>
 
       {message && <div className="info-banner">{message}</div>}
+      {cardsRes.error && <WidgetError title="לא הצלחנו לטעון את הכרטיסים לייבוא" detail={cardsRes.error} onRetry={cardsRes.reload} inline />}
       {detailError && (
         <WidgetError title="לא הצלחנו לפתוח את הייבוא האחרון" detail={detailError} onRetry={load} inline />
       )}
 
+      <CreditWallet monthKey={monthKey} revision={reloadKey} imports={imports ?? []} onChanged={load} onImport={() => {
+        if (importPanelRef.current) {
+          importPanelRef.current.open = true;
+          importPanelRef.current.scrollIntoView({ block: "start" });
+          importPanelRef.current.querySelector("summary")?.focus();
+        }
+      }} />
+
+      <details className="card" ref={importPanelRef}><summary>ייבוא דוחות, אישור וסיווג עסקאות {pendingTransactions > 0 ? `(${pendingTransactions} ממתינות)` : ""}</summary>
+      <div className="page-toolbar">{importToolbar}</div>
       {/* KPI (§6.2) — scoped to the selected import, and each card says so. */}
       <div className="kpi-row">
         <AsyncSection
@@ -344,11 +363,11 @@ export default function CreditPage() {
           {() => (
             <>
               <SummaryCard
-                label="חיוב קרוב"
+                label="הוצאות מיוחסות מחודש זה והלאה"
                 value={nextBilling ? formatCurrency(nextBilling.total) : "—"}
                 // Without a loaded import we genuinely do not know — not ₪0 (§1.2).
                 certainty={nextBilling ? "measured" : "unknown"}
-                sub={nextBilling ? `${formatMonthKey(nextBilling.monthKey)} · בייבוא הנבחר` : "לא נטען ייבוא עם חיוב עתידי"}
+                sub={nextBilling ? `${formatMonthKey(nextBilling.monthKey)} · בייבוא הנבחר, לא מועד ירידה מהבנק` : "אין הוצאות מיוחסות מחודש זה בייבוא הנבחר"}
               />
               <SummaryCard
                 label="עסקאות ממתינות לאישור"
@@ -547,6 +566,7 @@ export default function CreditPage() {
         </Card>
       )}
 
+      </details>
       <Modal
         title="לסווג אוטומטית עסקאות דומות?"
         open={learn !== null}

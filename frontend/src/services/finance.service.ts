@@ -305,9 +305,10 @@ export type CreditUploadResult =
       previousImport: { id: number; fileName: string; createdAt: string } | null;
     };
 
-export async function uploadCreditImport(file: File, monthKey?: string): Promise<CreditUploadResult> {
+export async function uploadCreditImport(file: File, monthKey?: string, cardId?: number): Promise<CreditUploadResult> {
   const form = new FormData();
   form.append("file", file);
+  if (cardId !== undefined) form.append("cardId", String(cardId));
   if (monthKey) {
     const { year, month } = monthParams(monthKey);
     form.append("importYear", String(year));

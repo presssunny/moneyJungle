@@ -1,4 +1,4 @@
-import type { KeyboardEvent, ReactNode } from "react";
+import { useId, useRef, type KeyboardEvent, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 
 export interface HubTab {
@@ -15,6 +15,8 @@ export interface HubTab {
  * fetches fresh data when selected — matching how the standalone pages behaved.
  */
 export function TabbedHub({ tabs }: { tabs: HubTab[] }) {
+  const hubId = useId();
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const [params, setParams] = useSearchParams();
   const requested = params.get("tab");
   const active = tabs.find((t) => t.key === requested) ?? tabs[0];
@@ -32,10 +34,11 @@ export function TabbedHub({ tabs }: { tabs: HubTab[] }) {
   // Arrow-key navigation between tabs (WAI-ARIA tabs pattern).
   const onKeyDown = (e: KeyboardEvent, index: number) => {
     const delta = e.key === "ArrowRight" ? -1 : e.key === "ArrowLeft" ? 1 : 0; // RTL
-    if (delta === 0) return;
+    if (delta === 0 && e.key !== "Home" && e.key !== "End") return;
     e.preventDefault();
-    const next = (index + delta + tabs.length) % tabs.length;
+    const next = e.key === "Home" ? 0 : e.key === "End" ? tabs.length - 1 : (index + delta + tabs.length) % tabs.length;
     selectTab(tabs[next].key);
+    tabRefs.current[next]?.focus();
   };
 
   return (
@@ -46,11 +49,12 @@ export function TabbedHub({ tabs }: { tabs: HubTab[] }) {
           return (
             <button
               key={tab.key}
-              id={`hubtab-${tab.key}`}
+              ref={(node) => { tabRefs.current[index] = node; }}
+              id={`${hubId}-tab-${tab.key}`}
               type="button"
               role="tab"
               aria-selected={selected}
-              aria-controls={`hubpanel-${tab.key}`}
+              aria-controls={`${hubId}-panel-${tab.key}`}
               tabIndex={selected ? 0 : -1}
               className={`hub-tab ${selected ? "hub-tab-active" : ""}`}
               onClick={() => selectTab(tab.key)}
@@ -64,8 +68,8 @@ export function TabbedHub({ tabs }: { tabs: HubTab[] }) {
       <div
         className="hub-panel"
         role="tabpanel"
-        id={`hubpanel-${active.key}`}
-        aria-labelledby={`hubtab-${active.key}`}
+        id={`${hubId}-panel-${active.key}`}
+        aria-labelledby={`${hubId}-tab-${active.key}`}
         tabIndex={0}
       >
         {active.element}
