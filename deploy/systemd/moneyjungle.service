@@ -1,0 +1,22 @@
+[Unit]
+Description=Money Jungle API
+After=network.target
+
+[Service]
+Type=simple
+User=moneyjungle
+Group=moneyjungle
+WorkingDirectory=/opt/moneyjungle/backend
+EnvironmentFile=/etc/moneyjungle/backend.env
+ExecStart=/usr/bin/node /opt/moneyjungle/backend/dist/src/server.js
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/moneyjungle/documents
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

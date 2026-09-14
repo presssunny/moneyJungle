@@ -1,5 +1,7 @@
 # Monthly Finance Planner (CYBER_BUDGET) 💰
 
+עדכון ארכיטקטורה: האימות בדפדפן משתמש כעת ב־HttpOnly Cookie, הגנת CSRF ותפוגת סשן; אין לשמור טוקן התחברות ב־localStorage. לפירוט העדכני ולהכנת סביבת ייצור ראו [הוראות פריסה](docs/production-deployment.md), [סקירת הארכיטקטורה והמקורות](docs/production-architecture-review.md) ו־[תחזית וארנק כרטיסים](docs/forecast-and-wallet.md).
+
 > **English summary** — A full-stack monthly finance planner for a single family: bank/credit
 > statement import and parsing, budgets, loans with amortization schedules, subscriptions,
 > recurring payments, and a reporting dashboard. React + TypeScript frontend (RTL, Hebrew UI, 3
