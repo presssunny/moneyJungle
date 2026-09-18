@@ -1,3 +1,4 @@
+import { businessDate } from "../journey/journey.utils";
 import { ApiError } from "../../utils/ApiError";
 import { decimalToNumber } from "../../utils/money.utils";
 import { buildRuleCategorizer } from "../categories/categorization.service";
@@ -35,12 +36,12 @@ function stripPrefix(word: string): string {
 }
 
 export function parseQuickAdd(text: string): QuickParse {
-  const raw = text.trim();
+  const raw = text.trim().replace(/\b(\d{1,3}(?:,\d{3})+)(?:\.(\d{1,2}))?\b/g, (value) => value.replace(/,/g, ""));
 
   // Relative date words (plain includes — Hebrew has no ASCII word boundaries)
-  const date = new Date();
-  if (raw.includes("אתמול")) date.setDate(date.getDate() - 1);
-  else if (raw.includes("שלשום")) date.setDate(date.getDate() - 2);
+  const date = new Date(`${businessDate()}T00:00:00Z`);
+  if (raw.includes("אתמול")) date.setUTCDate(date.getUTCDate() - 1);
+  else if (raw.includes("שלשום")) date.setUTCDate(date.getUTCDate() - 2);
 
   // Amounts — prefer a number sitting next to a currency word, else the largest.
   const numbers = [...raw.matchAll(/\d+(?:[.,]\d+)?/g)].map((m) => ({

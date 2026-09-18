@@ -137,14 +137,16 @@ export const creditService = {
         throw ApiError.badRequest("נמצאו עסקאות זהות שעדיין לא משויכות לכרטיס. שייכו קודם את העסקאות או הדוח הקודם לכרטיס הנכון, ואז העלו שוב — כדי למנוע ספירה כפולה או השמטה.");
       }
     }
-    const seen = new Set(
-      existing.map((t) => keyOf(t.transactionDate, t.businessName, Number(t.amount), t.paymentCount))
-    );
-    const rows = parsedRows.filter((row) => {
+    const remaining = new Map<string, number>();
+    for (const t of existing) {
+      const key = keyOf(t.transactionDate, t.businessName, Number(t.amount), t.paymentCount);
+      remaining.set(key, (remaining.get(key) ?? 0) + 1);
+    }
+    const rows = parsedRows.filter(row => {
       const key = keyOf(row.transactionDate, row.businessName, row.amount, row.paymentCount);
-      if (seen.has(key)) return false;
-      seen.add(key); // also collapses repeats inside the same file
-      return true;
+      const count = remaining.get(key) ?? 0;
+      if (!count) return true;
+      remaining.set(key, count - 1); return false;
     });
     const skippedDuplicates = parsedRows.length - rows.length;
 

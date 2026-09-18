@@ -9,6 +9,17 @@ function setup() {
   Object.values(db).forEach((model) => model.findMany.mockResolvedValue([]));
 }
 describe("forward obligations", () => {
+  it("uses the Israeli business day when UTC is still on the previous date", async () => {
+    setup(); vi.setSystemTime(new Date("2026-09-17T22:30:00Z"));
+    expect((await buildUpcoming(1, 1)).from).toBe("2026-09-18T00:00:00.000Z");
+  });
+  it("retains old occurrences through the current planning horizon without truncation", async () => {
+    setup(); db.recurringPayment.findMany.mockResolvedValue([{ id: 1, name: "old", amount: 100, frequency: "monthly", nextPaymentDate: new Date("2020-01-31") }]);
+    const result = await buildUpcoming(1, 62, new Date("2026-01-01"), true);
+    expect(result.events[0].date.slice(0, 10)).toBe("2020-01-31");
+    expect(result.events.at(-1)?.date.slice(0, 10)).toBe("2026-02-28");
+    expect(result.events).toHaveLength(74);
+  });
   it("does not schedule a monthly obligation before its first payment", async () => {
     setup(); db.recurringPayment.findMany.mockResolvedValue([{ name: "future", amount: 100, frequency: "monthly", nextPaymentDate: new Date("2026-03-31") }]);
     const result = await buildUpcoming(1, 150);

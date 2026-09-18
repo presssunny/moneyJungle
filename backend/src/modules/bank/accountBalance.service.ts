@@ -1,3 +1,4 @@
+import { businessDate } from "../journey/journey.utils";
 import { prisma } from "../../config/database";
 import { decimalToNumber, round2 } from "../../utils/money.utils";
 
@@ -50,7 +51,7 @@ async function findAnchor(
   account: { anchorBalance: unknown; anchorDate: Date | null }
 ): Promise<Anchor | null> {
   const statement = await prisma.bankStatementImport.findFirst({
-    where: { userId, bankAccountId: accountId, closingBalance: { not: null } },
+    where: { userId, bankAccountId: accountId, closingBalance: { not: null }, coverageTo: { lte: new Date(businessDate()) } },
     orderBy: [{ coverageTo: "desc" }, { createdAt: "desc" }],
   });
   const fromStatement: Anchor | null =
@@ -64,7 +65,7 @@ async function findAnchor(
       : null;
 
   const fromUser: Anchor | null =
-    account.anchorDate !== null && account.anchorBalance !== null
+    account.anchorDate !== null && account.anchorBalance !== null && account.anchorDate <= new Date(businessDate())
       ? {
           statementId: null,
           fileName: "יתרה שהוזנה ידנית",
@@ -93,7 +94,7 @@ export const accountBalanceService = {
       // No statement ever reported a balance — the best we can do is the old
       // sum. Reported as "accumulated" so the UI never presents it as verified.
       const all = await prisma.bankTransaction.findMany({
-        where: { userId, bankAccountId: accountId },
+        where: { userId, bankAccountId: accountId, transactionDate: { lte: new Date(businessDate()) } },
         select: { amount: true, type: true },
       });
       const net = all.reduce((sum, t) => sum + signed(t.type, decimalToNumber(t.amount)), 0);
@@ -114,7 +115,7 @@ export const accountBalanceService = {
       where: {
         userId,
         bankAccountId: accountId,
-        transactionDate: { gt: anchor.asOf },
+        transactionDate: { gt: anchor.asOf, lte: new Date(businessDate()) },
       },
       select: { amount: true, type: true },
     });

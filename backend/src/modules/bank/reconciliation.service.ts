@@ -438,7 +438,6 @@ export const reconciliationService = {
   },
 
   async getReconciliation(userId: number): Promise<ReconciliationView> {
-    await this.resolveAll(userId);
     const txs = (await prisma.bankTransaction.findMany({
       where: { userId },
       orderBy: [{ transactionDate: "asc" }, { id: "asc" }],

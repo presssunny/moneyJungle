@@ -1,5 +1,6 @@
 import { prisma } from "../../config/database";
 import { decimalToNumber, round2 } from "../../utils/money.utils";
+import { businessDate } from "../journey/journey.utils";
 
 /**
  * Forward-looking cash-flow: projects dated obligations (recurring payments,
@@ -11,10 +12,12 @@ import { decimalToNumber, round2 } from "../../utils/money.utils";
 export type UpcomingKind = "recurring" | "subscription" | "loan" | "reminder";
 
 export interface UpcomingEvent {
+  key?: string;
   date: string; // ISO date
   kind: UpcomingKind;
   name: string;
   amount: number;
+  amountKnown?: boolean;
   icon: string;
 }
 
@@ -34,9 +37,8 @@ const KIND_ICON: Record<UpcomingKind, string> = {
   reminder: "🔔",
 };
 
-function todayUTC(): Date {
-  const now = new Date();
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+function businessDayStart(): Date {
+  return new Date(businessDate());
 }
 
 /** Monthly occurrences on the anchor's day-of-month (clamped) within [from, to]. */
@@ -45,7 +47,7 @@ function monthlyOccurrences(anchor: Date, from: Date, to: Date): Date[] {
   const res: Date[] = [];
   let y = from.getUTCFullYear();
   let m = from.getUTCMonth();
-  for (let i = 0; i < 18; i++) {
+  while (new Date(Date.UTC(y, m, 1)) <= to) {
     const daysInMonth = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
     const d = new Date(Date.UTC(y, m, Math.min(day, daysInMonth)));
     if (d >= from && d >= anchor && d <= to) res.push(d);
@@ -74,26 +76,26 @@ function weeklyOccurrences(anchor: Date, from: Date, to: Date): Date[] {
   const res: Date[] = [];
   const d = new Date(anchor);
   if (d < from) d.setUTCDate(d.getUTCDate() + Math.ceil((from.getTime() - d.getTime()) / (7 * 86400000)) * 7);
-  let guard = 0;
-  while (d <= to && guard < 400) {
+  while (d <= to) {
     res.push(new Date(d));
     d.setUTCDate(d.getUTCDate() + 7);
-    guard += 1;
   }
   return res;
 }
 
-export async function buildUpcoming(userId: number, windowDays: number): Promise<UpcomingResponse> {
-  const from = todayUTC();
+// Journey review includes historical occurrences because a past date alone is
+// not payment evidence. Dashboard callers keep the forward-only default.
+export async function buildUpcoming(userId: number, windowDays: number, anchor = businessDayStart(), includeOverdue = false): Promise<UpcomingResponse> {
+  const from = anchor;
   const to = new Date(from);
   to.setUTCDate(to.getUTCDate() + windowDays);
 
   const [recurrings, subscriptions, loans, reminders] = await Promise.all([
     prisma.recurringPayment.findMany({ where: { userId } }),
     prisma.subscription.findMany({ where: { userId, status: "active" } }),
-    prisma.loan.findMany({ where: { userId, status: "active" }, include: { schedule: { where: { paymentDate: { gte: from, lte: to } }, orderBy: { paymentDate: "asc" } } } }),
+    prisma.loan.findMany({ where: { userId, status: { in: ["active", "overdue"] } }, include: { schedule: { where: { paymentDate: { ...(includeOverdue ? {} : { gte: from }), lte: to } }, orderBy: { paymentDate: "asc" } } } }),
     prisma.reminder.findMany({
-      where: { userId, isActive: true, eventDate: { gte: from, lte: to } },
+      where: { userId, isActive: true, eventDate: { ...(includeOverdue ? {} : { gte: from }), lte: to } },
     }),
   ]);
 
@@ -102,23 +104,25 @@ export async function buildUpcoming(userId: number, windowDays: number): Promise
   for (const r of recurrings) {
     const amount = decimalToNumber(r.amount);
     const anchor = new Date(r.nextPaymentDate);
+    const occurrenceFrom = includeOverdue && anchor < from ? anchor : from;
     const dates =
       r.frequency === "weekly"
-        ? weeklyOccurrences(anchor, from, to)
+        ? weeklyOccurrences(anchor, occurrenceFrom, to)
         : r.frequency === "yearly"
-          ? yearlyOccurrences(anchor, from, to)
-          : monthlyOccurrences(anchor, from, to);
+          ? yearlyOccurrences(anchor, occurrenceFrom, to)
+          : monthlyOccurrences(anchor, occurrenceFrom, to);
     for (const d of dates) {
-      events.push({ date: d.toISOString(), kind: "recurring", name: r.name, amount, icon: KIND_ICON.recurring });
+      events.push({ key: `recurring:${r.id}:${d.toISOString().slice(0, 10)}`, date: d.toISOString(), kind: "recurring", name: r.name, amount, icon: KIND_ICON.recurring });
     }
   }
 
   for (const s of subscriptions) {
     const amount = decimalToNumber(s.amount);
     const anchor = new Date(s.billingDate);
-    const dates = s.frequency === "yearly" ? yearlyOccurrences(anchor, from, to) : monthlyOccurrences(anchor, from, to);
+    const occurrenceFrom = includeOverdue && anchor < from ? anchor : from;
+    const dates = s.frequency === "yearly" ? yearlyOccurrences(anchor, occurrenceFrom, to) : monthlyOccurrences(anchor, occurrenceFrom, to);
     for (const d of dates) {
-      events.push({ date: d.toISOString(), kind: "subscription", name: s.name, amount, icon: KIND_ICON.subscription });
+      events.push({ key: `subscription:${s.id}:${d.toISOString().slice(0, 10)}`, date: d.toISOString(), kind: "subscription", name: s.name, amount, icon: KIND_ICON.subscription });
     }
   }
 
@@ -126,7 +130,7 @@ export async function buildUpcoming(userId: number, windowDays: number): Promise
     // Bank schedules carry final/variable payments; repeating monthlyPayment would invent extra debt.
     if (loan.scheduleSource === "bank_file") {
       for (const entry of loan.schedule) {
-        events.push({ date: entry.paymentDate.toISOString(), kind: "loan", name: loan.loanName,
+        events.push({ key: `loan:${loan.id}:${entry.paymentDate.toISOString().slice(0, 10)}`, date: entry.paymentDate.toISOString(), kind: "loan", name: loan.loanName,
           amount: decimalToNumber(entry.total), icon: KIND_ICON.loan });
       }
       continue;
@@ -136,10 +140,12 @@ export async function buildUpcoming(userId: number, windowDays: number): Promise
     const balance = decimalToNumber(loan.currentBalance);
     if (balance <= 0) continue;
     const endDate = loan.endDate ? new Date(loan.endDate) : null;
-    const dates = monthlyOccurrences(new Date(loan.startDate), from, to);
+    const start = new Date(loan.startDate);
+    const dates = monthlyOccurrences(start, includeOverdue && start < from ? start : from, to);
     for (const d of dates) {
       if (endDate && d > endDate) continue;
       events.push({
+        key: `loan:${loan.id}:${d.toISOString().slice(0, 10)}`,
         date: d.toISOString(),
         kind: "loan",
         name: loan.loanName,
@@ -151,10 +157,12 @@ export async function buildUpcoming(userId: number, windowDays: number): Promise
 
   for (const rem of reminders) {
     events.push({
+      key: `reminder:${rem.id}:${new Date(rem.eventDate).toISOString().slice(0, 10)}`,
       date: new Date(rem.eventDate).toISOString(),
       kind: "reminder",
       name: rem.title,
       amount: rem.estimatedAmount != null ? decimalToNumber(rem.estimatedAmount) : 0,
+      amountKnown: rem.estimatedAmount != null,
       icon: rem.icon || KIND_ICON.reminder,
     });
   }

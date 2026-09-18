@@ -171,13 +171,16 @@ export const bankService = {
     });
     const keyOf = (d: Date, amount: number, type: string, desc: string | null) =>
       `${d.toISOString().slice(0, 10)}|${round2(amount)}|${type}|${(desc ?? "").trim()}`;
-    const seen = new Set(existing.map((t) => keyOf(t.transactionDate, Number(t.amount), t.type, t.description)));
-
-    const fresh = rows.filter((r) => {
+    const remaining = new Map<string, number>();
+    for (const t of existing) {
+      const key = keyOf(t.transactionDate, Number(t.amount), t.type, t.description);
+      remaining.set(key, (remaining.get(key) ?? 0) + 1);
+    }
+    const fresh = rows.filter(r => {
       const key = keyOf(r.date, r.amount, r.type, r.description);
-      if (seen.has(key)) return false;
-      seen.add(key); // also dedupes repeats within the same file
-      return true;
+      const count = remaining.get(key) ?? 0;
+      if (!count) return true;
+      remaining.set(key, count - 1); return false;
     });
 
     // Recorded BEFORE the rows so each row can name its source file — needed to

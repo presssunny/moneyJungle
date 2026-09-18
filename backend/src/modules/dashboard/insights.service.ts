@@ -99,8 +99,7 @@ export async function buildInsights(userId: number, year: number, month: number)
         projectedBalance: round2(current.incomeTotal - (current.expenseTotal + dailyBurn * daysLeft)),
       }
     : null;
-  const safePerDay =
-    isCurrentMonth && daysLeft > 0 && balance > 0 ? Math.floor(balance / daysLeft) : isCurrentMonth ? 0 : null;
+  const safePerDay = null; // Deprecated: recorded surplus is not available cash.
 
   // ---- Proactive pace alert: forecast vs monthly target BEFORE the month ends ----
   // Target mirrors the expenses month-progress rule: explicit goal, else last month's spend.
