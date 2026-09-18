@@ -4,6 +4,7 @@ import { z } from "zod";
 import { gateAuth } from "../../middlewares/gateAuth.middleware";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { ApiError } from "../../utils/ApiError";
+import { importRows } from "./importRows.service";
 import { importSessions } from "./importSession.service";
 export const importSessionRoutes=Router();
 importSessionRoutes.use(gateAuth);
@@ -20,3 +21,6 @@ importSessionRoutes.patch("/:id/answers",asyncHandler(async(req,res)=>{const bod
 importSessionRoutes.post("/:id/commit",asyncHandler(async(req,res)=>{res.json(await importSessions.commit(req.userId!,id(req.params.id),z.number().int().nonnegative().parse(req.body.version)));}));
 importSessionRoutes.post("/:id/complete",asyncHandler(async(req,res)=>{res.json(await importSessions.finish(req.userId!,id(req.params.id)));}));
 importSessionRoutes.post("/:id/cancel",asyncHandler(async(req,res)=>{res.json(await importSessions.cancel(req.userId!,id(req.params.id)));}));
+
+importSessionRoutes.get("/:id/rows",asyncHandler(async(req,res)=>{res.json(await importRows.list(req.userId!,id(req.params.id),z.coerce.number().int().min(1).default(1).parse(req.query.page)));}));
+importSessionRoutes.patch("/:id/rows/:row",asyncHandler(async(req,res)=>{res.json(await importRows.edit(req.userId!,id(req.params.id),z.coerce.number().int().positive().parse(req.params.row),req.body));}));

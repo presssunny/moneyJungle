@@ -11,6 +11,7 @@ export interface FinancialStatus {
  allowance:{amount:number|null;shortfall:number|null;state:string;cash:number;reserves:number;essentialReserve:number;formula:string;assumptions:string[]};
 }
 export interface ImportSession {
+ error?:string|null;
  id:string;fileName:string;kind:string;status:string;version:number;answers:Record<string,string|number>;
  preview:{rows:Array<{date:string|null;name:string;amount:number}>;count:number;total:number;warnings:string[];questions:string[];previousImportId?:number};
  result:{creditImportId?:number;accountId?:number;statementImportId?:number;details?:{loanId?:number;expenseIds?:number[]}}|null;

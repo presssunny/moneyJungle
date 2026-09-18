@@ -1,10 +1,15 @@
-import { Outlet } from "react-router-dom";
+import { Link, Outlet, useSearchParams } from "react-router-dom";
 import { Toaster } from "../components/common/Toaster";
 import { FilterBar } from "../components/filters/FilterBar";
 import { Header } from "../components/header/Header";
 import { BottomNav } from "../components/nav/BottomNav";
 import { Sidebar } from "../components/sidebar/Sidebar";
 import { FiltersProvider } from "../context/FiltersContext";
+
+function JourneyReturn(){
+  const [params]=useSearchParams();const to=params.get("returnTo");
+  return to&&(/^\/imports\?session=[0-9a-f-]{36}$/i.test(to)||["/check-in","/review"].includes(to))?<p><Link to={to}>חזרה לתהליך הבדיקה</Link></p>:null;
+}
 
 export function AppLayout() {
   return (
@@ -22,6 +27,7 @@ export function AppLayout() {
             <FilterBar />
           </div>
           <main className="layout-content" id="main-content" tabIndex={-1} aria-live="polite">
+            <JourneyReturn/>
             <Outlet />
           </main>
         </div>

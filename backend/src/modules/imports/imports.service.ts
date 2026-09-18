@@ -1,6 +1,6 @@
 import { prisma } from "../../config/database";
 import { buildRuleCategorizer } from "../categories/categorization.service";
-import { parseExpensesFile } from "./importsParser.service";
+import { parseExpensesFile, type ParsedExpenseRow } from "./importsParser.service";
 
 /** Hebrew payment-method words → PaymentMethod.type, for matching sheet cells. */
 const METHOD_TYPE_KEYWORDS: Array<{ type: string; keywords: string[] }> = [
@@ -60,8 +60,8 @@ export const importsService = {
    * Existing rows with the same name+amount in that month are skipped,
    * so re-uploading the same file is safe.
    */
-  async importExpenses(userId: number, buffer: Buffer, year: number, month: number) {
-    const rows = parseExpensesFile(buffer);
+  async importExpenses(userId: number, buffer: Buffer, year: number, month: number, staged?: ParsedExpenseRow[]) {
+    const rows = staged ?? parseExpensesFile(buffer);
     const [matchMethod, categorize] = await Promise.all([
       buildMethodMatcher(userId),
       buildCategorizer(userId),
@@ -92,17 +92,18 @@ export const importsService = {
       remaining.set(key, (remaining.get(key) ?? 0) + 1);
     }
 
+    const expenseIds: number[] = [];
     let created = 0;
     let totalAmount = 0;
     const monthsTouched = new Set<string>();
     for (const { row, expenseDate } of dated) {
       const key = `${row.name}|${row.amount}|${dateKey(expenseDate)}`;
       const left = remaining.get(key) ?? 0;
-      if (left > 0) {
+      if (!staged && left > 0) {
         remaining.set(key, left - 1); // consume one already-imported match
         continue;
       }
-      await prisma.expense.create({
+      const expense = await prisma.expense.create({
         data: {
           userId,
           amount: row.amount,
@@ -114,12 +115,14 @@ export const importsService = {
           isRecurring: false,
         },
       });
+      expenseIds.push(expense.id);
       created += 1;
       totalAmount += row.amount;
       monthsTouched.add(dateKey(expenseDate).slice(0, 7));
     }
 
     return {
+      expenseIds,
       parsed: rows.length,
       created,
       skipped: rows.length - created,

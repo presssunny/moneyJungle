@@ -5,6 +5,7 @@ import { validate } from "../../middlewares/validation.middleware";
 import { ApiError } from "../../utils/ApiError";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { IdParam, idParamSchema, validatedBody, validatedParams } from "../../utils/validation.utils";
+import { stageLegacyImport } from "../imports/legacyImportAdapter";
 import { creditService } from "./credit.service";
 import { z } from "zod";
 import { walletService } from "./wallet.service";
@@ -63,13 +64,7 @@ creditRoutes.post(
   asyncHandler(async (req: Request, res: Response) => {
     if (!req.file) throw ApiError.badRequest("יש לצרף קובץ אקסל");
     const body = validatedBody<UploadImportBody>(req);
-    const result = await creditService.createImport(
-      req.userId!,
-      Buffer.from(req.file.originalname, "latin1").toString("utf8"),
-      req.file.buffer,
-      body
-    );
-    res.status(201).json(result);
+    await stageLegacyImport(req,res,{kind:"credit",...(body.cardId?{cardId:body.cardId}:{})});
   })
 );
 

@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 async function mockApi(page:Page,{pending=false}={}){
  let profile={onboarding:pending?'pending':'completed',scope:{accountsListed:true,cardsListed:true,commitmentsListed:true,manualOnly:false},cashBuffer:'0',essentialReserve:'0',savedReserve:'0'};
- let session:any=null;let expense:any=null;let removed=false;
+ let session:any=null;let expense:any=null;let removed=false;let editedRow:{name:string;amount:number;date:string}|null=null;
  const state=()=>({today:'2026-09-17',end:'2026-09-30',dataVersion:'a'.repeat(64),profile,sources:[],balances:[],cards:[],events:[],issues:[],blockers:['אין יתרה מאומתת'],allowance:{amount:null,shortfall:null,state:'unavailable',cash:0,reserves:0,essentialReserve:0,formula:'יתרה פחות התחייבויות',assumptions:['הכנסה שטרם התקבלה אינה נכללת']}});
  await page.route('**/api/**',async route=>{
   const req=route.request(),path=new URL(req.url()).pathname,method=req.method();let body:any=[];
@@ -25,6 +25,8 @@ async function mockApi(page:Page,{pending=false}={}){
   }else if(path.endsWith('/answers')){session={...session,answers:req.postDataJSON().answers,version:1,status:'ready_for_review',preview:{...session.preview,questions:[]}};body=session;}
   else if(path.endsWith('/commit')){session={...session,status:'review',version:2,result:{details:{expenseIds:[7]}}};body=session;}
   else if(path.endsWith('/complete')&&path.includes('/imports/')){session={...session,status:'completed',version:3};body=session;}
+  else if(path.endsWith('/rows/1')&&method==='PATCH'){editedRow=req.postDataJSON().normalized;session={...session,version:session.version+1};body=session;}
+  else if(path.endsWith('/rows'))body={items:[{id:1,rowNumber:1,original:{name:'קפה',amount:18,date:null},normalized:editedRow??{name:'קפה',amount:18,date:session.answers.month?session.answers.month+'-01':null},resolution:'include',candidates:[],outputRef:null}],total:1,pageSize:50,pendingCount:0};
   else if(path.includes('/imports/sessions/'))body=session;
   else if(path==='/api/imports/sessions')body=session?[session]:[];
   else if(path==='/api/journey/check-in')body={draft:null,previousCompletedAt:null,due:true,token:'b'.repeat(64),action:{title:'בדיקת המקורות',to:'/data'},status:state(),comparison:{baseline:true,added:0,late:0,changed:0,removed:0,cashChange:null}};
@@ -63,4 +65,15 @@ test('Legacy import and management links reach canonical destinations',async({pa
  await mockApi(page);await page.goto('/transactions?tab=import');await expect(page).toHaveURL(/\/imports$/);
  await page.goto('/manage?tab=documents');await expect(page).toHaveURL(/\/data$/);
  await page.goto('/manage');await expect(page.getByRole('link',{name:'פתיחה ←'})).toHaveCount(4);
+});
+
+test('A staged row can be corrected before commit and survives reload',async({page})=>{
+ await mockApi(page);await page.goto('/imports');
+ await page.locator('input[type=file]').setInputFiles({name:'expenses.csv',mimeType:'text/csv',buffer:Buffer.from('שם,סכום\nקפה,18')});
+ await page.getByLabel('חודש לשורות ללא תאריך').fill('2026-09');await page.getByRole('button',{name:'בדיקת הפרטים',exact:true}).click();
+ await page.getByRole('button',{name:'בדיקת שורה 1'}).click();
+ const dialog=page.getByRole('dialog');await dialog.getByLabel('תיאור',{exact:true}).fill('קפה מתוקן');await dialog.getByLabel('סכום (₪)',{exact:true}).fill('20');
+ await dialog.getByRole('button',{name:'זו תנועה נפרדת — שמירת השורה לקליטה'}).click();
+ await expect(page.getByRole('dialog')).toHaveCount(0);await page.reload();
+ await expect(page.getByText('קפה מתוקן',{exact:true})).toBeVisible();
 });

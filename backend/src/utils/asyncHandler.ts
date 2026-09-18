@@ -12,7 +12,8 @@ export const asyncHandler =
   (fn: AsyncRouteHandler): RequestHandler =>
   (req, res, next) => {
     const financial = req.userId && /^\/api\/(bank|credit|expenses|incomes|loans|recurring|subscriptions|reminders|savings|budgets|documents|imports|journey|dashboard|reports|updates)(\/|$)/.test(req.originalUrl);
-    if (!financial || (req.method === "GET" && /\/documents\/\d+\/file/.test(req.originalUrl))) {
+    const uploadOnly = req.method === "POST" && /^\/api\/(imports\/(sessions\/?|smart|expenses)|credit\/imports|bank\/accounts\/\d+\/import|loans\/schedule\/import)(\?|$)/.test(req.originalUrl);
+    if (!financial || uploadOnly || (req.method === "GET" && /\/documents\/\d+\/file/.test(req.originalUrl))) {
       Promise.resolve(fn(req, res, next)).catch(next);
       return;
     }

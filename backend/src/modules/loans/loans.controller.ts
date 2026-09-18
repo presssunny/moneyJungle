@@ -1,3 +1,4 @@
+import { stageLegacyImport } from "../imports/legacyImportAdapter";
 import { Request, Response } from "express";
 import { ApiError } from "../../utils/ApiError";
 import { asyncHandler } from "../../utils/asyncHandler";
@@ -42,13 +43,7 @@ export const loansController = {
   importSchedule: asyncHandler(async (req: Request, res: Response) => {
     if (!req.file) throw ApiError.badRequest("לא נבחר קובץ");
     const loanId = req.body?.loanId ? Number(req.body.loanId) : undefined;
-    res.json(
-      await loanScheduleService.importSchedule(
-        req.userId!,
-        req.file.buffer,
-        Number.isFinite(loanId) ? loanId : undefined
-      )
-    );
+    await stageLegacyImport(req,res,{kind:"loan_schedule",...(Number.isFinite(loanId)?{loanId}:{})});
   }),
 
   close: asyncHandler(async (req: Request, res: Response) => {

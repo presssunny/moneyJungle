@@ -7,7 +7,7 @@ export async function review(userId: number): Promise<ReviewItem[]> {
   const [bank, credit, sessions, uncategorized] = await Promise.all([
     reconciliationService.getReconciliation(userId),
     prisma.creditImport.findMany({ where: { userId, status: { not: "confirmed" } }, orderBy: { id: "asc" } }),
-    prisma.importSession.findMany({ where: { userId, status: { notIn: ["completed", "cancelled"] } }, orderBy: { createdAt: "asc" } }),
+    prisma.importSession.findMany({ where: { userId, status: { notIn: ["completed", "cancelled", "rolled_back"] } }, orderBy: { createdAt: "asc" } }),
     prisma.expense.count({ where: { userId, categoryId: null } }),
   ]);
   const items: Omit<ReviewItem,"fingerprint">[] = [

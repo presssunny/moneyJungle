@@ -1,3 +1,4 @@
+import { invalidateImportSessions } from "../imports/importLifecycle.service";
 import { prisma } from "../../config/database";
 import { Prisma } from "../../../generated/prisma/client";
 import { ApiError } from "../../utils/ApiError";
@@ -103,12 +104,12 @@ export const creditService = {
     userId: number,
     fileName: string,
     buffer: Buffer,
-    override?: { importMonth?: number; importYear?: number; cardId?: number }
+    override?: { importMonth?: number; importYear?: number; cardId?: number; staged?: ParsedCreditRow[] }
   ) {
     if (override?.cardId !== undefined && !await prisma.creditCard.findFirst({ where: { id: override.cardId, userId } })) {
       throw ApiError.notFound("הכרטיס לא נמצא");
     }
-    const parsedRows = parseCreditFile(buffer);
+    const parsedRows = override?.staged ?? parseCreditFile(buffer);
     const fileHash = hashFile(buffer);
 
     // Same bytes, any file name: this exact statement was already taken in.
@@ -131,7 +132,7 @@ export const creditService = {
     });
     const keyOf = (date: Date, business: string, amount: number, payments: number) =>
       `${date.toISOString().slice(0, 10)}|${business.trim()}|${round2(amount)}|${payments}`;
-    if (override?.cardId !== undefined) {
+    if (override?.cardId !== undefined && !override.staged) {
       const unassigned = new Set(existing.filter((row) => row.cardId === null).map((row) => keyOf(row.transactionDate, row.businessName, Number(row.amount), row.paymentCount)));
       if (parsedRows.some((row) => unassigned.has(keyOf(row.transactionDate, row.businessName, row.amount, row.paymentCount)))) {
         throw ApiError.badRequest("נמצאו עסקאות זהות שעדיין לא משויכות לכרטיס. שייכו קודם את העסקאות או הדוח הקודם לכרטיס הנכון, ואז העלו שוב — כדי למנוע ספירה כפולה או השמטה.");
@@ -142,7 +143,7 @@ export const creditService = {
       const key = keyOf(t.transactionDate, t.businessName, Number(t.amount), t.paymentCount);
       remaining.set(key, (remaining.get(key) ?? 0) + 1);
     }
-    const rows = parsedRows.filter(row => {
+    const rows = override?.staged ?? parsedRows.filter(row => {
       const key = keyOf(row.transactionDate, row.businessName, row.amount, row.paymentCount);
       const count = remaining.get(key) ?? 0;
       if (!count) return true;
@@ -234,6 +235,7 @@ export const creditService = {
     const creditImport = await prisma.creditImport.findFirst({ where: { id, userId } });
     if (!creditImport) throw ApiError.notFound("הייבוא לא נמצא");
     await prisma.creditImport.delete({ where: { id } }); // cascades to transactions
+    await invalidateImportSessions(userId,{creditImportId:id});
     // The mirror case: without this file, its card is no longer itemized anywhere,
     // so the bank settlements it silenced have to become visible spend again.
     await reconciliationService.resolveAll(userId);

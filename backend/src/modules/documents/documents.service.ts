@@ -1,4 +1,5 @@
-import { prisma } from "../../config/database";
+import { invalidateImportSessions } from "../imports/importLifecycle.service";
+import { prisma, withFinancialTransaction, afterFinancialCommit } from "../../config/database";
 import { ApiError } from "../../utils/ApiError";
 import { accountBalanceService } from "../bank/accountBalance.service";
 import { reconciliationService } from "../bank/reconciliation.service";
@@ -27,6 +28,7 @@ export type DocumentStatus = "imported" | "rejected" | "superseded" | "rolled_ba
 const ROLLBACK_KINDS: readonly DocumentKind[] = ["bank_statement", "credit_report"];
 
 export interface RecordDocumentInput {
+  required?: boolean;
   fileName: string;
   fileHash: string;
   sizeBytes: number;
@@ -292,12 +294,13 @@ export const documentsService = {
   labelOf: (kind: string) => KIND_LABELS[kind as DocumentKind] ?? kind,
 
   /** Write the record. Never throws — see the note on best-effort above. */
-  async record(userId: number, input: RecordDocumentInput): Promise<void> {
+  async record(userId: number, input: RecordDocumentInput): Promise<number | undefined> {
     try {
       const storagePath = input.buffer
         ? await documentStorage.save(userId, input.fileHash, input.fileName, input.buffer)
         : null;
-      await prisma.document.create({
+      if(input.required && !storagePath) throw ApiError.internal("לא ניתן לשמור את מסמך המקור");
+      const document = await prisma.document.create({
         data: {
           storagePath,
           userId,
@@ -319,7 +322,9 @@ export const documentsService = {
           note: input.note ?? null,
         },
       });
+      return document.id;
     } catch (error) {
+      if(input.required) throw error;
       console.warn("[מרכז מסמכים] לא הצלחנו לרשום את המסמך — הייבוא עצמו הצליח", error);
     }
   },
@@ -386,8 +391,14 @@ export const documentsService = {
   async remove(userId: number, id: number) {
     const existing = await prisma.document.findFirst({ where: { id, userId } });
     if (!existing) throw ApiError.notFound("המסמך לא נמצא");
-    if (existing.storagePath) await documentStorage.remove(existing.storagePath);
+    // Keep bytes referenced by durable sessions; metadata deletion must not break resume.
+    const references=await prisma.importSession.count({where:{userId,fileHash:existing.fileHash}});
+    if(references) throw ApiError.conflict("מסמך זה משמש תהליך קליטה שמור. ניתן לבטל את הייבוא דרך פעולת הביטול");
     await prisma.document.delete({ where: { id } });
+    if(existing.storagePath) await afterFinancialCommit(()=>withFinancialTransaction(userId,async()=>{
+      const [documents,sessions]=await Promise.all([prisma.document.count({where:{storagePath:existing.storagePath}}),prisma.importSession.count({where:{storagePath:existing.storagePath!}})]);
+      if(!documents&&!sessions) await documentStorage.remove(existing.storagePath!);
+    }));
   },
 
   /** The stored bytes, for download or preview. */
@@ -407,14 +418,18 @@ export const documentsService = {
    * record. The opposite of `remove` above, which touches only the log.
    */
   async rollback(userId: number, id: number): Promise<RollbackResult> {
+    return withFinancialTransaction(userId,async()=>{
     const doc = await prisma.document.findFirst({ where: { id, userId } });
     if (!doc) throw ApiError.notFound("המסמך לא נמצא");
     if (doc.status === "rolled_back") throw ApiError.badRequest("הייבוא הזה כבר בוטל");
     if (!ROLLBACK_KINDS.includes(doc.kind as DocumentKind)) {
       throw ApiError.badRequest("אפשר לבטל רק ייבוא של דף חשבון בנק או של דוח אשראי");
     }
-    return doc.kind === "credit_report"
-      ? rollbackCreditReport(userId, doc.id, doc.linkedCreditImportId)
-      : rollbackBankStatement(userId, doc.id, doc.linkedStatementImportId);
+    const result = doc.kind === "credit_report"
+      ? await rollbackCreditReport(userId, doc.id, doc.linkedCreditImportId)
+      : await rollbackBankStatement(userId, doc.id, doc.linkedStatementImportId);
+    await invalidateImportSessions(userId,{creditImportId:doc.linkedCreditImportId??undefined,statementImportId:doc.linkedStatementImportId??undefined});
+    return result;
+    });
   },
 };

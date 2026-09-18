@@ -9,6 +9,7 @@ import { financialStatus, getProfile } from "./coverage.service";
 import { review } from "./review.service";
 import { businessDate, json } from "./journey.utils";
 import { journeyActions, upcomingCommitments } from "./actions.service";
+import { sessionSourceExists } from "../imports/importLifecycle.service";
 import { checkIns } from "./checkin.service";
 export const journeyRoutes=Router(); journeyRoutes.use(gateAuth);
 const money=z.number().finite().min(0).max(9999999999);
@@ -38,7 +39,8 @@ journeyRoutes.post("/onboarding/complete",asyncHandler(async(req,res)=>{
   res.json(await withFinancialTransaction(req.userId!,async()=>{
     const state=await financialStatus(req.userId!);
     if(!state.profile.scope || state.issues.some(i=>i.blocking)) throw ApiError.conflict("יש להגדיר את המקורות ולהשלים את הקליטה והבדיקה לפני סיום ההיכרות");
-    const completed=await prisma.importSession.count({where:{userId:req.userId!,status:"completed"}});
+    const sessions=await prisma.importSession.findMany({where:{userId:req.userId!,status:"completed"}});
+    const completed=(await Promise.all(sessions.map(s=>sessionSourceExists(req.userId!,s.result)))).filter(Boolean).length;
     const manual=await prisma.expense.count({where:{userId:req.userId!}})+await prisma.income.count({where:{userId:req.userId!}});
     const scope=state.profile.scope as {manualOnly?:boolean};
     if(!completed && (!scope.manualOnly || (!manual && !body.noActivity))) throw ApiError.conflict("יש להשלים קליטה ראשונה או לבחור בהזנה ידנית ולבדוק את המידע שנרשם");

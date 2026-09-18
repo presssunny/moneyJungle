@@ -6,6 +6,7 @@ import { ApiError } from "../../utils/ApiError";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { IdParam, idParamSchema, validatedBody, validatedParams } from "../../utils/validation.utils";
 import { accountBalanceService } from "./accountBalance.service";
+import { stageLegacyImport } from "../imports/legacyImportAdapter";
 import { bankService } from "./bank.service";
 import { reconciliationService } from "./reconciliation.service";
 import {
@@ -130,9 +131,7 @@ bankRoutes.post(
   asyncHandler(async (req: Request, res: Response) => {
     if (!req.file) throw ApiError.badRequest("יש לצרף קובץ אקסל או PDF של דף החשבון");
     const { id } = validatedParams<IdParam>(req);
-    res
-      .status(201)
-      .json(await bankService.importStatement(req.userId!, id, req.file.buffer, req.file.originalname));
+    await stageLegacyImport(req,res,{kind:"bank",accountId:id});
   })
 );
 

@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { AsyncSection } from "../components/common/AsyncSection";
 import { PageShell } from "../components/common/PageShell";
 import { Button } from "../components/common/Button";
@@ -52,11 +53,13 @@ const LOAN_TYPE_OPTIONS = [
  * resolution is a bug — it is counted nowhere, so it shows in red.
  */
 export default function BankReconcilePage() {
+  const [params]=useSearchParams();const rowId=Number(params.get("row"));
   const res = useAsync<ReconciliationView>(
     () => getReconciliation(),
     [],
     "לא הצלחנו לטעון את נתוני ההתאמה"
   );
+  useEffect(()=>{if(!res.loading&&rowId)document.getElementById("focused-bank-row")?.focus();},[res.loading,rowId]);
   const { expenseCategories } = useLookups();
   const [busy, setBusy] = useState(false);
   const [autoResult, setAutoResult] = useState<ResolveResult | null>(null);
@@ -108,6 +111,9 @@ export default function BankReconcilePage() {
         >
           {(data) => (
             <>
+              {rowId>0&&<section id="focused-bank-row" tabIndex={-1} aria-label="התנועה שנבחרה לבדיקה">
+                <Card title="התנועה שנבחרה לבדיקה">{(()=>{const row=data.byResolution.flatMap(group=>group.rows).find(r=>r.id===rowId);return row?<ReviewRow row={row} busy={busy} run={run}/>:<p>התנועה אינה נמצאת עוד. ייתכן שמקור הנתונים בוטל.</p>;})()}</Card>
+              </section>}
               <div className="reconcile-summary" aria-label="סיכום התאמה">
                 <SummaryChip label="שורות בדוח" value={data.summary.total} tone="default" />
                 <SummaryChip label="דורש תשומת לב" value={data.summary.needsReview} tone="danger" />

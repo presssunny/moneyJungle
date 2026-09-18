@@ -21,8 +21,15 @@ Home now obtains one consistent status/actions/upcoming response. A shared serve
 
 Validation: 17 targeted backend tests passed, including same-topic/different-route and different-topic/same-route cases, plus overdue Home integration; eight desktop/mobile browser tests passed; backend application/test typechecks and frontend build passed.
 
+## Phase 3 — staged imports and review
+
+Uploads persist before parsing and failed processing can resume from stored bytes. Parser version, paginated rows, original/normalized values, candidate matches, decisions and exact output references are stored. Expense/credit rows support controlled date/description/amount correction; bank/schedule monetary values remain tied to the verified source file, with replacement-file correction and per-row duplicate review. Matching is occurrence-aware and requires explicit confirmation; changes in existing source rows invalidate the preview before commit.
+
+All legacy HTTP upload routes now return HTTP 202 with a durable session/review URL and write no money until commit. Required provenance participates in the import transaction. Completion verifies the source still exists; rollback/direct credit deletion updates sessions. Retried commits return the stored result before accessing bytes and validate the request version. Document deletion protects session provenance and shared files; unreferenced bytes are removed only after commit. Bank review links focus the selected row and review screens provide a return link.
+
+Validation: staged import integration covers expense edits/lineage, duplicate decisions, stale/concurrent edits, parse failure/retry, required-provenance rollback, legacy staging, and real bank XLSX/PDF, credit and loan-schedule files. Existing document rollback, journey, API smoke and wallet suites were exercised. Application/test typechecks and frontend build passed. All ten browser cases passed across the full run and the focused mobile/desktop row-edit rerun (the initial mobile assertion was corrected for table labels).
+
 ## Remaining sequence
-3. Durable parse failures/retry, editable paginated staged rows, lineage, atomic provenance, source lifecycle and all upload adapters.
 4. Bounded versioned check-in snapshots, shared ranked action and meaningful comparison.
 5. Metric source drill-down, scoped refresh, transaction URL filters and accessible review return paths.
 6. Branding, route/UI cleanup, management groups, documentation and full release validation.

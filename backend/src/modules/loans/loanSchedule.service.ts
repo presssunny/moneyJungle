@@ -50,7 +50,8 @@ export const loanScheduleService = {
   async importSchedule(
     userId: number,
     buffer: Buffer,
-    loanId?: number
+    loanId?: number,
+    skipDocument = false
   ): Promise<ScheduleImportResult> {
     let parsed: ParsedSchedule;
     try {
@@ -161,7 +162,7 @@ export const loanScheduleService = {
       })),
     });
 
-    await documentsService.record(userId, {
+    if(!skipDocument) await documentsService.record(userId, {
       fileName: `לוח סילוקין${parsed.loanNumber ? ` — הלוואה ${parsed.loanNumber}` : ""}${parsed.trackNumber ? ` מסלול ${parsed.trackNumber}` : ""}`,
       fileHash: crypto.createHash("sha256").update(buffer).digest("hex"),
       sizeBytes: buffer.byteLength,

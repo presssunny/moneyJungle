@@ -5,13 +5,12 @@ import { Button } from "../components/common/Button";
 import { DropZone } from "../components/common/DropZone";
 import { Input } from "../components/common/Input";
 import { Select } from "../components/common/Select";
-import { Table } from "../components/common/Table";
+import { ImportRowsReview } from "../components/common/ImportRowsReview";
 import { AsyncSection } from "../components/common/AsyncSection";
 import { Loading } from "../components/common/Loading";
 import { useAsync } from "../hooks/useAsync";
 import { api, apiErrorMessage } from "../services/api";
 import { getFinancialStatus, uploadSession, getImportSession, answerSession, actOnSession, type ImportSession } from "../services/journey.service";
-import { formatCurrency, formatDate } from "../utils/format";
 
 export default function ImportJourneyPage(){
  const [params,setParams]=useSearchParams();const id=params.get('session');
@@ -28,14 +27,15 @@ export default function ImportJourneyPage(){
    setNewName('');sources.reload();
  }catch(e){setError(apiErrorMessage(e));}finally{setBusy(false);}}
  const kind=String(answers.kind??session?.kind??'');
- const editable=session&&['needs_input','ready_for_review'].includes(session.status);
+ const editable=session&&['uploaded','processing','failed','needs_input','ready_for_review'].includes(session.status);
  return <div className="journey-page">
   <p className="text-muted">העלאה ← זיהוי ועיבוד ← השלמת מידע ← בדיקה ← תמונה מעודכנת</p>
   {error&&<p role="alert" className="error-message">{error}</p>}
   {!id&&<Card title="עדכון המידע הפיננסי"><p>דוח בנק, דוח אשראי, גיליון הוצאות או לוח סילוקין. נזהה את הקובץ ונציג את הנתונים לבדיקה לפני קליטה.</p><DropZone onFile={file=>run(()=>uploadSession(file,Object.fromEntries(['accountId','cardId','loanId'].flatMap(k=>params.get(k)?[[k,Number(params.get(k))]]:[]))))} accept=".xlsx,.xls,.csv,.pdf" busy={busy}/><Link to="/data">קליטות קודמות והמשך תהליך</Link></Card>}
   {busy&&!session&&<Loading/>}
   {session&&<>
-   <Card title={session.fileName}><p role="status">{({needs_input:'נדרש מידע נוסף',ready_for_review:'מוכן לבדיקה לפני קליטה',review:'נקלט — נותרה בדיקה',completed:'הקליטה והבדיקה הושלמו',cancelled:'הקליטה בוטלה'} as Record<string,string>)[session.status]??session.status}</p></Card>
+   <Card title={session.fileName}><p role="status">{({failed:'עיבוד הקובץ נכשל — ניתן לתקן פרטים ולנסות שוב',uploaded:'הקובץ נשמר',processing:'העיבוד החל — אפשר לנסות שוב אם נעצר',rolled_back:'נתוני הקליטה בוטלו',needs_input:'נדרש מידע נוסף',ready_for_review:'מוכן לבדיקה לפני קליטה',review:'נקלט — נותרה בדיקה',completed:'הקליטה והבדיקה הושלמו',cancelled:'הקליטה בוטלה'} as Record<string,string>)[session.status]??session.status}</p></Card>
+   {session.error&&<p role="alert">{session.error}</p>}
    {editable&&<Card title="פרטי הקובץ">
     <Select label="סוג המידע" value={kind==='unknown'?'':kind} placeholder="בחירת סוג" options={[{value:'bank',label:'דף חשבון בנק'},{value:'credit',label:'דוח אשראי'},{value:'expense_sheet',label:'גיליון הוצאות'},{value:'loan_schedule',label:'לוח סילוקין'}]} onChange={e=>setAnswers(old=>({...old,kind:e.target.value}))}/>
     <AsyncSection resource={sources} errorTitle="לא ניתן לטעון חשבונות וכרטיסים" skeleton={<Loading/>}>{data=><>
@@ -45,21 +45,22 @@ export default function ImportJourneyPage(){
     </>}</AsyncSection>
     {kind==='loan_schedule'&&<Select label="הלוואה קיימת (אם אין זיהוי חד־משמעי בקובץ)" value={answers.loanId??''} placeholder="זיהוי לפי מספר ההלוואה בקובץ" options={(loans.data??[]).map(l=>({value:l.id,label:l.loanName}))} onChange={e=>inputNumber('loanId',e.target.value)}/>}
     {kind==='expense_sheet'&&<Input label="חודש לשורות ללא תאריך" type="month" value={answers.month??''} onChange={e=>setAnswers(old=>({...old,month:e.target.value}))}/>}
+    <p className="text-muted">שינוי פרטי הקובץ ובדיקתם מחדש יחזירו את השורות למצב המקורי וידרשו בדיקה חוזרת של התיקונים והכפילויות.</p>
     <Button disabled={busy||!kind||kind==='unknown'} onClick={()=>run(()=>answerSession(session,cleanAnswers()))}>בדיקת הפרטים</Button>
    </Card>}
    {session.preview&&<Card title={`נמצאו ${session.preview.count} שורות`}>
     {session.preview.questions.map((q,i)=><p key={i} role="status">{q}</p>)}
     {session.preview.warnings.length>0&&<details open><summary>מה חשוב לבדוק</summary><ul>{session.preview.warnings.map((w,i)=><li key={i}>{w}</li>)}</ul></details>}
-    <Table rows={session.preview.rows.map((r,i)=>({...r,id:i}))} rowKey={r=>r.id} columns={[{key:'date',header:'תאריך',render:r=>r.date?formatDate(r.date):'ללא תאריך — לפי החודש שנבחר'},{key:'name',header:'תיאור',render:r=>r.name},{key:'amount',header:'סכום',render:r=>formatCurrency(r.amount)}]}/>
+    <ImportRowsReview session={session} onSaved={next=>{setSession(next);setAccepted(false);}}/>
    </Card>}
    {session.status==='ready_for_review'&&<Card title="אישור קליטה"><label><input type="checkbox" checked={accepted} onChange={e=>setAccepted(e.target.checked)}/> בדקתי את השורות ואת ההערות, ובחרתי את המקור הנכון</label><div className="row-actions"><Button disabled={busy||!accepted||JSON.stringify(cleanAnswers())!==JSON.stringify(session.answers??{})} onClick={()=>run(()=>actOnSession(session,'commit'))}>{busy?'קולט…':'קליטת הנתונים'}</Button></div></Card>}
    {session.status==='review'&&<Card title="השלמת הבדיקה"><p>הנתונים נקלטו. יש לבדוק את התוצאה לפני סיום התהליך.</p><div className="row-actions">
-    <Link to={session.result?.creditImportId?`/accounts?tab=credit&importId=${session.result.creditImportId}`:session.kind==='bank'?'/accounts?tab=reconcile':session.kind==='loan_schedule'?'/accounts?tab=loans':'/transactions?tab=expenses'}>פתיחת הנתונים לבדיקה</Link>
+    <Link to={(session.result?.creditImportId?`/accounts?tab=credit&importId=${session.result.creditImportId}`:session.kind==='bank'?'/accounts?tab=reconcile':session.kind==='loan_schedule'?'/accounts?tab=loans':'/transactions?tab=expenses')+`&returnTo=${encodeURIComponent('/imports?session='+session.id)}`}>פתיחת הנתונים לבדיקה</Link>
     <Button disabled={busy} onClick={()=>run(()=>actOnSession(session,'complete'))}>בדקתי — סיום הקליטה</Button>
    </div></Card>}
    {editable&&<Button variant="ghost" disabled={busy} onClick={()=>run(()=>actOnSession(session,'cancel'))}>ביטול הקליטה לפני החלת הנתונים</Button>}
    {session.status==='completed'&&<Card title="התמונה עודכנה"><div className="row-actions"><Link to="/onboarding">השלמת ההיכרות</Link><Link to="/check-in">המשך בדיקה שבועית</Link><Link to="/">לתמונת הכסף</Link><Button variant="outline" onClick={()=>setParams({})}>העלאת קובץ נוסף</Button></div></Card>}
-   {session.status==='cancelled'&&<Button onClick={()=>setParams({})}>העלאת קובץ חדש</Button>}
+   {['cancelled','rolled_back'].includes(session.status)&&<Button onClick={()=>setParams({})}>העלאת קובץ חדש</Button>}
   </>}
  </div>;
 }

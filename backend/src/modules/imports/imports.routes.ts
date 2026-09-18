@@ -6,8 +6,7 @@ import { ApiError } from "../../utils/ApiError";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { readAnswers } from "../assistant/assistant.types";
 import { MonthQuery, monthQuerySchema, resolveMonth } from "../../utils/validation.utils";
-import { importsService } from "./imports.service";
-import { smartImportService } from "./smartImport.service";
+import { stageLegacyImport } from "./legacyImportAdapter";
 import { detectStatement, type StatementKind } from "./statementDetector.service";
 
 const upload = multer({
@@ -51,15 +50,8 @@ importsRoutes.post(
   upload.single("file"),
   asyncHandler(async (req: Request, res: Response) => {
     if (!req.file) throw ApiError.badRequest("יש לצרף קובץ אקסל או PDF");
-    const fileName = Buffer.from(req.file.originalname, "latin1").toString("utf8");
-    const result = await smartImportService.importFile(
-      req.userId!,
-      fileName,
-      req.file.buffer,
-      readForcedKind(req.body?.kind),
-      readAnswers(req.body?.answers)
-    );
-    res.status(result.assistant.status === "needs_answers" ? 200 : 201).json(result);
+    const answers=readAnswers(req.body?.answers);
+    await stageLegacyImport(req,res,{kind:readForcedKind(req.body?.kind),...(answers.bank_account_id?{accountId:Number(answers.bank_account_id)}:{}),...(answers.card_id?{cardId:Number(answers.card_id)}:{})});
   })
 );
 
@@ -70,6 +62,6 @@ importsRoutes.post(
   asyncHandler(async (req: Request, res: Response) => {
     if (!req.file) throw ApiError.badRequest("יש לצרף קובץ אקסל");
     const { year, month } = resolveMonth((req.validated?.body ?? {}) as MonthQuery);
-    res.status(201).json(await importsService.importExpenses(req.userId!, req.file.buffer, year, month));
+    await stageLegacyImport(req,res,{kind:"expense_sheet",month:`${year}-${String(month).padStart(2,"0")}`});
   })
 );

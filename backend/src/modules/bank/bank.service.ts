@@ -125,7 +125,7 @@ export const bankService = {
    * (auto-categorized). Rows already present — same date, amount, type and
    * description — are skipped, so re-uploading is safe.
    */
-  async importStatement(userId: number, accountId: number, buffer: Buffer, fileName = "") {
+  async importStatement(userId: number, accountId: number, buffer: Buffer, fileName = "", selectedRows?: number[]) {
     await requireAccount(userId, accountId);
     const isPdf = /\.pdf$/i.test(fileName) || buffer.subarray(0, 5).toString("latin1") === "%PDF-";
     const statement = isPdf ? await parseBankStatementPdf(buffer) : parseBankStatement(buffer);
@@ -176,7 +176,7 @@ export const bankService = {
       const key = keyOf(t.transactionDate, Number(t.amount), t.type, t.description);
       remaining.set(key, (remaining.get(key) ?? 0) + 1);
     }
-    const fresh = rows.filter(r => {
+    const fresh = selectedRows ? rows.filter((_, index) => selectedRows.includes(index + 1)) : rows.filter(r => {
       const key = keyOf(r.date, r.amount, r.type, r.description);
       const count = remaining.get(key) ?? 0;
       if (!count) return true;

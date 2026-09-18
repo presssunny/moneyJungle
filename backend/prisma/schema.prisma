@@ -707,6 +707,8 @@ model Reminder {
 model ImportSession {
   id          String   @id @default(uuid()) @db.VarChar(36)
   userId      Int      @map("user_id")
+  parserVersion String @default("journey-v2") @map("parser_version") @db.VarChar(30)
+  rows ImportRow[]
   fileName    String   @map("file_name") @db.VarChar(255)
   fileHash    String   @map("file_hash") @db.VarChar(64)
   storagePath String   @map("storage_path") @db.VarChar(500)
@@ -773,4 +775,20 @@ model MoneyCheckIn {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@index([userId, status, completedAt])
   @@map("money_check_ins")
+}
+
+model ImportRow {
+  id Int @id @default(autoincrement())
+  sessionId String @map("session_id") @db.VarChar(36)
+  rowNumber Int @map("row_number")
+  original Json
+  normalized Json
+  candidates Json
+  resolution String @default("include") @db.VarChar(20)
+  matchRef Json? @map("match_ref")
+  outputRef Json? @map("output_ref")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  session ImportSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  @@unique([sessionId, rowNumber])
+  @@map("import_rows")
 }
