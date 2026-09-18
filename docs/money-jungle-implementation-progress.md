@@ -29,7 +29,12 @@ All legacy HTTP upload routes now return HTTP 202 with a durable session/review 
 
 Validation: staged import integration covers expense edits/lineage, duplicate decisions, stale/concurrent edits, parse failure/retry, required-provenance rollback, legacy staging, and real bank XLSX/PDF, credit and loan-schedule files. Existing document rollback, journey, API smoke and wallet suites were exercised. Application/test typechecks and frontend build passed. All ten browser cases passed across the full run and the focused mobile/desktop row-edit rerun (the initial mobile assertion was corrected for table labels).
 
+## Phase 4 — weekly check-in
+
+Snapshots use schema version 2 and a calculation version, with at most 1,000 detailed rows in three calendar months and a digest/count for older data. Comparison reads ledger fields in batches of 500, preserves partial-coverage limitations, does not count aging-out as deletion, and avoids exact change counts when detail is truncated. Legacy snapshots start a new baseline. The same ranked action as Home is saved with its reason; upcoming items include overdue debt. Step advancement and idempotent completion share the financial transaction boundary.
+
+Validation: 19 backend tests across snapshot comparison, journey integration and action ranking passed; desktop/mobile check-in resume-to-completion tests passed; backend typechecks and frontend production build passed.
+
 ## Remaining sequence
-4. Bounded versioned check-in snapshots, shared ranked action and meaningful comparison.
 5. Metric source drill-down, scoped refresh, transaction URL filters and accessible review return paths.
 6. Branding, route/UI cleanup, management groups, documentation and full release validation.

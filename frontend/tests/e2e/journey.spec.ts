@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 async function mockApi(page:Page,{pending=false}={}){
+ let draft:{id:string;step:number}|null=null;let completedAt:string|null=null;
  let profile={onboarding:pending?'pending':'completed',scope:{accountsListed:true,cardsListed:true,commitmentsListed:true,manualOnly:false},cashBuffer:'0',essentialReserve:'0',savedReserve:'0'};
  let session:any=null;let expense:any=null;let removed=false;let editedRow:{name:string;amount:number;date:string}|null=null;
  const state=()=>({today:'2026-09-17',end:'2026-09-30',dataVersion:'a'.repeat(64),profile,sources:[],balances:[],cards:[],events:[],issues:[],blockers:['אין יתרה מאומתת'],allowance:{amount:null,shortfall:null,state:'unavailable',cash:0,reserves:0,essentialReserve:0,formula:'יתרה פחות התחייבויות',assumptions:['הכנסה שטרם התקבלה אינה נכללת']}});
@@ -29,7 +30,10 @@ async function mockApi(page:Page,{pending=false}={}){
   else if(path.endsWith('/rows'))body={items:[{id:1,rowNumber:1,original:{name:'קפה',amount:18,date:null},normalized:editedRow??{name:'קפה',amount:18,date:session.answers.month?session.answers.month+'-01':null},resolution:'include',candidates:[],outputRef:null}],total:1,pageSize:50,pendingCount:0};
   else if(path.includes('/imports/sessions/'))body=session;
   else if(path==='/api/imports/sessions')body=session?[session]:[];
-  else if(path==='/api/journey/check-in')body={draft:null,previousCompletedAt:null,due:true,token:'b'.repeat(64),action:{title:'בדיקת המקורות',to:'/data'},status:state(),comparison:{baseline:true,added:0,late:0,changed:0,removed:0,cashChange:null}};
+  else if(path==='/api/journey/check-in'&&method==='POST'){draft={id:'checkin-test',step:0};body=draft;}
+  else if(path==='/api/journey/check-in/checkin-test'&&method==='PATCH'){draft={id:'checkin-test',step:req.postDataJSON().step};body={ok:true};}
+  else if(path==='/api/journey/check-in/checkin-test/complete'){draft=null;completedAt='2026-09-18';body={status:'completed'};}
+  else if(path==='/api/journey/check-in')body={draft,previousCompletedAt:completedAt,due:!completedAt,token:'b'.repeat(64),action:{title:'בדיקת המקורות',to:'/data',reason:'אין יתרה מאומתת'},status:{...state(),upcoming:[]},comparison:{baseline:true,added:0,late:0,changed:0,removed:0,cashChange:null,limited:false,historyChanged:null}};
   await route.fulfill({json:body});
  });
  return {isRemoved:()=>removed};
@@ -76,4 +80,13 @@ test('A staged row can be corrected before commit and survives reload',async({pa
  await dialog.getByRole('button',{name:'זו תנועה נפרדת — שמירת השורה לקליטה'}).click();
  await expect(page.getByRole('dialog')).toHaveCount(0);await page.reload();
  await expect(page.getByText('קפה מתוקן',{exact:true})).toBeVisible();
+});
+
+test('Weekly check-in resumes its step and saves the suggested action',async({page})=>{
+ await mockApi(page);await page.goto('/check-in');await page.getByRole('button',{name:'תחילת הבדיקה השבועית'}).click();
+ await page.getByRole('button',{name:'המשך',exact:true}).click();await page.reload();
+ await expect(page.getByRole('heading',{name:'פתרון — רק מה שדורש תשומת לב'})).toBeVisible();
+ await page.getByRole('button',{name:'המשך',exact:true}).click();await expect(page.getByRole('heading',{name:'הבנה — מה השתנה?'})).toBeVisible();
+ await page.getByRole('button',{name:'המשך',exact:true}).click();await expect(page.getByRole('heading',{name:'פעולה — צעד אחד להמשך'})).toBeVisible();
+ await page.getByRole('button',{name:'שמירת הבדיקה והצעד הבא'}).click();await expect(page.getByRole('status').filter({hasText:'הבדיקה נשמרה'})).toBeVisible();
 });

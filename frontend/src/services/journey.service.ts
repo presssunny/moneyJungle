@@ -16,7 +16,7 @@ export interface ImportSession {
  preview:{rows:Array<{date:string|null;name:string;amount:number}>;count:number;total:number;warnings:string[];questions:string[];previousImportId?:number};
  result:{creditImportId?:number;accountId?:number;statementImportId?:number;details?:{loanId?:number;expenseIds?:number[]}}|null;
 }
-export interface CheckInView {draft:{id:string;step:number}|null;previousCompletedAt:string|null;due:boolean;token:string;action:{title:string;to:string};status:FinancialStatus;comparison:{baseline:boolean;added:number;late:number;changed:number;removed:number;cashChange:number|null}}
+export interface CheckInView {draft:{id:string;step:number}|null;previousCompletedAt:string|null;due:boolean;token:string;action:{title:string;to:string;reason?:string};status:FinancialStatus & {upcoming:Commitment[]};comparison:{baseline:boolean;added:number|null;late:number|null;changed:number|null;removed:number|null;cashChange:number|null;limited:boolean;historyChanged:boolean|null}}
 export async function getFinancialStatus():Promise<FinancialStatus>{return (await api.get('/journey/status')).data;}
 export async function getProfile():Promise<Profile>{return (await api.get('/journey/profile')).data;}
 export async function saveProfile(input:unknown):Promise<Profile>{return (await api.patch('/journey/profile',input)).data;}
