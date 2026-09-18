@@ -58,5 +58,12 @@ export function useAsync<T>(
 
   const reload = useCallback(() => setAttempt((n) => n + 1), []);
 
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    const changed = () => { clearTimeout(timer); timer = setTimeout(reload, 150); };
+    window.addEventListener("money-jungle:changed", changed);
+    return () => { clearTimeout(timer); window.removeEventListener("money-jungle:changed", changed); };
+  }, [reload]);
+
   return { data, error, loading, reload, setData };
 }

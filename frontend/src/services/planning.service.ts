@@ -503,14 +503,3 @@ export async function updateSettings(input: Partial<Settings>): Promise<Settings
   return data;
 }
 
-// ---------- Onboarding (first-run flag stored in Settings.notificationsJson) ----------
-
-export function isOnboardingComplete(settings: Settings): boolean {
-  return settings.notificationsJson?.onboardingCompleted === true;
-}
-
-/** Persist the "onboarding done" flag, merging into the existing notifications JSON. */
-export async function completeOnboarding(settings: Settings): Promise<Settings> {
-  const merged = { ...(settings.notificationsJson ?? {}), onboardingCompleted: true };
-  return updateSettings({ notificationsJson: merged });
-}

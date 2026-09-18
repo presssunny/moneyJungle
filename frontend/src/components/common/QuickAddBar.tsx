@@ -1,77 +1,18 @@
 import { useState } from "react";
-import { quickAddExpense, type QuickAddResult } from "../../services/finance.service";
-import { formatCurrency } from "../../utils/format";
-
-/**
- * Natural-language quick add: type "שופרסל 250" (or "קניתי בקפה ב-18 אתמול") and
- * the server parses the amount, business name and auto-category. Complements the
- * structured form and Excel import without needing an LLM.
- */
-export function QuickAddBar({ onAdded }: { onAdded?: () => void }) {
-  const [text, setText] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<QuickAddResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    const value = text.trim();
-    if (!value || busy) return;
-    setBusy(true);
-    setError(null);
-    setResult(null);
-    try {
-      const res = await quickAddExpense(value);
-      setResult(res);
-      setText("");
-      onAdded?.();
-    } catch (err) {
-      const message =
-        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
-        "לא הצלחתי להוסיף — נסי שוב";
-      setError(message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="quick-add">
-      <form className="quick-add-form" onSubmit={submit}>
-        <span className="quick-add-icon" aria-hidden>
-          ✨
-        </span>
-        <input
-          className="quick-add-input"
-          value={text}
-          onChange={(e) => {
-            setText(e.target.value);
-            if (result) setResult(null);
-            if (error) setError(null);
-          }}
-          placeholder='הוספה מהירה — לדוגמה: "שופרסל 250" או "קפה 18 אתמול"'
-          aria-label="הוספת הוצאה מהירה בשפה חופשית"
-          maxLength={255}
-        />
-        <button type="submit" className="btn btn-primary btn-sm" disabled={busy || !text.trim()}>
-          {busy ? "מוסיף…" : "הוספה"}
-        </button>
-      </form>
-
-      {result && (
-        <div className="quick-add-result">
-          ✅ נוספה הוצאה: <strong>{result.parsed.businessName || "הוצאה"}</strong> ·{" "}
-          <span className="mono">{formatCurrency(result.parsed.amount)}</span>
-          {result.parsed.categoryName ? (
-            <>
-              {" "}· {result.parsed.categoryIcon ?? "🏷️"} {result.parsed.categoryName}
-            </>
-          ) : (
-            <span className="text-muted"> · ללא קטגוריה</span>
-          )}
-        </div>
-      )}
-      {error && <div className="quick-add-error">⚠️ {error}</div>}
-    </div>
-  );
+import { quickAddExpense, deleteExpense } from "../../services/finance.service";
+import { apiErrorMessage } from "../../services/api";
+import type { Expense } from "../../types/models";
+import { formatCurrency, formatDate } from "../../utils/format";
+import { Modal } from "./Modal";
+import { Button } from "./Button";
+import { ExpenseEditor } from "../expenses/ExpenseEditor";
+export function QuickAddBar({onAdded}:{onAdded?:()=>void}){
+ const [text,setText]=useState('');const [busy,setBusy]=useState(false);const [saved,setSaved]=useState<Expense|null>(null);const [editing,setEditing]=useState(false);const [error,setError]=useState('');const [message,setMessage]=useState('');
+ async function add(e:React.FormEvent){e.preventDefault();if(busy||!text.trim())return;setBusy(true);setError('');setMessage('');try{const result=await quickAddExpense(text.trim());setSaved(result.expense);setText('');onAdded?.();}catch(err){setError(apiErrorMessage(err,'לא ניתן להוסיף את ההוצאה'));}finally{setBusy(false);}}
+ async function undo(){if(!saved||busy)return;setBusy(true);setError('');try{await deleteExpense(saved.id);setSaved(null);setMessage('ההוספה בוטלה');onAdded?.();}catch(err){setError(apiErrorMessage(err,'לא ניתן לבטל את ההוספה. אפשר לנסות שוב'));}finally{setBusy(false);}}
+ return <div className="quick-add"><form className="quick-add-form" onSubmit={add}><input className="quick-add-input" value={text} onChange={e=>setText(e.target.value)} placeholder='הוספה מהירה: שופרסל 250 או קפה 18 אתמול' aria-label="הוספת הוצאה בשפה חופשית" maxLength={255}/><Button type="submit" disabled={busy||!text.trim()}>הוספה</Button></form>
+ {saved&&<div className="quick-add-result" role="status"><p>נשמרה הוצאה: <strong>{saved.businessName||'ללא בית עסק'}</strong> · {formatCurrency(Number(saved.amount))} · {saved.category?.name??'ללא קטגוריה'} · {formatDate(saved.expenseDate)}</p><p className="text-muted">{saved.description}</p><div className="row-actions"><Button size="sm" variant="outline" disabled={busy} onClick={()=>setEditing(true)}>עריכה</Button><Button size="sm" variant="ghost" disabled={busy} onClick={undo}>ביטול ההוספה</Button><Button size="sm" variant="ghost" onClick={()=>setSaved(null)}>סגירה</Button></div></div>}
+ {message&&<p role="status">{message}</p>}{error&&<p role="alert" className="quick-add-error">{error}</p>}
+ <Modal title="תיקון ההוצאה שנוספה" open={editing&&!!saved} onClose={()=>setEditing(false)}>{saved&&<ExpenseEditor key={saved.id} expenseId={saved.id} initial={{amount:Number(saved.amount),expenseDate:saved.expenseDate.slice(0,10),categoryId:saved.categoryId,paymentMethodId:saved.paymentMethodId,businessName:saved.businessName,description:saved.description,isRecurring:saved.isRecurring}} onSaved={expense=>{setSaved(expense);setEditing(false);onAdded?.();}} onCancel={()=>setEditing(false)}/>}</Modal>
+ </div>;
 }

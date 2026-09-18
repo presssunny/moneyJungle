@@ -1,3 +1,4 @@
+import { uploadSession } from "../services/journey.service";
 import { useMemo, useState, type FormEvent } from "react";
 import { AsyncSection } from "../components/common/AsyncSection";
 import { PageShell } from "../components/common/PageShell";
@@ -22,7 +23,6 @@ import {
   createBankTransaction,
   deleteBankAccount,
   deleteBankTransaction,
-  importBankStatement,
   listBankAccounts,
   listBankTransactions,
   setBankAnchor,
@@ -161,14 +161,8 @@ export default function BankPage() {
     setImportMsg("");
     setUploading(true);
     try {
-      const result = await importBankStatement(accountId, file);
-      const parts = [`נוספו ${result.imported} תנועות`];
-      if (result.deposits > 0 || result.withdrawals > 0) {
-        parts.push(`(${result.deposits} הכנסות · ${result.withdrawals} הוצאות)`);
-      }
-      if (result.skippedDuplicates > 0) parts.push(`· ${result.skippedDuplicates} כפילויות דולגו`);
-      setImportMsg(parts.join(" "));
-      load(); // reloads both the balances and the transaction list
+      const session = await uploadSession(file, { accountId });
+      window.location.assign(`/imports?session=${session.id}`);
     } catch (err) {
       setError(apiErrorMessage(err));
     } finally {

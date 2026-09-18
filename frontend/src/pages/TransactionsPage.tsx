@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { AsyncSection } from "../components/common/AsyncSection";
 import { PageShell } from "../components/common/PageShell";
 import { Card } from "../components/common/Card";
@@ -18,7 +18,6 @@ import type { CategorySlice } from "../types/dashboard.types";
 import type { Expense } from "../types/models";
 import { formatCurrency } from "../utils/format";
 import ExpensesPage from "./ExpensesPage";
-import ImportsPage from "./ImportsPage";
 import IncomesPage from "./IncomesPage";
 
 const UNCATEGORIZED_COLOR = "#6D6875";
@@ -69,6 +68,8 @@ function sourceSlices(rows: Expense[]): CategorySlice[] {
 export default function TransactionsPage() {
   const { monthKey } = useMonth();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const [analysisOpen, setAnalysisOpen] = useState(false);
   // Bump to remount the active tab so it re-fetches after a quick add.
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -87,10 +88,20 @@ export default function TransactionsPage() {
   const uncategorized = rows.filter((row) => row.categoryId === null).length;
   const largest = rows.reduce((max, row) => Math.max(max, Number(row.amount)), 0);
 
+  if(params.get("tab") === "import") return <Navigate to="/imports" replace/>;
   return (
     <PageShell>
       <QuickAddBar onAdded={refreshAll} />
 
+      <TabbedHub
+        key={refreshKey}
+        tabs={[
+          { key: "expenses", label: "הוצאות", icon: "🧾", element: <ExpensesPage /> },
+          { key: "incomes", label: "הכנסות", icon: "💰", element: <IncomesPage /> },
+        ]}
+      />
+      <details className="home-analysis" onToggle={e=>setAnalysisOpen(e.currentTarget.open)}><summary>ניתוח החודש — סיכומים וגרפים</summary>
+      {analysisOpen && <>
       {/* KPI (§4.2) */}
       <div className="kpi-row">
         <AsyncSection
@@ -164,14 +175,9 @@ export default function TransactionsPage() {
         </Card>
       </div>
 
-      <TabbedHub
-        key={refreshKey}
-        tabs={[
-          { key: "expenses", label: "הוצאות", icon: "🧾", element: <ExpensesPage /> },
-          { key: "incomes", label: "הכנסות", icon: "💰", element: <IncomesPage /> },
-          { key: "import", label: "ייבוא אקסל", icon: "📂", element: <ImportsPage /> },
-        ]}
-      />
+
+      </>}
+      </details>
     </PageShell>
   );
 }

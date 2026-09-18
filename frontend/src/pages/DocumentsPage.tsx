@@ -1,6 +1,6 @@
+import { uploadSession } from "../services/journey.service";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { AssistantPanel } from "../components/assistant/AssistantPanel";
 import { AsyncSection } from "../components/common/AsyncSection";
 import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
@@ -21,9 +21,7 @@ import {
   type DocumentRecord,
   type RollbackResult,
 } from "../services/documents.service";
-import { importLoanSchedule, smartImportFile, type SmartImportResult } from "../services/finance.service";
 import { toast } from "../services/toast";
-import type { AssistantAnswers, AssistantStep } from "../types/assistant";
 import { formatDate } from "../utils/format";
 
 const STATUS: Record<DocumentRecord["status"], { icon: string; label: string; tone: string }> = {
@@ -67,9 +65,6 @@ export default function DocumentsPage() {
   const navigate = useNavigate();
 
   const [busy, setBusy] = useState(false);
-  const [lastFile, setLastFile] = useState<File | null>(null);
-  const [step, setStep] = useState<AssistantStep | null>(null);
-  const [result, setResult] = useState<SmartImportResult | null>(null);
   /** What the last undo cost. Kept on screen — a toast is gone too fast to act on. */
   const [undone, setUndone] = useState<RollbackResult | null>(null);
 
@@ -77,39 +72,11 @@ export default function DocumentsPage() {
    * One turn of the import conversation. The same file is re-sent with the
    * answers, so nothing is buffered server-side.
    */
-  async function onFile(file: File, answers?: AssistantAnswers) {
+  async function onFile(file: File) {
     setBusy(true);
-    setLastFile(file);
-    try {
-      const next = await smartImportFile(file, undefined, answers);
-      setResult(next);
-      setStep(next.assistant);
-      docs.reload();
-    } catch (err) {
-      toast.error(apiErrorMessage(err));
-      setStep(null);
-      setResult(null);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  /**
-   * A schedule is not a statement, so it goes to its own importer. Offering it
-   * here means the user never has to know which screen owns which file.
-   */
-  async function onScheduleHere(file: File) {
-    setBusy(true);
-    try {
-      const imported = await importLoanSchedule(file);
-      setStep(imported.assistant);
-      setResult(null);
-      docs.reload();
-    } catch (err) {
-      toast.error(apiErrorMessage(err));
-    } finally {
-      setBusy(false);
-    }
+    try { const session = await uploadSession(file, {}); navigate(`/imports?session=${session.id}`); }
+    catch (err) { toast.error(apiErrorMessage(err)); }
+    finally { setBusy(false); }
   }
 
   function askRemove(doc: DocumentRecord) {
@@ -369,39 +336,6 @@ export default function DocumentsPage() {
           hint=".xlsx / .xls / .csv / .pdf עד 10MB"
         />
 
-        {step && (
-          <AssistantPanel
-            step={step}
-            busy={busy}
-            onAnswer={(answers) => lastFile && onFile(lastFile, answers)}
-            footer={
-              step.status !== "needs_answers" ? (
-                <div className="import-result-actions">
-                  {/* A schedule landed here by mistake — offer to do it properly
-                      instead of sending the user to another screen. */}
-                  {result?.kind === "loan_schedule" && lastFile && (
-                    <Button size="sm" onClick={() => onScheduleHere(lastFile)}>
-                      לטעון אותו כלוח סילוקין
-                    </Button>
-                  )}
-                  {result && result.importedRows > 0 && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() =>
-                        navigate(
-                          result.kind === "credit" ? "/accounts?tab=credit" : "/accounts?tab=reconcile"
-                        )
-                      }
-                    >
-                      {result.kind === "credit" ? "לאישור העסקאות ←" : "למסך ההתאמות ←"}
-                    </Button>
-                  )}
-                </div>
-              ) : undefined
-            }
-          />
-        )}
       </Card>
 
       <Card title="היסטוריית המסמכים">

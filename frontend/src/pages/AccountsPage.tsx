@@ -58,18 +58,18 @@ export default function AccountsPage() {
     savingsRes.data === null ? null : savingsRes.data.reduce((sum, g) => sum + Number(g.currentAmount), 0);
   const debts = loansRes.data === null ? null : loansRes.data.totals.totalBalance;
 
-  const assets = bankTotal === null || savingsTotal === null ? null : bankTotal + savingsTotal;
-  const netWorth = assets === null || debts === null ? null : assets - debts;
+  const assets = bankTotal; // Goal progress may already be included in bank cash.
+  
 
   return (
     <>
       <div className="overview-strip" aria-label="סיכום נכסים וחובות">
-        <OverviewChip label="נכסים" amount={assets} tone="success" loading={loading} />
+        <OverviewChip label="יתרות בנק רשומות" amount={assets} tone="success" loading={loading} />
         <OverviewChip label="חובות" amount={debts} tone="danger" loading={loading} />
         <OverviewChip
-          label="שווי נקי"
-          amount={netWorth}
-          tone={netWorth !== null && netWorth < 0 ? "danger" : "success"}
+          label="התקדמות ביעדי חיסכון (עשויה לחפוף לבנק)"
+          amount={savingsTotal}
+          tone="default"
           loading={loading}
         />
       </div>

@@ -49,6 +49,10 @@ const ROUTE_TITLES: Record<string, NavItem> = {
   "/family": { path: "/family", label: "משפחה / משתמשים", icon: "👨‍👩‍👧" },
   "/imports": { path: "/imports", label: "ייבוא קבצים", icon: "📂" },
   "/settings": { path: "/settings", label: "הגדרות", icon: "⚙️" },
+  "/data": { path: "/data", label: "מידע ומסמכים", icon: "📁" },
+  "/review": { path: "/review", label: "פריטים לבדיקה", icon: "🔎" },
+  "/check-in": { path: "/check-in", label: "בדיקת הכסף השבועית", icon: "🌿" },
+  "/commitments": { path: "/commitments", label: "התחייבויות קרובות", icon: "📅" },
   "/onboarding": { path: "/onboarding", label: "ברוכה הבאה", icon: "👋" },
 };
 

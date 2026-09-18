@@ -1,33 +1,4 @@
-import { TabbedHub } from "../components/common/TabbedHub";
-import AlertsPage from "./AlertsPage";
-import CalendarPage from "./CalendarPage";
-import CategoriesRulesPage from "./CategoriesRulesPage";
-import DocumentsPage from "./DocumentsPage";
-import FamilyPage from "./FamilyPage";
-import PaymentMethodsPage from "./PaymentMethodsPage";
-import RecurringPage from "./RecurringPage";
-import SettingsPage from "./SettingsPage";
-import SubscriptionsPage from "./SubscriptionsPage";
-
-/**
- * Setup & occasional screens, pulled out of the primary rail (progressive
- * disclosure). Planning items (recurring, subscriptions, calendar, alerts) sit
- * first, then configuration (categories, payment methods, family, preferences).
- */
-export default function ManagePage() {
-  return (
-    <TabbedHub
-      tabs={[
-        { key: "recurring", label: "תשלומים קבועים", icon: "🔁", element: <RecurringPage /> },
-        { key: "subscriptions", label: "מנויים", icon: "📺", element: <SubscriptionsPage /> },
-        { key: "calendar", label: "לוח שנה", icon: "📅", element: <CalendarPage /> },
-        { key: "alerts", label: "התראות", icon: "🚨", element: <AlertsPage /> },
-        { key: "documents", label: "מרכז המסמכים", icon: "📁", element: <DocumentsPage /> },
-        { key: "categories", label: "קטגוריות וחוקים", icon: "🏷️", element: <CategoriesRulesPage /> },
-        { key: "payment-methods", label: "אמצעי תשלום", icon: "💼", element: <PaymentMethodsPage /> },
-        { key: "family", label: "משפחה", icon: "👨‍👩‍👧", element: <FamilyPage /> },
-        { key: "settings", label: "העדפות", icon: "⚙️", element: <SettingsPage /> },
-      ]}
-    />
-  );
-}
+import { Link, Navigate, useSearchParams } from "react-router-dom";
+import { Card } from "../components/common/Card";
+const legacy:Record<string,string>={recurring:'/commitments?tab=recurring',subscriptions:'/commitments?tab=subscriptions',calendar:'/commitments?tab=calendar',alerts:'/alerts',documents:'/data',categories:'/settings?tab=categories','payment-methods':'/settings?tab=payment-methods',family:'/settings?tab=family',settings:'/settings'};
+export default function ManagePage(){const [params]=useSearchParams();const target=legacy[params.get('tab')??''];if(target)return <Navigate to={target} replace/>;return <div className="management-grid">{[{to:'/commitments',title:'התחייבויות קרובות',description:'תשלומים, מנויים ולוח שנה'},{to:'/data',title:'מידע ומסמכים',description:'העלאות, מקורות והשלמת נתונים'},{to:'/alerts',title:'התראות',description:'אירועים שדורשים תשומת לב'},{to:'/settings',title:'הגדרות',description:'קטגוריות, אמצעי תשלום, משפחה והעדפות'}].map(item=><Card key={item.to} title={item.title}><p>{item.description}</p><Link to={item.to}>פתיחה ←</Link></Card>)}</div>;}

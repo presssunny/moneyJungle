@@ -438,6 +438,7 @@ export interface Achievements {
 }
 
 export interface UpcomingEvent {
+  amountKnown?: boolean;
   date: string;
   kind: "recurring" | "subscription" | "loan" | "reminder";
   name: string;

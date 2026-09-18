@@ -20,7 +20,7 @@ export function UpcomingPanel({ data }: { data: Upcoming }) {
           <span className="card-title">📅 מה צפוי בקרוב</span>
         </div>
         <div className="text-muted" style={{ fontSize: 14 }}>
-          אין תשלומים קבועים, מנויים או החזרי הלוואות ב-{data.windowDays} הימים הקרובים.
+          לא רשומים תשלומים קבועים, מנויים או החזרי הלוואות ב-{data.windowDays} הימים הקרובים.
         </div>
       </div>
     );
@@ -42,7 +42,7 @@ export function UpcomingPanel({ data }: { data: Upcoming }) {
       <div className="card-header">
         <span className="card-title">📅 מה צפוי ב-{data.windowDays} הימים הקרובים</span>
         <span className="upcoming-total">
-          סה״כ <strong className="mono">{formatCurrency(data.total)}</strong>
+          סכומים רשומים <strong className="mono">{formatCurrency(data.total)}</strong>
         </span>
       </div>
 
@@ -63,7 +63,7 @@ export function UpcomingPanel({ data }: { data: Upcoming }) {
                   {event.icon}
                 </span>
                 <span className="upcoming-event-name">{event.name}</span>
-                <span className="upcoming-event-amount mono">{formatCurrency(event.amount)}</span>
+                <span className="upcoming-event-amount mono">{event.amountKnown === false ? "סכום לא ידוע" : formatCurrency(event.amount)}</span>
               </div>
             ))}
           </li>

@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { useLocation, useSearchParams } from "react-router-dom";
+import { uploadSession } from "../services/journey.service";
+import { ExpenseEditor } from "../components/expenses/ExpenseEditor";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useSearchParams, useNavigate } from "react-router-dom";
 import { AsyncSection } from "../components/common/AsyncSection";
 import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
 import { useConfirm } from "../components/common/ConfirmDialog";
 import { EmptyState } from "../components/common/EmptyState";
-import { ErrorMessage } from "../components/common/ErrorMessage";
 import { Input } from "../components/common/Input";
 import { Modal } from "../components/common/Modal";
 import { PageShell } from "../components/common/PageShell";
@@ -17,11 +18,8 @@ import { useAsync } from "../hooks/useAsync";
 import { useLookups } from "../hooks/useLookups";
 import { apiErrorMessage } from "../services/api";
 import {
-  createExpense,
   deleteExpense,
-  importExpensesFile,
   listExpenses,
-  updateExpense,
   type ExpenseInput,
 } from "../services/finance.service";
 import type { Expense } from "../types/models";
@@ -45,8 +43,9 @@ export default function ExpensesPage() {
   const confirm = useConfirm();
   const { monthKey } = useMonth();
   const location = useLocation();
+  const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
-  const { expenseCategories, paymentMethods } = useLookups();
+  const { expenseCategories } = useLookups();
   const [filterCategory, setFilterCategory] = useState<number | undefined>();
   const [search, setSearch] = useState("");
   // Entry point from the "לא מסווגות" KPI on the hub above.
@@ -55,8 +54,6 @@ export default function ExpensesPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Expense | null>(null);
   const [form, setForm] = useState<ExpenseInput>(emptyForm(monthKey));
-  const [error, setError] = useState("");
-  const [saving, setSaving] = useState(false);
   const [importMessage, setImportMessage] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -114,7 +111,6 @@ export default function ExpensesPage() {
   function openCreate() {
     setEditing(null);
     setForm(emptyForm(monthKey));
-    setError("");
     setFormOpen(true);
   }
 
@@ -129,25 +125,7 @@ export default function ExpensesPage() {
       description: expense.description ?? "",
       isRecurring: expense.isRecurring,
     });
-    setError("");
     setFormOpen(true);
-  }
-
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    setSaving(true);
-    setError("");
-    try {
-      const payload = { ...form, businessName: form.businessName || null, description: form.description || null };
-      if (editing) await updateExpense(editing.id, payload);
-      else await createExpense(payload);
-      setFormOpen(false);
-      load();
-    } catch (err) {
-      setError(apiErrorMessage(err));
-    } finally {
-      setSaving(false);
-    }
   }
 
   function remove(expense: Expense) {
@@ -174,9 +152,8 @@ export default function ExpensesPage() {
   async function onImportFile(file: File) {
     setImportMessage("");
     try {
-      const result = await importExpensesFile(file, monthKey);
-      setImportMessage(`יובאו ${result.created} הוצאות בסך ${formatCurrency(result.totalAmount)} (${result.skipped} דולגו)`);
-      load();
+      const session = await uploadSession(file, { month: monthKey });
+      navigate(`/imports?session=${session.id}`);
     } catch (err) {
       setImportMessage(apiErrorMessage(err));
     }
@@ -339,61 +316,7 @@ export default function ExpensesPage() {
       </Card>
 
       <Modal title={editing ? "עריכת הוצאה" : "הוספת הוצאה"} open={formOpen} onClose={() => setFormOpen(false)}>
-        <form onSubmit={submit}>
-          {error && <ErrorMessage message={error} />}
-          <div className="form-row">
-            <Input
-              label="סכום (₪)"
-              type="number"
-              step="0.01"
-              min="0.01"
-              required
-              value={form.amount || ""}
-              onChange={(e) => setForm({ ...form, amount: Number(e.target.value) })}
-            />
-            <Input
-              label="תאריך"
-              type="date"
-              required
-              value={form.expenseDate}
-              onChange={(e) => setForm({ ...form, expenseDate: e.target.value })}
-            />
-          </div>
-          <Input
-            label="שם / בית עסק"
-            value={form.businessName ?? ""}
-            onChange={(e) => setForm({ ...form, businessName: e.target.value })}
-          />
-          <div className="form-row">
-            <Select
-              label="קטגוריה"
-              options={expenseCategories.map((c) => ({ value: c.id, label: `${c.icon ?? ""} ${c.name}` }))}
-              placeholder="ללא קטגוריה"
-              value={form.categoryId ?? ""}
-              onChange={(e) => setForm({ ...form, categoryId: e.target.value ? Number(e.target.value) : null })}
-            />
-            <Select
-              label="אמצעי תשלום"
-              options={paymentMethods.map((m) => ({ value: m.id, label: m.name }))}
-              placeholder="ללא"
-              value={form.paymentMethodId ?? ""}
-              onChange={(e) => setForm({ ...form, paymentMethodId: e.target.value ? Number(e.target.value) : null })}
-            />
-          </div>
-          <Input
-            label="הערה"
-            value={form.description ?? ""}
-            onChange={(e) => setForm({ ...form, description: e.target.value })}
-          />
-          <div className="modal-actions">
-            <Button type="submit" disabled={saving}>
-              {saving ? "שומר..." : editing ? "עדכון" : "הוספה"}
-            </Button>
-            <Button type="button" variant="ghost" onClick={() => setFormOpen(false)}>
-              ביטול
-            </Button>
-          </div>
-        </form>
+        <ExpenseEditor key={editing?.id ?? "new"} expenseId={editing?.id} initial={form} onSaved={() => { setFormOpen(false); load(); }} onCancel={() => setFormOpen(false)} />
       </Modal>
 
       {confirm.dialog}

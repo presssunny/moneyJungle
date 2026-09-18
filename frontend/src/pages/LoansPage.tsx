@@ -1,3 +1,4 @@
+import { uploadSession } from "../services/journey.service";
 import { useState, type FormEvent } from "react";
 import { AsyncSection } from "../components/common/AsyncSection";
 import { Button } from "../components/common/Button";
@@ -24,11 +25,9 @@ import { apiErrorMessage, toastApiError } from "../services/api";
 import {
   createLoan,
   deleteLoan,
-  importLoanSchedule,
   listLoans,
   updateLoan,
   type LoanInput,
-  type ScheduleImportResult,
 } from "../services/finance.service";
 import type { StatementLoanGroup } from "../services/planning.service";
 import type { Loan, LoanEvent } from "../types/models";
@@ -82,7 +81,6 @@ export default function LoansPage() {
 
   const [showClosed, setShowClosed] = useState(false);
   const [uploadBusy, setUploadBusy] = useState(false);
-  const [uploadResult, setUploadResult] = useState<ScheduleImportResult | null>(null);
   const [uploadTarget, setUploadTarget] = useState<Loan | null>(null);
 
   const data = loansRes.data;
@@ -134,12 +132,9 @@ export default function LoansPage() {
 
   async function onScheduleFile(file: File) {
     setUploadBusy(true);
-    setUploadResult(null);
     try {
-      const result = await importLoanSchedule(file, uploadTarget?.id);
-      setUploadResult(result);
-      setUploadTarget(null);
-      loansRes.reload();
+      const session = await uploadSession(file, uploadTarget ? { loanId: uploadTarget.id } : {});
+      window.location.assign(`/imports?session=${session.id}`);
     } catch (err) {
       toastApiError(err);
     } finally {
@@ -154,8 +149,7 @@ export default function LoansPage() {
     onEarlyRepayment: setQuoteFor,
     onUploadSchedule: (loan) => {
       setUploadTarget(loan);
-      setUploadResult(null);
-      document.getElementById("loan-schedule-upload")?.scrollIntoView({ behavior: "smooth" });
+        document.getElementById("loan-schedule-upload")?.scrollIntoView({ behavior: "smooth" });
     },
     onDelete: (loan) =>
       confirm.ask(
@@ -314,32 +308,6 @@ export default function LoansPage() {
             hint="הקובץ שהבנק מייצא, עם עמודות מספר תשלום קרן · תאריך · קרן · ריבית · יתרה"
           />
 
-          {uploadResult && (
-            <div className="info-banner">
-              <div>
-                <span aria-hidden>✅</span> {uploadResult.message}
-              </div>
-              <div className="text-muted">נשמרו {uploadResult.rowsStored} שורות תשלום.</div>
-              {/* Where the file could not answer, the app asks instead of guessing. */}
-              {uploadResult.questions.map((question) => (
-                <div key={question.code} className="loan-question">
-                  <span aria-hidden>❓</span> {question.text}
-                  {question.code === "original_amount" && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        const loan = data?.loans.find((l) => l.id === uploadResult.loanId);
-                        if (loan) openEdit(loan);
-                      }}
-                    >
-                      הזנת הסכום המקורי
-                    </Button>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       </Card>
 

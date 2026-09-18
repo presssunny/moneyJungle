@@ -14,7 +14,12 @@ api.interceptors.request.use((config) => {
 });
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    if (["post", "patch", "put", "delete"].includes(response.config.method ?? "") && !response.config.url?.includes("/gate/")) {
+      window.dispatchEvent(new Event("money-jungle:changed"));
+    }
+    return response;
+  },
   (error) => {
     const status = error.response?.status;
     const url: string = error.config?.url ?? "";

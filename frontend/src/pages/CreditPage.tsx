@@ -1,7 +1,8 @@
+import { uploadSession } from "../services/journey.service";
 import { useEffect, useRef, useState } from "react";
 import { CreditWallet } from "../components/credit/CreditWallet";
 import { listCreditCards } from "../services/future.service";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { AsyncSection } from "../components/common/AsyncSection";
 import { PageShell } from "../components/common/PageShell";
 import { Button } from "../components/common/Button";
@@ -28,7 +29,6 @@ import {
   listCreditImports,
   recategorizeCredit,
   updateCreditTransaction,
-  uploadCreditImport,
 } from "../services/finance.service";
 import { createRule } from "../services/planning.service";
 import type { CreditImport, CreditImportDetail, CreditTransaction } from "../types/models";
@@ -44,6 +44,8 @@ export default function CreditPage() {
   const confirmDialog = useConfirm();
   const { monthKey, setMonthKey } = useMonth();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const requestedImport = params.get("importId");
   const { expenseCategories } = useLookups();
   const [selected, setSelected] = useState<CreditImportDetail | null>(null);
   const [detailError, setDetailError] = useState("");
@@ -74,9 +76,9 @@ export default function CreditPage() {
   // Auto-open the most recent import so its month-by-month split is visible
   // right away instead of hidden behind a click.
   useEffect(() => {
-    if (!imports || imports.length === 0 || selected) return;
+    if (!imports || imports.length === 0 || (selected && (!requestedImport || selected.id === Number(requestedImport)))) return;
     let alive = true;
-    getCreditImport(imports[0].id)
+    getCreditImport(requestedImport ? Number(requestedImport) : imports[0].id)
       .then((detail) => {
         if (alive) {
           setSelected(detail);
@@ -89,43 +91,15 @@ export default function CreditPage() {
     return () => {
       alive = false;
     };
-  }, [imports, selected]);
+  }, [imports, selected, requestedImport]);
 
   async function onUpload(file: File) {
-    if (importPanelRef.current) importPanelRef.current.open = true;
-    setUploading(true);
-    setMessage("");
+    setUploading(true); setMessage("");
     try {
-      const detail = await uploadCreditImport(file, monthKey, uploadCardId ? Number(uploadCardId) : undefined);
-      setMonthFilter(null);
-      // Nothing new in the file: no import was created, so there is nothing to
-      // select or approve — say so instead of showing an empty import.
-      if (detail.alreadyImported) {
-        setMessage(
-          detail.previousImport
-            ? `⚠️ הדוח הזה כבר הועלה (${detail.previousImport.fileName}) — לא נוספה אף עסקה`
-            : `⚠️ כל ${detail.parsedRows} העסקאות בקובץ כבר קיימות — לא נוסף כלום`
-        );
-        load();
-        return;
-      }
-      setSelected(detail);
-      const months = detail.monthlyBreakdown?.length ?? 1;
-      const base =
-        months > 1
-          ? `נקלטו ${detail.totalTransactions} עסקאות ופוצלו ל־${months} חודשי חיוב — בדקי סיווג ואשרי`
-          : `נקלטו ${detail.totalTransactions} עסקאות — בדקי סיווג ואשרי`;
-      setMessage(
-        detail.skippedDuplicates > 0
-          ? `${base} · ${detail.skippedDuplicates} עסקאות דולגו (כבר היו קיימות)`
-          : base
-      );
-      load();
-    } catch (err) {
-      setMessage(apiErrorMessage(err));
-    } finally {
-      setUploading(false);
-    }
+      const session = await uploadSession(file, uploadCardId ? { cardId: Number(uploadCardId) } : {});
+      navigate(`/imports?session=${session.id}`);
+    } catch (err) { setMessage(apiErrorMessage(err)); }
+    finally { setUploading(false); }
   }
 
   async function openImport(imp: CreditImport) {

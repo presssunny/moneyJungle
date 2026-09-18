@@ -17,6 +17,7 @@ export function Header() {
         <span aria-hidden>{current?.icon}</span> {current?.label ?? ""}
       </h1>
       <div className="header-actions">
+        <NavLink to="/imports" className="btn btn-outline btn-sm">העלאת מידע</NavLink>
         <NavLink to={MANAGE_NAV.path} className="header-icon-btn" title={MANAGE_NAV.label} aria-label={MANAGE_NAV.label}>
           {MANAGE_NAV.icon}
         </NavLink>

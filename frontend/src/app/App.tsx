@@ -25,7 +25,12 @@ const DashboardPage = lazy(() => import("../pages/DashboardPage"));
 const DocumentsPage = lazy(() => import("../pages/DocumentsPage"));
 const ExpensesPage = lazy(() => import("../pages/ExpensesPage"));
 const FamilyPage = lazy(() => import("../pages/FamilyPage"));
-const ImportsPage = lazy(() => import("../pages/ImportsPage"));
+const ImportJourneyPage = lazy(() => import("../pages/ImportJourneyPage"));
+const FinancialDataPage = lazy(() => import("../pages/FinancialDataPage"));
+const ReviewPage = lazy(() => import("../pages/ReviewPage"));
+const CheckInPage = lazy(() => import("../pages/CheckInPage"));
+const CommitmentsPage = lazy(() => import("../pages/CommitmentsPage"));
+const SettingsHubPage = lazy(() => import("../pages/SettingsHubPage"));
 const IncomesPage = lazy(() => import("../pages/IncomesPage"));
 const LoansPage = lazy(() => import("../pages/LoansPage"));
 const ManagePage = lazy(() => import("../pages/ManagePage"));
@@ -34,7 +39,6 @@ const PaymentMethodsPage = lazy(() => import("../pages/PaymentMethodsPage"));
 const RecurringPage = lazy(() => import("../pages/RecurringPage"));
 const ReportsHubPage = lazy(() => import("../pages/ReportsHubPage"));
 const SavingsPage = lazy(() => import("../pages/SavingsPage"));
-const SettingsPage = lazy(() => import("../pages/SettingsPage"));
 const SubscriptionsPage = lazy(() => import("../pages/SubscriptionsPage"));
 const TransactionsPage = lazy(() => import("../pages/TransactionsPage"));
 
@@ -76,14 +80,6 @@ export default function App() {
           {/* Old entry point — kept so existing bookmarks and links still land. */}
           <Route path="/gate" element={<Navigate to="/login" replace />} />
           <Route
-            path="/onboarding"
-            element={
-              <RequireGate>
-                <OnboardingPage />
-              </RequireGate>
-            }
-          />
-          <Route
             element={
               <RequireGate>
                 <RequireOnboarding>
@@ -116,8 +112,13 @@ export default function App() {
             <Route path="/payment-methods" element={<PaymentMethodsPage />} />
             <Route path="/family" element={<FamilyPage />} />
             <Route path="/documents" element={<DocumentsPage />} />
-            <Route path="/imports" element={<ImportsPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/onboarding" element={<OnboardingPage />} />
+            <Route path="/imports" element={<ImportJourneyPage />} />
+            <Route path="/data" element={<FinancialDataPage />} />
+            <Route path="/review" element={<ReviewPage />} />
+            <Route path="/check-in" element={<CheckInPage />} />
+            <Route path="/commitments" element={<CommitmentsPage />} />
+            <Route path="/settings" element={<SettingsHubPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
 
