@@ -7,6 +7,7 @@ import { api, apiErrorMessage } from "../../services/api";
 import { saveProfile, confirmCoverage, type FinancialStatus } from "../../services/journey.service";
 import { formatCurrency } from "../../utils/format";
 export function CoveragePanel({data,onSaved}:{data:FinancialStatus;onSaved:()=>void}){
+ const [checked,setChecked]=useState<Record<string,boolean>>({});
  const [busy,setBusy]=useState(false);const [error,setError]=useState('');const [saved,setSaved]=useState('');
  async function run(action:()=>Promise<unknown>){setBusy(true);setError('');setSaved('');try{await action();setSaved('נשמר');onSaved();}catch(e){setError(apiErrorMessage(e));}finally{setBusy(false);}}
  return <>
@@ -22,6 +23,6 @@ export function CoveragePanel({data,onSaved}:{data:FinancialStatus;onSaved:()=>v
    </form>
    {error&&<p role="alert" className="error-message">{error}</p>}{saved&&<p role="status">{saved}</p>}
   </Card>
-  <Card title="עדכניות המידע"><ul>{data.blockers.map(b=><li key={b}>{b}</li>)}</ul><p>אישור זה מתייחס למקורות שהזנת נכון ל־{data.today}. לאחר שינוי בנתונים או ביום חדש נבקש לבדוק שוב.</p><Button disabled={busy||!data.profile.scope} onClick={()=>run(()=>confirmCoverage(data.dataVersion))}>בדקתי — המידע מעודכן להיום</Button></Card>
+  <Card title="עדכניות המידע">{data.sources.map(s=><div key={s.key}><label><input type="checkbox" checked={!!checked[`${data.dataVersion}:${s.key}`]} onChange={e=>setChecked({...checked,[`${data.dataVersion}:${s.key}`]:e.target.checked})}/> בדקתי את עדכניות {s.name}</label><p className="text-muted">{s.asOf?`יתרה נכון ל־${s.asOf}. `:""}{s.limitation}</p></div>)}<ul>{data.blockers.map(b=><li key={b}>{b}</li>)}</ul><p>אישור זה מתייחס למקורות שהזנת נכון ל־{data.today}. לאחר שינוי בנתונים או ביום חדש נבקש לבדוק שוב.</p><Button disabled={busy||!data.profile.scope||data.sources.some(s=>!checked[`${data.dataVersion}:${s.key}`])} onClick={()=>run(()=>confirmCoverage(data.dataVersion,data.sources.map(s=>s.key)))}>בדקתי — המידע מעודכן להיום</Button></Card>
  </>;
 }

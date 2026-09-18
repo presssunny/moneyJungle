@@ -1,7 +1,8 @@
 import { prisma } from "../../config/database";
 import { reconciliationService } from "../bank/reconciliation.service";
 import { fingerprint } from "./journey.utils";
-export interface ReviewItem { key: string; title: string; to: string; blocking: boolean; fingerprint: string }
+import type { ReviewItem } from "../../types/journey.types";
+export type { ReviewItem } from "../../types/journey.types";
 export async function review(userId: number): Promise<ReviewItem[]> {
   const [bank, credit, sessions, uncategorized] = await Promise.all([
     reconciliationService.getReconciliation(userId),

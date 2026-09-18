@@ -3,6 +3,7 @@ export interface ReviewItem {key:string;title:string;to:string;blocking:boolean;
 export interface Commitment {key:string;date:string;name:string;amount:number|null;kind:string;fingerprint:string;decision:string|null;note:string|null;to:string}
 export interface Profile {onboarding:string;scope:{accountsListed:boolean;cardsListed:boolean;commitmentsListed:boolean;manualOnly:boolean}|null;cashBuffer:string;essentialReserve:string;savedReserve:string}
 export interface FinancialStatus {
+ sources:Array<{key:string;name:string;kind:string;asOf:string|null;observedFrom:string|null;observedTo:string|null;limitation:string}>;
  today:string;end:string;dataVersion:string;profile:Profile;
  balances:Array<{id:number;name:string;balance:number;explanation:string;anchor:{coverageTo:string;fileName:string}|null}>;
  cards:Array<{id:number;name:string}>;events:Commitment[];issues:ReviewItem[];blockers:string[];
@@ -17,7 +18,7 @@ export interface CheckInView {draft:{id:string;step:number}|null;previousComplet
 export async function getFinancialStatus():Promise<FinancialStatus>{return (await api.get('/journey/status')).data;}
 export async function getProfile():Promise<Profile>{return (await api.get('/journey/profile')).data;}
 export async function saveProfile(input:unknown):Promise<Profile>{return (await api.patch('/journey/profile',input)).data;}
-export async function confirmCoverage(dataVersion:string){return (await api.post('/journey/coverage',{dataVersion,confirmed:true})).data;}
+export async function confirmCoverage(dataVersion:string,sourceKeys:string[]){return (await api.post('/journey/coverage',{dataVersion,sourceKeys,confirmed:true})).data;}
 export async function finishOnboarding(noActivity:boolean){return (await api.post('/journey/onboarding/complete',{reviewed:true,noActivity})).data;}
 export async function getReview():Promise<ReviewItem[]>{return (await api.get('/journey/review')).data;}
 export async function getCommitments():Promise<Commitment[]>{return (await api.get('/journey/commitments')).data;}

@@ -76,7 +76,7 @@ async function findAnchor(
 
   if (!fromStatement) return fromUser;
   if (!fromUser) return fromStatement;
-  return fromUser.asOf > fromStatement.asOf ? fromUser : fromStatement;
+  return fromUser.asOf >= fromStatement.asOf ? fromUser : fromStatement;
 }
 
 export const accountBalanceService = {

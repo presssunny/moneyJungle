@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 async function mockApi(page:Page,{pending=false}={}){
  let profile={onboarding:pending?'pending':'completed',scope:{accountsListed:true,cardsListed:true,commitmentsListed:true,manualOnly:false},cashBuffer:'0',essentialReserve:'0',savedReserve:'0'};
  let session:any=null;let expense:any=null;let removed=false;
- const state=()=>({today:'2026-09-17',end:'2026-09-30',dataVersion:'a'.repeat(64),profile,balances:[],cards:[],events:[],issues:[],blockers:['אין יתרה מאומתת'],allowance:{amount:null,shortfall:null,state:'unavailable',cash:0,reserves:0,essentialReserve:0,formula:'יתרה פחות התחייבויות',assumptions:['הכנסה שטרם התקבלה אינה נכללת']}});
+ const state=()=>({today:'2026-09-17',end:'2026-09-30',dataVersion:'a'.repeat(64),profile,sources:[],balances:[],cards:[],events:[],issues:[],blockers:['אין יתרה מאומתת'],allowance:{amount:null,shortfall:null,state:'unavailable',cash:0,reserves:0,essentialReserve:0,formula:'יתרה פחות התחייבויות',assumptions:['הכנסה שטרם התקבלה אינה נכללת']}});
  await page.route('**/api/**',async route=>{
   const req=route.request(),path=new URL(req.url()).pathname,method=req.method();let body:any=[];
   if(path==='/api/gate/session')body={user:{id:1,email:'test@example.test',displayName:'Test',role:'USER'},csrfToken:'x'};
@@ -43,7 +43,7 @@ test('Home leads with a partial picture and three actions; charts load only when
 test('Quick Add shows interpreted date and supports editing and immediate undo',async({page})=>{
  const mocked=await mockApi(page);await page.goto('/');
  await page.getByRole('textbox',{name:'הוספת הוצאה בשפה חופשית'}).fill('קפה 18 אתמול');await page.getByRole('button',{name:'הוספה',exact:true}).click();
- await expect(page.getByRole('status').filter({hasText:'נשמרה הוצאה'})).toContainText('16/09/2026');
+ await expect(page.getByRole('status').filter({hasText:'נשמרה הוצאה'})).toContainText(/16[./]09[./]2026/);
  await page.getByRole('button',{name:'עריכה',exact:true}).click();await page.getByRole('spinbutton',{name:'סכום (₪)'}).fill('20');await page.getByRole('button',{name:'שמירה',exact:true}).click();
  await expect(page.getByRole('status').filter({hasText:'נשמרה הוצאה'})).toContainText('20');
  await page.getByRole('button',{name:'ביטול ההוספה'}).click();await expect(page.getByText('ההוספה בוטלה')).toBeVisible();expect(mocked.isRemoved()).toBe(true);

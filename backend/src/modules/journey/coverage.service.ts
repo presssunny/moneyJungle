@@ -20,8 +20,24 @@ export async function financialStatus(userId: number) {
     prisma.creditTransaction.count({ where: { userId, creditImport: { status: "confirmed" }, transactionType: "financing" } }),
   ]);
   const balances = await Promise.all(accounts.map(async a => ({ id: a.id, name: a.accountName, ...(await accountBalanceService.derive(userId, a.id)) })));
-  const dataVersion = fingerprint({ balances, cards, events, issues, pendingDates, expenses, incomes, bankRows, creditRows, scope: profile.scope, reserves: [profile.cashBuffer, profile.essentialReserve, profile.savedReserve] });
-  const coverage = profile.coverage as { date?: string; dataVersion?: string } | null;
+  const statements = await prisma.bankStatementImport.findMany({ where: { userId }, orderBy: { id: "asc" } });
+  const sources = [
+    ...balances.map(b => {
+      const reports = statements.filter(s => s.bankAccountId === b.id);
+      return { key: `bank:${b.id}`, name: b.name, kind: "bank", asOf: b.anchor?.coverageTo ?? null,
+        reportedFrom: null, reportedTo: null,
+        observedFrom: reports.length ? reports.map(s => s.coverageFrom.toISOString().slice(0, 10)).sort()[0] : null,
+        observedTo: reports.length ? reports.map(s => s.coverageTo.toISOString().slice(0, 10)).sort().at(-1)! : null,
+        revision: fingerprint({ account: accounts.find(a => a.id === b.id), reports, rows: bankRows.filter(r => r.bankAccountId === b.id) }),
+        limitation: "טווח התנועות אינו הוכחת רציפות. האישור כולל בדיקת דוחות חסרים ותשלומים שכבר נכללו ביתרה." };
+    }),
+    ...cards.map(c => ({ key: `credit:${c.id}`, name: c.name, kind: "credit", asOf: null,
+      reportedFrom: null, reportedTo: null, observedFrom: null, observedTo: null,
+      revision: fingerprint({ card: c, rows: creditRows.filter(r => r.cardId === c.id) }),
+      limitation: "יש לבדוק שכל הדוחות והחיובים העתידיים של הכרטיס נרשמו; קובץ אחרון לבדו אינו כיסוי מלא." })),
+  ];
+  const dataVersion = fingerprint({ revision: profile.revision, balances, cards, events, issues, pendingDates, expenses, incomes, bankRows, creditRows, sources, scope: profile.scope, reserves: [profile.cashBuffer, profile.essentialReserve, profile.savedReserve] });
+  const coverage = profile.coverage as { date?: string; dataVersion?: string; sources?: Array<{ key: string; revision: string }> } | null;
   const blockers: string[] = [];
   if (!profile.scope) blockers.push("יש לאשר אילו מקורות כלולים בתמונה הפיננסית");
   if (!accounts.length) blockers.push("אין יתרת בנק מאומתת לתכנון מזומן");
@@ -31,6 +47,7 @@ export async function financialStatus(userId: number) {
   if (financing) blockers.push("יש עסקאות מימון שטרם הותאמו להתחייבות ההחזר — לא ניתן לקבוע את סכום התשלום המלא");
   if (events.some(e => !e.decision || (e.amount === null && e.decision === "unpaid"))) blockers.push("יש להשלים סכומים ולבדוק אילו התחייבויות כבר שולמו או חופפות");
   if (coverage?.date !== today || coverage.dataVersion !== dataVersion) blockers.push("יש לאשר שהמקורות וההתחייבויות מעודכנים להיום");
+  if (sources.some(s => !coverage?.sources?.some(c => c.key === s.key && c.revision === s.revision))) blockers.push("יש לבדוק ולאשר עדכניות לכל חשבון וכרטיס בנפרד");
   // Cash on a different account is not proof that the debit account can pay.
   if (accounts.length > 1) blockers.push("תכנון יומי משולב לכמה חשבונות אינו זמין בלי הקצאת החיובים לחשבון המשלם");
   const end = new Date(Date.UTC(Number(today.slice(0,4)), Number(today.slice(5,7)), 0)).toISOString().slice(0,10);
@@ -40,7 +57,7 @@ export async function financialStatus(userId: number) {
   const cash = balances.reduce((sum,b)=>sum+b.balance,0);
   const reserves = Number(profile.cashBuffer) + Number(profile.savedReserve) + futureCardReserve;
   const calculated = calculateAllowance(cash, reserves, Number(profile.essentialReserve), dates, unpaid.filter(e=>e.date<=end).map(e=>({date:e.date,amount:Math.max(0,e.amount!)})));
-  return { today, end, dataVersion, profile, balances, cards, events, issues, blockers,
+  return { today, end, dataVersion, profile, sources, balances, cards, events, issues, blockers,
     allowance: { amount: blockers.length ? null : calculated.daily, shortfall: blockers.length ? null : calculated.shortfall,
       state: blockers.length ? "unavailable" : "provisional", cash, reserves, essentialReserve: Number(profile.essentialReserve),
       formula: "בכל יום נבדקת היתרה לאחר כרית הביטחון, החיסכון ששוריין, חיובי אשראי עתידיים, התחייבויות שטרם שולמו והוצאות חיוניות. התקציב היומי הוא הנמוך מבין הסכומים האפשריים לאורך התקופה, כולל היום.",

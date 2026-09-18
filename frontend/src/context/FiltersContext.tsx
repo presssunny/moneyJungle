@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { useLocation, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { currentMonthKey } from "../utils/format";
 
 /**
@@ -73,43 +73,32 @@ function initialFilters(search: URLSearchParams): StoredFilters {
 
 export function FiltersProvider({ children }: { children: ReactNode }) {
   const [params, setParams] = useSearchParams();
-  const location = useLocation();
   const [filters, setFilters] = useState<StoredFilters>(() => initialFilters(params));
 
-  const { monthKey, accountId, categoryId } = filters;
+  const fromUrl = params.get("month");
+  const monthKey = isMonthKey(fromUrl) ? fromUrl : filters.monthKey;
+  const accountId = params.has("month") ? readNumber(params.get("account")) : filters.accountId;
+  const categoryId = params.has("month") ? readNumber(params.get("cat")) : filters.categoryId;
 
-  // Persist for the session and mirror to the URL, alongside TabbedHub's ?tab=
-  // (both use the functional updater, so neither clobbers the other). Runs on
-  // navigation too, so the filters survive moving between tabs.
   useEffect(() => {
-    try {
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(filters));
-    } catch {
-      // Private-mode storage failures are not worth interrupting the user for.
-    }
-    setParams(
-      (prev) => {
-        const next = new URLSearchParams(prev);
-        next.set("month", monthKey);
-        if (accountId === null) next.delete("account");
-        else next.set("account", String(accountId));
-        if (categoryId === null) next.delete("cat");
-        else next.set("cat", String(categoryId));
-        return next;
-      },
-      { replace: true }
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [monthKey, accountId, categoryId, location.pathname]);
+    try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify({monthKey, accountId, categoryId})); } catch { /* Storage is optional. */ }
+  }, [monthKey, accountId, categoryId]);
 
-  const setMonthKey = useCallback((key: string) => setFilters((f) => ({ ...f, monthKey: key })), []);
-  const goToday = useCallback(() => setFilters((f) => ({ ...f, monthKey: currentMonthKey() })), []);
-  const setAccountId = useCallback((id: number | null) => setFilters((f) => ({ ...f, accountId: id })), []);
-  const setCategoryId = useCallback((id: number | null) => setFilters((f) => ({ ...f, categoryId: id })), []);
-  const clearAll = useCallback(
-    () => setFilters({ monthKey: currentMonthKey(), accountId: null, categoryId: null }),
-    []
-  );
+  // Only a user filter change writes the URL. A mount effect can race a redirect.
+  const update = useCallback((patch: Partial<StoredFilters>) => {
+    const nextFilters = {monthKey, accountId, categoryId, ...patch};
+    setFilters(nextFilters);
+    const next = new URLSearchParams(params);
+    next.set("month", nextFilters.monthKey);
+    if (nextFilters.accountId === null) next.delete("account"); else next.set("account", String(nextFilters.accountId));
+    if (nextFilters.categoryId === null) next.delete("cat"); else next.set("cat", String(nextFilters.categoryId));
+    setParams(next);
+  }, [monthKey, accountId, categoryId, params, setParams]);
+  const setMonthKey = useCallback((key: string) => update({monthKey:key}), [update]);
+  const goToday = useCallback(() => update({monthKey:currentMonthKey()}), [update]);
+  const setAccountId = useCallback((id: number | null) => update({accountId:id}), [update]);
+  const setCategoryId = useCallback((id: number | null) => update({categoryId:id}), [update]);
+  const clearAll = useCallback(() => update({monthKey:currentMonthKey(),accountId:null,categoryId:null}), [update]);
 
   const value = useMemo<FiltersContextValue>(() => {
     const [year, month] = monthKey.split("-").map(Number);

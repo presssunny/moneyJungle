@@ -1,10 +1,8 @@
 import { prisma } from "../../config/database";
 import { buildUpcoming } from "../dashboard/cashflow.service";
 import { businessDate, fingerprint } from "./journey.utils";
-export interface Commitment {
-  key: string; date: string; name: string; amount: number | null; kind: string;
-  fingerprint: string; decision: string | null; note: string | null; to: string;
-}
+import type { Commitment } from "../../types/journey.types";
+export type { Commitment } from "../../types/journey.types";
 export async function commitments(userId: number): Promise<Commitment[]> {
   const today = businessDate();
   const [upcoming, cards, decisions] = await Promise.all([
@@ -12,7 +10,7 @@ export async function commitments(userId: number): Promise<Commitment[]> {
     prisma.creditTransaction.findMany({ where: { userId, creditImport: { status: "confirmed" }, chargeDate: { not: null }, transactionType: { not: "financing" } }, include: { card: true }, orderBy: { id: "asc" } }),
     prisma.commitmentDecision.findMany({ where: { userId } }),
   ]);
-  const rows = upcoming.events.map(e => ({ key: e.key!, date: e.date.slice(0, 10), name: e.name,
+  const rows: Array<Pick<Commitment, "key" | "date" | "name" | "amount" | "kind" | "to">> = upcoming.events.map(e => ({ key: e.key!, date: e.date.slice(0, 10), name: e.name,
     amount: e.amountKnown === false ? null : e.amount, kind: e.kind,
     to: e.kind === "loan" ? "/accounts?tab=loans" : `/commitments?tab=${e.kind === "subscription" ? "subscriptions" : e.kind === "recurring" ? "recurring" : "calendar"}` }));
   const bills = new Map<string, { key: string; date: string; name: string; amount: number; kind: string; to: string }>();
@@ -22,8 +20,14 @@ export async function commitments(userId: number): Promise<Commitment[]> {
     const bill = bills.get(key) ?? { key, date, name: tx.card?.name ?? "אשראי ללא כרטיס משויך", amount: 0, kind: "credit", to: "/accounts?tab=credit" };
     bill.amount = Math.round((bill.amount + Number(tx.amount)) * 100) / 100; bills.set(key, bill);
   }
+  // Advancing or removing a schedule is not evidence that its acknowledged debt was paid.
+  for (const decision of decisions) {
+    const saved = decision.eventSnapshot as unknown as Commitment | null;
+    if (decision.decision === "unpaid" && saved && saved.date < today && !rows.some(r => r.key === saved.key) && !bills.has(saved.key)) rows.push(saved);
+  }
   const result = [...rows, ...bills.values()].map(row => {
-    const hash = fingerprint(row);
+    const { key, date, name, amount, kind, to } = row;
+    const hash = fingerprint({ key, date, name, amount, kind, to });
     const match = decisions.find(d => d.eventKey === row.key && d.fingerprint === hash);
     return { ...row, fingerprint: hash, decision: match?.decision ?? null, note: match?.note ?? null };
   }).sort((a,b) => a.date.localeCompare(b.date) || a.key.localeCompare(b.key));

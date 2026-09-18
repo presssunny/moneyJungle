@@ -17,7 +17,7 @@ export function formatCurrency(amount: number | null | undefined, options?: { si
 export function formatDate(date: string | Date | null | undefined): string {
   if (!date) return "";
   const d = typeof date === "string" ? new Date(date) : date;
-  return d.toLocaleDateString("he-IL", { day: "2-digit", month: "2-digit", year: "numeric" });
+  return d.toLocaleDateString("he-IL", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" });
 }
 
 export function calculatePercent(used: number, total: number): number {
@@ -37,8 +37,7 @@ export function formatMonthKey(monthKey: string): string {
 }
 
 export function currentMonthKey(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  return new Intl.DateTimeFormat("en-CA", {timeZone:"Asia/Jerusalem",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date()).slice(0,7);
 }
 
 export function shiftMonthKey(monthKey: string, delta: number): string {

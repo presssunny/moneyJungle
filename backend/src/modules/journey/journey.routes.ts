@@ -19,10 +19,11 @@ journeyRoutes.patch("/profile",asyncHandler(async(req,res)=>{
   res.json(await prisma.financialProfile.update({where:{userId:req.userId!},data:{...body,scope:body.scope?json(body.scope):undefined,reviewedAt:null}}));
 }));
 journeyRoutes.post("/coverage",asyncHandler(async(req,res)=>{
-  const body=z.object({dataVersion:z.string().length(64),confirmed:z.literal(true)}).parse(req.body);
+  const body=z.object({dataVersion:z.string().length(64),confirmed:z.literal(true),sourceKeys:z.array(z.string()).default([])}).parse(req.body);
   const state=await financialStatus(req.userId!);
   if(state.dataVersion!==body.dataVersion) throw ApiError.conflict("הנתונים השתנו. יש לרענן לפני אישור העדכניות");
-  res.json(await prisma.financialProfile.update({where:{userId:req.userId!},data:{coverage:json({date:businessDate(),dataVersion:state.dataVersion}),reviewedAt:new Date()}}));
+  if(state.sources.some(s=>!body.sourceKeys.includes(s.key)) || body.sourceKeys.some(key=>!state.sources.some(s=>s.key===key))) throw ApiError.conflict("יש לבדוק ולאשר כל מקור ברשימה העדכנית");
+  res.json(await prisma.financialProfile.update({where:{userId:req.userId!},data:{coverage:json({date:businessDate(),dataVersion:state.dataVersion,sources:state.sources.map(s=>({key:s.key,revision:s.revision,verifiedAt:new Date().toISOString(),reportedFrom:s.reportedFrom,reportedTo:s.reportedTo,observedFrom:s.observedFrom,observedTo:s.observedTo}))}),reviewedAt:new Date()}}));
 }));
 journeyRoutes.post("/onboarding/defer",asyncHandler(async(req,res)=>{await getProfile(req.userId!);await prisma.financialProfile.updateMany({where:{userId:req.userId!,onboarding:"pending"},data:{onboarding:"deferred"}});res.json({ok:true});}));
 journeyRoutes.post("/onboarding/complete",asyncHandler(async(req,res)=>{
@@ -64,7 +65,9 @@ journeyRoutes.post("/commitments/decision",asyncHandler(async(req,res)=>{
     }
     // This row holds the current decision: record when its evidence was last
     // verified, including replacements, so subsequent payment edits invalidate it.
-    const data={fingerprint:body.fingerprint,decision:body.decision,note:body.note,bankTransactionId:body.decision==="paid"?body.bankTransactionId??null:null,relatedEventKey:body.decision==="duplicate"?body.relatedEventKey??null:null,createdAt:new Date()};
+    const previous=await prisma.commitmentDecision.findUnique({where:{userId_eventKey:{userId:req.userId!,eventKey:body.key}}});
+    const history=Array.isArray(previous?.history)?previous.history:[];
+    const data={eventSnapshot:json(event),history:json([...history,{at:new Date().toISOString(),before:previous?{decision:previous.decision,note:previous.note,bankTransactionId:previous.bankTransactionId,relatedEventKey:previous.relatedEventKey}:null,after:body}]),fingerprint:body.fingerprint,decision:body.decision,note:body.note,bankTransactionId:body.decision==="paid"?body.bankTransactionId??null:null,relatedEventKey:body.decision==="duplicate"?body.relatedEventKey??null:null,createdAt:new Date()};
     return prisma.commitmentDecision.upsert({where:{userId_eventKey:{userId:req.userId!,eventKey:body.key}},create:{userId:req.userId!,eventKey:body.key,...data},update:data});
   }));
 }));

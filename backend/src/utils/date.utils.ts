@@ -22,13 +22,12 @@ export function toMonthKey(year: number, month: number): string {
 
 export function addDays(date: Date, days: number): Date {
   const result = new Date(date);
-  result.setDate(result.getDate() + days);
+  result.setUTCDate(result.getUTCDate() + days);
   return result;
 }
 
 export function startOfToday(): Date {
-  const now = new Date();
-  return new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+  return new Date(businessDate());
 }
 
 export function daysUntil(date: Date): number {
@@ -43,4 +42,11 @@ export function relativeDayLabel(date: Date): string {
   if (days === 1) return "מחר";
   if (days <= 7) return `בעוד ${days} ימים`;
   return date.toLocaleDateString("he-IL", { day: "2-digit", month: "2-digit" });
+}
+
+export function businessDate(now = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+}
+export function nextDate(day: string, count: number): string {
+  const date = new Date(day + "T00:00:00Z"); date.setUTCDate(date.getUTCDate() + count); return date.toISOString().slice(0, 10);
 }

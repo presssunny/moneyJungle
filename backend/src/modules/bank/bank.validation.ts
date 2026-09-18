@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { businessDate } from "../../utils/date.utils";
 
 export const bankTransactionTypes = ["deposit", "withdrawal", "transfer", "fee", "other"] as const;
 
@@ -46,8 +47,8 @@ export const reconcileLoanSchema = z.object({
 
 /** A balance can legitimately be negative (overdraft) — no nonnegative here. */
 export const setAnchorSchema = z.object({
-  balance: z.coerce.number(),
-  asOf: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "נדרש תאריך בפורמט YYYY-MM-DD"),
+  balance: z.coerce.number().finite().min(-9999999999).max(9999999999),
+  asOf: z.iso.date().refine(date => date <= businessDate(), "אי אפשר לאמת יתרה מתאריך עתידי"),
 });
 
 export type SetAnchorBody = z.infer<typeof setAnchorSchema>;

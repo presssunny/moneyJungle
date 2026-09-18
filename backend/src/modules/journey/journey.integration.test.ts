@@ -56,6 +56,26 @@ describe('persisted financial journey',()=>{
    await expect(withFinancialTransaction(userId,async()=>{await prisma.$transaction(async tx=>{await tx.income.create({data:{userId,type:'extra',amount:123,incomeDate:new Date()}});});throw new Error('rollback');})).rejects.toThrow();
    expect(await prisma.income.count({where:{userId}})).toBe(0);
  });
+ it('serializes ordinary writes with financial validation and rolls back nested arrays',async()=>{
+   let release!:()=>void;
+   let entered!:()=>void;
+   const gate=new Promise<void>(resolve=>{release=resolve;});
+   const locked=new Promise<void>(resolve=>{entered=resolve;});
+   const holder=withFinancialTransaction(userId,async()=>{entered();await gate;});
+   await locked;
+   let finished=false;
+   const write=request(app).post('/api/incomes').set(headers()).send({type:'extra',amount:19,incomeDate:businessDate()}).then(response=>{finished=true;return response;});
+   await new Promise(resolve=>setTimeout(resolve,50));
+   expect(finished).toBe(false);
+   release();await holder;
+   expect((await write).status).toBe(201);
+   expect((await prisma.financialProfile.findUniqueOrThrow({where:{userId}})).revision).toBeGreaterThan(0);
+   await expect(withFinancialTransaction(userId,async()=>{
+     await prisma.$transaction([prisma.income.create({data:{userId,type:'extra',amount:111,incomeDate:new Date()}}),prisma.income.create({data:{userId,type:'extra',amount:222,incomeDate:new Date()}})]);
+     throw new Error('array rollback');
+   })).rejects.toThrow('array rollback');
+   expect(await prisma.income.count({where:{userId,amount:{in:[111,222]}}})).toBe(0);
+ });
  it('does not collapse two identical card purchases inside a statement',async()=>{
    const file=sheet([['תאריך עסקה','שם בית עסק','סכום','מועד חיוב'],['17/09/2026','Twin',12,'20/09/2026'],['17/09/2026','Twin',12,'20/09/2026']]);
    const result=await creditService.createImport(userId,'twins.xlsx',file);expect(result.alreadyImported).toBe(false);expect(await prisma.creditTransaction.count({where:{userId,businessName:'Twin'}})).toBe(2);

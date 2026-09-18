@@ -32,6 +32,32 @@ async function bankPayment(amount: number, day = today) {
 }
 
 describe("commitment evidence and coverage", () => {
+  it("does not treat a nonfinancial reminder as unknown debt", async () => {
+    await prisma.reminder.create({ data: { userId, title: "Birthday", type: "birthday", eventDate: new Date(today) } });
+    expect(await commitments(userId)).toEqual([]);
+    await prisma.reminder.create({ data: { userId, title: "Unknown bill", type: "expected_expense", eventDate: new Date(today) } });
+    expect((await commitments(userId))[0].amount).toBeNull();
+  });
+
+  it("keeps acknowledged overdue debt when the schedule is advanced", async () => {
+    const oldDate = nextDate(today, -90);
+    const row = await prisma.recurringPayment.create({ data: { userId, name: "rent", amount: 100, nextPaymentDate: new Date(oldDate), frequency: "monthly" } });
+    const event = (await commitments(userId)).find(e => e.key === `recurring:${row.id}:${oldDate}`)!;
+    expect((await decide(event, "unpaid")).status).toBe(200);
+    await prisma.recurringPayment.update({ where: { id: row.id }, data: { nextPaymentDate: new Date(nextDate(today, 10)) } });
+    expect((await commitments(userId)).find(e => e.key === event.key)).toMatchObject({ amount: 100, decision: "unpaid" });
+    expect((await decide(event, "paid")).status).toBe(200);
+    const saved = await prisma.commitmentDecision.findFirstOrThrow({ where: { userId, eventKey: event.key } });
+    expect(saved.history).toHaveLength(2);
+  });
+
+  it("requires separate acknowledgement of the current sources", async () => {
+    await prisma.bankAccount.create({ data: { userId, bankName: "test", accountName: "test", anchorBalance: 1000, anchorDate: new Date(today) } });
+    const state = await financialStatus(userId);
+    expect((await request(app).post("/api/journey/coverage").set(headers()).send({ dataVersion: state.dataVersion, confirmed: true })).status).toBe(409);
+    expect(state.sources[0]).toMatchObject({ reportedFrom: null, reportedTo: null, asOf: today });
+  });
+
   it("excludes future manual anchors and transactions from today's balance", async () => {
     const payment = await bankPayment(60, nextDate(today, 1));
     await prisma.bankAccount.update({ where: { id: payment.bankAccountId }, data: { initialBalance: 100, anchorDate: new Date(nextDate(today, 1)), anchorBalance: 5000 } });
@@ -105,6 +131,13 @@ describe("commitment evidence and coverage", () => {
     expect((await commitments(userId)).find(e => e.key === event.key)?.decision).toBeNull();
   });
 
+  it("does not call a partly paid obligation settled", async () => {
+    const event = await reminder("partly paid", 100);
+    const payment = await bankPayment(40);
+    expect((await decide(event, "paid", { bankTransactionId: payment.id })).status).toBe(400);
+    expect((await commitments(userId)).find(e => e.key === event.key)?.decision).toBeNull();
+  });
+
   it("rejects future payments and attaching bank evidence to an unpaid decision", async () => {
     const event = await reminder("payment", 60);
     const payment = await bankPayment(60, nextDate(today, 1));
@@ -117,7 +150,7 @@ describe("commitment evidence and coverage", () => {
     await request(app).patch("/api/journey/profile").set(headers()).send({ scope: { accountsListed: true, cardsListed: true, commitmentsListed: true, manualOnly: true } });
     const versions: string[] = [(await financialStatus(userId)).dataVersion];
     const confirm = async (dataVersion: string) => {
-      expect((await request(app).post("/api/journey/coverage").set(headers()).send({ dataVersion, confirmed: true })).status).toBe(200);
+      expect((await request(app).post("/api/journey/coverage").set(headers()).send({ dataVersion, confirmed: true, sourceKeys: (await financialStatus(userId)).sources.map(s=>s.key) })).status).toBe(200);
       expect((await financialStatus(userId)).allowance.amount).not.toBeNull();
     };
     await confirm(versions[0]);

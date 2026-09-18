@@ -156,6 +156,7 @@ export async function buildUpcoming(userId: number, windowDays: number, anchor =
   }
 
   for (const rem of reminders) {
+    if (includeOverdue && rem.estimatedAmount === null && rem.type !== "expected_expense") continue;
     events.push({
       key: `reminder:${rem.id}:${new Date(rem.eventDate).toISOString().slice(0, 10)}`,
       date: new Date(rem.eventDate).toISOString(),

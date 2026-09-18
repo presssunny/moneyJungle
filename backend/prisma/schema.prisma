@@ -727,6 +727,7 @@ model ImportSession {
 
 model FinancialProfile {
   userId         Int      @id @map("user_id")
+  revision       Int      @default(0)
   onboarding     String   @default("pending") @db.VarChar(20)
   scope          Json?
   coverage       Json?
@@ -750,6 +751,9 @@ model CommitmentDecision {
   note        String  @db.VarChar(255)
   bankTransactionId Int? @map("bank_transaction_id")
   relatedEventKey String? @map("related_event_key") @db.VarChar(160)
+  eventSnapshot Json? @map("event_snapshot")
+  history Json?
+  updatedAt DateTime @updatedAt @map("updated_at")
   createdAt   DateTime @default(now()) @map("created_at")
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@unique([userId, eventKey])

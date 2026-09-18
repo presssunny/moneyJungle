@@ -1,0 +1,2 @@
+ALTER TABLE `financial_profiles` ADD COLUMN `revision` INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE `commitment_decisions` ADD COLUMN `event_snapshot` JSON NULL, ADD COLUMN `history` JSON NULL, ADD COLUMN `updated_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3);
