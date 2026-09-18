@@ -11,6 +11,7 @@ export interface Commitment {
 }
 
 export interface ReviewItem {
+  topic?: string;
   key: string;
   title: string;
   to: string;

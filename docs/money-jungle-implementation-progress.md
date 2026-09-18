@@ -13,11 +13,15 @@ Started 18 September 2026 from clean HEAD `7dd2e1b`. Existing implementations an
 - Browser validation exposed pre-existing navigation races: filters no longer write the URL on mount, and the onboarding guard reloads server progress on entering Home. The Quick Add date assertion accepts the locale's date separator.
 - Migration `20260918140000_financial_revision` applied locally after checking migration status; no existing migration was edited.
 
-Validation: backend full suite 24 files / 313 tests passed; frontend desktop/mobile 8 E2E tests passed; frontend production build and backend application/test typechecks passed. All six real report fixtures and golden files were present. A final targeted rerun covers the last date/type changes.
+Validation: backend full suite 24 files / 313 tests passed; frontend desktop/mobile 8 E2E tests passed; frontend production build and backend application/test typechecks passed. All six real report fixtures and golden files were present. The final targeted rerun passed 49 tests across five files. Commit: `458f21a`.
+
+## Phase 2 — Home
+
+Home now obtains one consistent status/actions/upcoming response. A shared server ranker groups by source/topic, retains distinct issues sharing a URL, includes coverage blockers and unresolved overdue debt, and returns at most three actions. The full queue remains accessible. Coverage/date and a first-activity state sit next to the primary picture; analysis stays lazy. Session and credit-review actions share their source topic. Savings actions select unfinished goals by deadline/target rather than insertion order.
+
+Validation: 17 targeted backend tests passed, including same-topic/different-route and different-topic/same-route cases, plus overdue Home integration; eight desktop/mobile browser tests passed; backend application/test typechecks and frontend build passed.
 
 ## Remaining sequence
-
-2. Shared semantic action ranking, Home coverage/date and overdue presentation.
 3. Durable parse failures/retry, editable paginated staged rows, lineage, atomic provenance, source lifecycle and all upload adapters.
 4. Bounded versioned check-in snapshots, shared ranked action and meaningful comparison.
 5. Metric source drill-down, scoped refresh, transaction URL filters and accessible review return paths.

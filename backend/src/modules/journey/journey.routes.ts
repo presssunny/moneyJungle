@@ -8,9 +8,16 @@ import { commitments } from "./commitments.service";
 import { financialStatus, getProfile } from "./coverage.service";
 import { review } from "./review.service";
 import { businessDate, json } from "./journey.utils";
+import { journeyActions, upcomingCommitments } from "./actions.service";
 import { checkIns } from "./checkin.service";
 export const journeyRoutes=Router(); journeyRoutes.use(gateAuth);
 const money=z.number().finite().min(0).max(9999999999);
+journeyRoutes.get("/home",asyncHandler(async(req,res)=>{
+  const state=await financialStatus(req.userId!);
+  const actions=await journeyActions(req.userId!,state);
+  res.json({...state,actions:actions.slice(0,3),actionCount:actions.length,upcoming:upcomingCommitments(state)});
+}));
+journeyRoutes.get("/actions",asyncHandler(async(req,res)=>{const state=await financialStatus(req.userId!);res.json(await journeyActions(req.userId!,state));}));
 journeyRoutes.get("/status",asyncHandler(async(req,res)=>{res.json(await financialStatus(req.userId!));}));
 journeyRoutes.get("/profile",asyncHandler(async(req,res)=>{res.json(await getProfile(req.userId!));}));
 journeyRoutes.patch("/profile",asyncHandler(async(req,res)=>{

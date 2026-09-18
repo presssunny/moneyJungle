@@ -4,6 +4,7 @@ export interface Commitment {key:string;date:string;name:string;amount:number|nu
 export interface Profile {onboarding:string;scope:{accountsListed:boolean;cardsListed:boolean;commitmentsListed:boolean;manualOnly:boolean}|null;cashBuffer:string;essentialReserve:string;savedReserve:string}
 export interface FinancialStatus {
  sources:Array<{key:string;name:string;kind:string;asOf:string|null;observedFrom:string|null;observedTo:string|null;limitation:string}>;
+ hasActivity:boolean;
  today:string;end:string;dataVersion:string;profile:Profile;
  balances:Array<{id:number;name:string;balance:number;explanation:string;anchor:{coverageTo:string;fileName:string}|null}>;
  cards:Array<{id:number;name:string}>;events:Commitment[];issues:ReviewItem[];blockers:string[];
@@ -32,3 +33,8 @@ export async function getCheckIn():Promise<CheckInView>{return (await api.get('/
 export async function startCheckIn(){return (await api.post('/journey/check-in')).data;}
 export async function advanceCheckIn(id:string,step:number){return (await api.patch(`/journey/check-in/${id}`,{step})).data;}
 export async function completeCheckIn(id:string,token:string){return (await api.post(`/journey/check-in/${id}/complete`,{token})).data;}
+
+export interface JourneyAction {id:string;topic:string;title:string;reason:string;to:string;priority:number}
+export interface HomeStatus extends FinancialStatus {actions:JourneyAction[];actionCount:number;upcoming:Commitment[]}
+export async function getHomeStatus():Promise<HomeStatus>{return (await api.get("/journey/home")).data;}
+export async function getJourneyActions():Promise<JourneyAction[]>{return (await api.get("/journey/actions")).data;}

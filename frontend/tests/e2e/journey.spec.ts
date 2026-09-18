@@ -8,6 +8,7 @@ async function mockApi(page:Page,{pending=false}={}){
   if(path==='/api/gate/session')body={user:{id:1,email:'test@example.test',displayName:'Test',role:'USER'},csrfToken:'x'};
   else if(path==='/api/settings')body={theme:'light',notificationsJson:{},currency:'ILS'};
   else if(path==='/api/journey/profile')body=profile;
+  else if(path==='/api/journey/home')body={...state(),actions:[1,2,3].map(i=>({id:String(i),title:`פעולה ${i}`,to:`/review?item=${i}`,reason:'סיבה'})),actionCount:5,upcoming:[]};
   else if(path==='/api/journey/status')body=state();
   else if(path==='/api/journey/onboarding/defer'){profile={...profile,onboarding:'deferred'};body={ok:true};}
   else if(path==='/api/journey/onboarding/complete'){if(!session||session.status!=='completed')return route.fulfill({status:409,json:{error:{message:'יש להשלים את הקליטה'}}});profile={...profile,onboarding:'completed'};body=profile;}

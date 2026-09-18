@@ -66,6 +66,15 @@ describe("commitment evidence and coverage", () => {
     expect(await accountBalanceService.derive(userId, payment.bankAccountId)).toMatchObject({ balance: 200, basis: "statement", anchor: { coverageTo: today } });
   });
 
+  it("shows old open debt on Home and caps server-ranked actions at three", async () => {
+    await reminder("old home debt", 120, nextDate(today, -90));
+    const response=await request(app).get("/api/journey/home").set(headers());
+    expect(response.status).toBe(200);
+    expect(response.body.upcoming.some((e:{name:string})=>e.name==="old home debt")).toBe(true);
+    expect(response.body.actions.length).toBeLessThanOrEqual(3);
+    expect(response.body.actions.some((a:{id:string})=>a.id==="coverage")).toBe(true);
+  });
+
   it("keeps an unpaid obligation more than 31 days overdue", async () => {
     const event = await reminder("old debt", 120, nextDate(today, -90));
     expect(event).toBeDefined();
