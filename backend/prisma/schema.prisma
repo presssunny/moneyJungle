@@ -85,6 +85,10 @@ model User {
   createdAt    DateTime   @default(now()) @map("created_at")
   updatedAt    DateTime   @updatedAt @map("updated_at")
 
+  importSessions     ImportSession[]
+  financialProfile   FinancialProfile?
+  commitmentDecisions CommitmentDecision[]
+  checkIns           MoneyCheckIn[]
   familyMembers      FamilyMember[]
   sessions           GateSession[]
   settings           Settings?
@@ -697,4 +701,72 @@ model Reminder {
 
   @@index([userId, eventDate, isActive])
   @@map("reminders")
+}
+
+/// Durable workflow state; imported domain records remain the financial source of truth.
+model ImportSession {
+  id          String   @id @default(uuid()) @db.VarChar(36)
+  userId      Int      @map("user_id")
+  fileName    String   @map("file_name") @db.VarChar(255)
+  fileHash    String   @map("file_hash") @db.VarChar(64)
+  storagePath String   @map("storage_path") @db.VarChar(500)
+  kind        String   @default("unknown") @db.VarChar(30)
+  status      String   @default("needs_input") @db.VarChar(30)
+  version     Int      @default(0)
+  answers     Json?
+  preview     Json?
+  result      Json?
+  error       String?  @db.VarChar(500)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, fileHash])
+  @@index([userId, status])
+  @@map("import_sessions")
+}
+
+model FinancialProfile {
+  userId         Int      @id @map("user_id")
+  onboarding     String   @default("pending") @db.VarChar(20)
+  scope          Json?
+  coverage       Json?
+  cashBuffer     Decimal  @default(0) @map("cash_buffer") @db.Decimal(12, 2)
+  essentialReserve Decimal @default(0) @map("essential_reserve") @db.Decimal(12, 2)
+  savedReserve   Decimal  @default(0) @map("saved_reserve") @db.Decimal(12, 2)
+  reviewedAt     DateTime? @map("reviewed_at")
+  completedAt    DateTime? @map("completed_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@map("financial_profiles")
+}
+
+/// Decisions apply to one version of one dated obligation; editing its source invalidates them.
+model CommitmentDecision {
+  id          Int      @id @default(autoincrement())
+  userId      Int      @map("user_id")
+  eventKey    String   @map("event_key") @db.VarChar(160)
+  fingerprint String  @db.VarChar(64)
+  decision    String  @db.VarChar(20)
+  note        String  @db.VarChar(255)
+  bankTransactionId Int? @map("bank_transaction_id")
+  relatedEventKey String? @map("related_event_key") @db.VarChar(160)
+  createdAt   DateTime @default(now()) @map("created_at")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([userId, eventKey])
+  @@map("commitment_decisions")
+}
+
+model MoneyCheckIn {
+  id          String   @id @default(uuid()) @db.VarChar(36)
+  userId      Int      @map("user_id")
+  step        Int      @default(0)
+  status      String   @default("draft") @db.VarChar(20)
+  snapshot    Json?
+  action      Json?
+  completedAt DateTime? @map("completed_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, status, completedAt])
+  @@map("money_check_ins")
 }

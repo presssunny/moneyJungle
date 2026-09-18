@@ -1,3 +1,5 @@
+import { journeyRoutes } from "./modules/journey/journey.routes";
+import { importSessionRoutes } from "./modules/imports/importSession.routes";
 import cors from "cors";
 import express from "express";
 import { env } from "./config/env";
@@ -66,6 +68,8 @@ app.use("/api/recurring", recurringRoutes);
 app.use("/api/subscriptions", subscriptionsRoutes);
 app.use("/api/savings", savingsRoutes);
 app.use("/api/family", familyRoutes);
+app.use("/api/journey", journeyRoutes);
+app.use("/api/imports/sessions", importSessionRoutes);
 app.use("/api/imports", importsRoutes);
 app.use("/api/documents", documentsRoutes);
 // The CRM's own namespace — read-only aggregation across every domain above,
