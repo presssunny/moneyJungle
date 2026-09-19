@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { beforeAll, afterAll, describe, it, expect } from "vitest";
+import { afterAll, describe, it, expect } from "vitest";
 import { prisma } from "../../config/database";
 import { getProfile } from "./coverage.service";
 
