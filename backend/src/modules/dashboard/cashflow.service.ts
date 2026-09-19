@@ -41,6 +41,23 @@ function businessDayStart(): Date {
   return new Date(businessDate());
 }
 
+// includeOverdue must keep surfacing genuinely relevant unresolved debt without
+// regenerating an unbounded number of past occurrences for an old recurring
+// payment or loan anchor (a stale nextPaymentDate can otherwise sit years in
+// the past). A decision already recorded on an old occurrence keeps working
+// regardless of this window — commitments.service.ts re-injects it from its
+// own persisted snapshot. This bound only limits how far back an occurrence
+// that was NEVER decided is still auto-generated for review.
+const HISTORICAL_LOOKBACK_DAYS = 366;
+function historicalFloor(from: Date): Date {
+  const floor = new Date(from);
+  floor.setUTCDate(floor.getUTCDate() - HISTORICAL_LOOKBACK_DAYS);
+  return floor;
+}
+function laterOf(a: Date, b: Date): Date {
+  return a > b ? a : b;
+}
+
 /** Monthly occurrences on the anchor's day-of-month (clamped) within [from, to]. */
 function monthlyOccurrences(anchor: Date, from: Date, to: Date): Date[] {
   const day = anchor.getUTCDate();
@@ -90,12 +107,13 @@ export async function buildUpcoming(userId: number, windowDays: number, anchor =
   const to = new Date(from);
   to.setUTCDate(to.getUTCDate() + windowDays);
 
+  const historicalGte = includeOverdue ? historicalFloor(from) : from;
   const [recurrings, subscriptions, loans, reminders] = await Promise.all([
     prisma.recurringPayment.findMany({ where: { userId } }),
     prisma.subscription.findMany({ where: { userId, status: "active" } }),
-    prisma.loan.findMany({ where: { userId, status: { in: ["active", "overdue"] } }, include: { schedule: { where: { paymentDate: { ...(includeOverdue ? {} : { gte: from }), lte: to } }, orderBy: { paymentDate: "asc" } } } }),
+    prisma.loan.findMany({ where: { userId, status: { in: ["active", "overdue"] } }, include: { schedule: { where: { paymentDate: { gte: historicalGte, lte: to } }, orderBy: { paymentDate: "asc" } } } }),
     prisma.reminder.findMany({
-      where: { userId, isActive: true, eventDate: { ...(includeOverdue ? {} : { gte: from }), lte: to } },
+      where: { userId, isActive: true, eventDate: { gte: historicalGte, lte: to } },
     }),
   ]);
 
@@ -104,7 +122,7 @@ export async function buildUpcoming(userId: number, windowDays: number, anchor =
   for (const r of recurrings) {
     const amount = decimalToNumber(r.amount);
     const anchor = new Date(r.nextPaymentDate);
-    const occurrenceFrom = includeOverdue && anchor < from ? anchor : from;
+    const occurrenceFrom = includeOverdue ? laterOf(anchor, historicalFloor(from)) : from;
     const dates =
       r.frequency === "weekly"
         ? weeklyOccurrences(anchor, occurrenceFrom, to)
@@ -119,7 +137,7 @@ export async function buildUpcoming(userId: number, windowDays: number, anchor =
   for (const s of subscriptions) {
     const amount = decimalToNumber(s.amount);
     const anchor = new Date(s.billingDate);
-    const occurrenceFrom = includeOverdue && anchor < from ? anchor : from;
+    const occurrenceFrom = includeOverdue ? laterOf(anchor, historicalFloor(from)) : from;
     const dates = s.frequency === "yearly" ? yearlyOccurrences(anchor, occurrenceFrom, to) : monthlyOccurrences(anchor, occurrenceFrom, to);
     for (const d of dates) {
       events.push({ key: `subscription:${s.id}:${d.toISOString().slice(0, 10)}`, date: d.toISOString(), kind: "subscription", name: s.name, amount, icon: KIND_ICON.subscription });
@@ -141,7 +159,7 @@ export async function buildUpcoming(userId: number, windowDays: number, anchor =
     if (balance <= 0) continue;
     const endDate = loan.endDate ? new Date(loan.endDate) : null;
     const start = new Date(loan.startDate);
-    const dates = monthlyOccurrences(start, includeOverdue && start < from ? start : from, to);
+    const dates = monthlyOccurrences(start, includeOverdue ? laterOf(start, historicalFloor(from)) : from, to);
     for (const d of dates) {
       if (endDate && d > endDate) continue;
       events.push({

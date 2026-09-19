@@ -13,12 +13,40 @@ describe("forward obligations", () => {
     setup(); vi.setSystemTime(new Date("2026-09-17T22:30:00Z"));
     expect((await buildUpcoming(1, 1)).from).toBe("2026-09-18T00:00:00.000Z");
   });
-  it("retains old occurrences through the current planning horizon without truncation", async () => {
+  it("bounds how far back overdue occurrences are regenerated for a stale anchor (P0.4 / G1)", async () => {
     setup(); db.recurringPayment.findMany.mockResolvedValue([{ id: 1, name: "old", amount: 100, frequency: "monthly", nextPaymentDate: new Date("2020-01-31") }]);
     const result = await buildUpcoming(1, 62, new Date("2026-01-01"), true);
-    expect(result.events[0].date.slice(0, 10)).toBe("2020-01-31");
+    // The anchor is 6 years old; only the last ~366 days of missed occurrences are regenerated.
+    expect(result.events[0].date.slice(0, 10)).toBe("2024-12-31");
     expect(result.events.at(-1)?.date.slice(0, 10)).toBe("2026-02-28");
-    expect(result.events).toHaveLength(74);
+    expect(result.events).toHaveLength(15);
+  });
+  it("never generates an occurrence older than the historical lookback bound, however old the anchor is", async () => {
+    setup(); db.recurringPayment.findMany.mockResolvedValue([{ id: 1, name: "ancient", amount: 100, frequency: "monthly", nextPaymentDate: new Date("1999-01-31") }]);
+    const result = await buildUpcoming(1, 62, new Date("2026-01-01"), true);
+    const floor = new Date("2026-01-01"); floor.setUTCDate(floor.getUTCDate() - 366);
+    for (const event of result.events) expect(new Date(event.date).getTime()).toBeGreaterThanOrEqual(floor.getTime());
+    expect(result.events).toHaveLength(15);
+  });
+  it("still surfaces a genuinely recent overdue occurrence in full, unaffected by the bound", async () => {
+    setup(); db.recurringPayment.findMany.mockResolvedValue([{ id: 1, name: "recent", amount: 100, frequency: "monthly", nextPaymentDate: new Date("2025-11-30") }]);
+    const result = await buildUpcoming(1, 62, new Date("2026-01-01"), true);
+    expect(result.events[0].date.slice(0, 10)).toBe("2025-11-30");
+  });
+  it("does not bound the forward-only (non-overdue) planning window", async () => {
+    setup(); db.recurringPayment.findMany.mockResolvedValue([{ id: 1, name: "future", amount: 100, frequency: "monthly", nextPaymentDate: new Date("2026-01-10") }]);
+    const result = await buildUpcoming(1, 62, new Date("2026-01-01"), false);
+    expect(result.events[0].date.slice(0, 10)).toBe("2026-01-10");
+  });
+  it("also bounds the DB-level reminder and bank-schedule queries, not just the JS-generated occurrences", async () => {
+    setup(); await buildUpcoming(1, 62, new Date("2026-01-01"), true);
+    const reminderGte = db.reminder.findMany.mock.calls.at(-1)![0].where.eventDate.gte as Date;
+    const loanScheduleGte = db.loan.findMany.mock.calls.at(-1)![0].include.schedule.where.paymentDate.gte as Date;
+    expect(reminderGte.toISOString().slice(0, 10)).toBe("2024-12-31");
+    expect(loanScheduleGte.toISOString().slice(0, 10)).toBe("2024-12-31");
+    await buildUpcoming(1, 62, new Date("2026-01-01"), false);
+    const forwardGte = db.reminder.findMany.mock.calls.at(-1)![0].where.eventDate.gte as Date;
+    expect(forwardGte.toISOString().slice(0, 10)).toBe("2026-01-01");
   });
   it("does not schedule a monthly obligation before its first payment", async () => {
     setup(); db.recurringPayment.findMany.mockResolvedValue([{ name: "future", amount: 100, frequency: "monthly", nextPaymentDate: new Date("2026-03-31") }]);
