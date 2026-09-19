@@ -1,9 +1,9 @@
 import { test, expect, type Page } from '@playwright/test';
-async function mockApi(page:Page,{pending=false}={}){
+async function mockApi(page:Page,{pending=false,coverageAcknowledged=true}={}){
  let draft:{id:string;step:number}|null=null;let completedAt:string|null=null;
  let profile={onboarding:pending?'pending':'completed',scope:{accountsListed:true,cardsListed:true,commitmentsListed:true,manualOnly:false},cashBuffer:'0',essentialReserve:'0',savedReserve:'0'};
  let session:any=null;let expense:any=null;let removed=false;let editedRow:{name:string;amount:number;date:string}|null=null;
- const state=()=>({today:'2026-09-17',end:'2026-09-30',dataVersion:'a'.repeat(64),profile,sources:[],balances:[],cards:[],events:[],issues:[],blockers:['אין יתרה מאומתת'],allowance:{amount:null,shortfall:null,state:'unavailable',cash:0,reserves:0,essentialReserve:0,formula:'יתרה פחות התחייבויות',assumptions:['הכנסה שטרם התקבלה אינה נכללת']}});
+ const state=()=>({today:'2026-09-17',end:'2026-09-30',dataVersion:'a'.repeat(64),profile,sources:[],balances:[],cards:[],events:[],issues:[],blockers:['אין יתרה מאומתת'],coverageAcknowledged,allowance:{amount:null,shortfall:null,state:'unavailable',cash:0,reserves:0,essentialReserve:0,formula:'יתרה פחות התחייבויות',assumptions:['הכנסה שטרם התקבלה אינה נכללת']}});
  await page.route('**/api/**',async route=>{
   const req=route.request(),path=new URL(req.url()).pathname,method=req.method();let body:any=[];
   if(path==='/api/gate/session')body={user:{id:1,email:'test@example.test',displayName:'Test',role:'USER'},csrfToken:'x'};
@@ -64,6 +64,12 @@ test('Upload questions survive reload, and completion follows review',async({pag
  await page.getByRole('checkbox',{name:/בדקתי את השורות/}).check();await page.getByRole('button',{name:'קליטת הנתונים',exact:true}).click();
  await page.getByRole('button',{name:'בדקתי — סיום הקליטה'}).click();await expect(page.getByText('הקליטה והבדיקה הושלמו')).toBeVisible();
  await page.getByRole('link',{name:'השלמת ההיכרות'}).click();await page.getByRole('checkbox',{name:/בדקתי את הנתונים/}).check();await page.getByRole('button',{name:'סיום ההיכרות'}).click();await expect(page).toHaveURL(/\/$/);
+});
+test('Onboarding cannot be finished without a real coverage acknowledgement from /data, even with every local checkbox checked',async({page})=>{
+ await mockApi(page,{pending:true,coverageAcknowledged:false});await page.goto('/onboarding');
+ await page.getByRole('checkbox',{name:/בדקתי את הנתונים/}).check();
+ await expect(page.getByText('לפני סיום ההיכרות')).toBeVisible();
+ await expect(page.getByRole('button',{name:'סיום ההיכרות'})).toBeDisabled();
 });
 test('Legacy import and management links reach canonical destinations',async({page})=>{
  await mockApi(page);await page.goto('/transactions?tab=import');await expect(page).toHaveURL(/\/imports$/);
