@@ -9,9 +9,9 @@ import { creditCardRefOf } from "./bankParser.service";
  */
 
 /** The card company's charge date and the bank debit differ by a day or two. */
-const CHARGE_MATCH_DAYS = 5;
+export const CHARGE_MATCH_DAYS = 5;
 /** A line that names no card at all is matched to a charge date only this close. */
-const ISSUER_ONLY_MATCH_DAYS = 3;
+export const ISSUER_ONLY_MATCH_DAYS = 3;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function dayKey(date: Date): string {
