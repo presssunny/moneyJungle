@@ -21,7 +21,8 @@ export interface AsyncResource<T> {
 export function useAsync<T>(
   loader: () => Promise<T>,
   deps: DependencyList,
-  errorMessage = "לא הצלחנו לטעון את הנתונים"
+  errorMessage = "לא הצלחנו לטעון את הנתונים",
+  domains: readonly string[] = ["financial"]
 ): AsyncResource<T> {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -31,6 +32,7 @@ export function useAsync<T>(
   // Keep the latest loader without making it a dependency (callers pass inline arrows).
   const loaderRef = useRef(loader);
   loaderRef.current = loader;
+  const domainsRef=useRef(domains); domainsRef.current=domains;
   const messageRef = useRef(errorMessage);
   messageRef.current = errorMessage;
 
@@ -60,7 +62,13 @@ export function useAsync<T>(
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
-    const changed = () => { clearTimeout(timer); timer = setTimeout(reload, 150); };
+    const changed = (event: Event) => {
+      const domain=(event as CustomEvent<{domain:string}>).detail?.domain;
+      const financial=!domain||!["gate","crm","alerts","updates"].includes(domain);
+      if(domainsRef.current.includes(domain??"financial") || financial&&domainsRef.current.includes("financial")) {
+        clearTimeout(timer); timer = setTimeout(reload, 50);
+      }
+    };
     window.addEventListener("money-jungle:changed", changed);
     return () => { clearTimeout(timer); window.removeEventListener("money-jungle:changed", changed); };
   }, [reload]);

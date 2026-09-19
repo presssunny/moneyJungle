@@ -1,3 +1,4 @@
+import { MetricExplanation } from "../common/MetricExplanation";
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { AsyncSection } from "../common/AsyncSection";
@@ -78,6 +79,7 @@ export function CreditWallet({ monthKey, revision, imports, onChanged, onImport 
             <SummaryCard label="שינוי מול החודש הקודם" value={summary.delta === null ? "—" : `${summary.delta > 0 ? "+" : ""}${formatCurrency(summary.delta)}`} certainty={summary.delta === null ? "unknown" : "measured"} sub="לפי עסקאות רשומות · לא בהכרח חודשים מלאים" />
             <SummaryCard label="עסקאות בחיוב הקרוב" value={summary.nextCharge ? formatCurrency(summary.nextCharge.amount) : "—"} certainty={summary.nextCharge ? "measured" : "unknown"} sub={summary.nextCharge ? `${formatDate(summary.nextCharge.date)} · לפי הדוח, ללא מימון פנימי` : "אין מועד חיוב עתידי בדוחות המאושרים"} />
           </div>
+          <MetricExplanation title="מה נכלל בחיוב הקרוב?" metric="creditCharge" card={effectiveId}/>
           <Card title={`עסקאות · ${label}`}>
             <div className="future-form"><Input label="חיפוש בית עסק" type="search" value={search} onChange={(e) => setSearch(e.target.value)} /><Select label="קטגוריה" value={category} onChange={(e) => setCategory(e.target.value)} options={[{ value: "", label: "כל הקטגוריות" }, ...summary.categories.map((item) => ({ value: item.name, label: item.name }))]} /></div>
             <Table key={`${effectiveId}-${monthKey}-${search}-${category}`} rows={rows} pageSize={25} rowKey={(row) => row.id} emptyState={<p>אין עסקאות להצגה בבחירה הזו.</p>} columns={[

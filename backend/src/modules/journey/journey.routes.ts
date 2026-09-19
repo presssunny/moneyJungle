@@ -1,3 +1,4 @@
+import { financialMetric } from "./metrics.service";
 import { Router } from "express";
 import { z } from "zod";
 import { prisma, withFinancialTransaction } from "../../config/database";
@@ -13,6 +14,11 @@ import { sessionSourceExists } from "../imports/importLifecycle.service";
 import { checkIns } from "./checkin.service";
 export const journeyRoutes=Router(); journeyRoutes.use(gateAuth);
 const money=z.number().finite().min(0).max(9999999999);
+journeyRoutes.get("/metrics/:name",asyncHandler(async(req,res)=>{
+  const name=z.enum(["creditCharge","cash","allowance","commitments","income","expense","surplus"]).parse(req.params.name);
+  const query=z.object({month:z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).default(businessDate().slice(0,7)),card:z.string().regex(/^(all|unassigned|[1-9]\d*)$/).optional(),page:z.coerce.number().int().min(1).max(100000).default(1),version:z.string().length(64).optional()}).parse(req.query);
+  res.json(await financialMetric(req.userId!,name,query.month,query.page,query.version,query.card));
+}));
 journeyRoutes.get("/home",asyncHandler(async(req,res)=>{
   const state=await financialStatus(req.userId!);
   const actions=await journeyActions(req.userId!,state);

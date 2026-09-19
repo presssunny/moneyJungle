@@ -58,7 +58,7 @@ export async function financialStatus(userId: number) {
   const reserves = Number(profile.cashBuffer) + Number(profile.savedReserve) + futureCardReserve;
   const calculated = calculateAllowance(cash, reserves, Number(profile.essentialReserve), dates, unpaid.filter(e=>e.date<=end).map(e=>({date:e.date,amount:Math.max(0,e.amount!)})));
   return { today, end, hasActivity: Boolean(expenses.length || incomes.length || bankRows.length || creditRows.length), dataVersion, profile, sources, balances, cards, events, issues, blockers,
-    allowance: { amount: blockers.length ? null : calculated.daily, shortfall: blockers.length ? null : calculated.shortfall,
+    allowance: { limitingDate: blockers.length ? null : calculated.limitingDate, amount: blockers.length ? null : calculated.daily, shortfall: blockers.length ? null : calculated.shortfall,
       state: blockers.length ? "unavailable" : "provisional", cash, reserves, essentialReserve: Number(profile.essentialReserve),
       formula: "בכל יום נבדקת היתרה לאחר כרית הביטחון, החיסכון ששוריין, חיובי אשראי עתידיים, התחייבויות שטרם שולמו והוצאות חיוניות. התקציב היומי הוא הנמוך מבין הסכומים האפשריים לאורך התקופה, כולל היום.",
       assumptions: ["לפי המקורות הרשומים ואישור העדכניות שלך; ייתכנו הוצאות שלא נרשמו", "הכנסה שטרם התקבלה אינה נכללת", "חיוב שכבר שולם אינו מנוכה שוב מהיתרה", "האומדן הוא לתכנון יומי עד סוף החודש ואינו הבטחה ליתרה בבנק"] } };

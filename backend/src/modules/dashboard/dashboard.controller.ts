@@ -1,3 +1,4 @@
+import { financialStatus } from "../journey/coverage.service";
 import { Request, Response } from "express";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { MonthQuery, resolveMonth } from "../../utils/validation.utils";
@@ -10,7 +11,9 @@ import { buildInsights } from "./insights.service";
 export const dashboardController = {
   summary: asyncHandler(async (req: Request, res: Response) => {
     const { year, month } = resolveMonth((req.validated?.query ?? {}) as MonthQuery);
-    res.json(await dashboardService.summary(req.userId!, year, month));
+    const summary=await dashboardService.summary(req.userId!, year, month);
+    const {dataVersion}=await financialStatus(req.userId!);
+    res.json({...summary,dataVersion});
   }),
 
   charts: asyncHandler(async (req: Request, res: Response) => {

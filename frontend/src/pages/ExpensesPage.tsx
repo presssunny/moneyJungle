@@ -1,7 +1,7 @@
-import { uploadSession } from "../services/journey.service";
+import { useTransactionFilters } from "../hooks/useTransactionFilters";
 import { ExpenseEditor } from "../components/expenses/ExpenseEditor";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useSearchParams, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { AsyncSection } from "../components/common/AsyncSection";
 import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
@@ -16,7 +16,6 @@ import { Table, type Column } from "../components/common/Table";
 import { useMonth } from "../context/MonthContext";
 import { useAsync } from "../hooks/useAsync";
 import { useLookups } from "../hooks/useLookups";
-import { apiErrorMessage } from "../services/api";
 import {
   deleteExpense,
   listExpenses,
@@ -44,24 +43,23 @@ export default function ExpensesPage() {
   const { monthKey } = useMonth();
   const location = useLocation();
   const navigate = useNavigate();
-  const [params, setParams] = useSearchParams();
+  const { params, set, clear: clearFilters } = useTransactionFilters();
   const { expenseCategories } = useLookups();
-  const [filterCategory, setFilterCategory] = useState<number | undefined>();
-  const [search, setSearch] = useState("");
-  // Entry point from the "לא מסווגות" KPI on the hub above.
-  const [onlyUncategorized, setOnlyUncategorized] = useState(params.get("uncat") === "1");
-  const [onlyRecurring, setOnlyRecurring] = useState(false);
+  const filterCategory = params.get("category") ? Number(params.get("category")) : undefined;
+  const search = params.get("q") ?? "";
+  const onlyUncategorized = params.get("uncat") === "1";
+  const onlyRecurring = params.get("recurring") === "1";
+  const from = params.get("from") ?? "";
+  const to = params.get("to") ?? "";
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Expense | null>(null);
   const [form, setForm] = useState<ExpenseInput>(emptyForm(monthKey));
-  const [importMessage, setImportMessage] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
-  const fileRef = useRef<HTMLInputElement>(null);
 
   const expensesRes = useAsync(
-    () => listExpenses(monthKey, filterCategory),
-    [monthKey, filterCategory, reloadKey],
-    "לא הצלחנו לטעון את התנועות"
+    () => listExpenses(monthKey),
+    [monthKey, reloadKey],
+    "לא הצלחנו לטעון את התנועות", ["expenses","imports","credit","bank","categories","payment-methods","settings","documents"]
   );
 
   const load = () => setReloadKey((k) => k + 1);
@@ -71,7 +69,7 @@ export default function ExpensesPage() {
     if ((location.state as { openForm?: boolean } | null)?.openForm) {
       setForm(emptyForm(monthKey));
       setFormOpen(true);
-      window.history.replaceState({}, "");
+      navigate(location.pathname + location.search, { replace: true, state: null });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -81,6 +79,8 @@ export default function ExpensesPage() {
   const rows = useMemo(() => {
     const needle = search.trim().toLowerCase();
     return allRows.filter((row) => {
+      if (filterCategory !== undefined && row.categoryId !== filterCategory) return false;
+      if (from && row.expenseDate.slice(0,10) < from || to && row.expenseDate.slice(0,10) > to) return false;
       if (onlyUncategorized && row.categoryId !== null) return false;
       if (onlyRecurring && !row.isRecurring) return false;
       if (needle) {
@@ -89,24 +89,9 @@ export default function ExpensesPage() {
       }
       return true;
     });
-  }, [allRows, search, onlyUncategorized, onlyRecurring]);
+  }, [allRows, search, onlyUncategorized, onlyRecurring, filterCategory, from, to]);
 
-  const filtersActive = search.trim() !== "" || onlyUncategorized || onlyRecurring || filterCategory !== undefined;
-
-  function clearFilters() {
-    setSearch("");
-    setOnlyUncategorized(false);
-    setOnlyRecurring(false);
-    setFilterCategory(undefined);
-    setParams(
-      (prev) => {
-        const next = new URLSearchParams(prev);
-        next.delete("uncat");
-        return next;
-      },
-      { replace: true }
-    );
-  }
+  const filtersActive = search.trim() !== "" || onlyUncategorized || onlyRecurring || filterCategory !== undefined || !!from || !!to;
 
   function openCreate() {
     setEditing(null);
@@ -147,16 +132,6 @@ export default function ExpensesPage() {
         load();
       }
     );
-  }
-
-  async function onImportFile(file: File) {
-    setImportMessage("");
-    try {
-      const session = await uploadSession(file, { month: monthKey });
-      navigate(`/imports?session=${session.id}`);
-    } catch (err) {
-      setImportMessage(apiErrorMessage(err));
-    }
   }
 
   const columns: Column<Expense>[] = [
@@ -220,53 +195,42 @@ export default function ExpensesPage() {
       toolbar={
         <>
           <Button onClick={openCreate}>+ הוספת הוצאה</Button>
-          <Button variant="outline" onClick={() => fileRef.current?.click()}>
-            ייבוא אקסל 📂
-          </Button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".xlsx,.xls,.csv"
-            hidden
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) onImportFile(file);
-              e.target.value = "";
-            }}
-          />
+          <Button variant="outline" onClick={() => navigate('/imports')}>ייבוא דוח 📂</Button>
         </>
       }
     >
 
-      {importMessage && <div className="info-banner">{importMessage}</div>}
+
 
       <Card>
         <div className="filter-bar">
           <Input
             placeholder="חיפוש בית עסק / תיאור…"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => set("q", e.target.value)}
             aria-label="חיפוש חופשי"
           />
           <Select
             options={expenseCategories.map((c) => ({ value: c.id, label: `${c.icon ?? ""} ${c.name}` }))}
             placeholder="כל הקטגוריות"
             value={filterCategory ?? ""}
-            onChange={(e) => setFilterCategory(e.target.value ? Number(e.target.value) : undefined)}
+            onChange={(e) => set("category", e.target.value)}
             aria-label="סינון לפי קטגוריה"
           />
           <label className="filter-toggle">
             <input
               type="checkbox"
               checked={onlyUncategorized}
-              onChange={(e) => setOnlyUncategorized(e.target.checked)}
+              onChange={(e) => set("uncat", e.target.checked ? "1" : "")}
             />
             רק לא מסווגות
           </label>
           <label className="filter-toggle">
-            <input type="checkbox" checked={onlyRecurring} onChange={(e) => setOnlyRecurring(e.target.checked)} />
+            <input type="checkbox" checked={onlyRecurring} onChange={(e) => set("recurring", e.target.checked ? "1" : "")} />
             רק תשלומים קבועים
           </label>
+          <Input type="date" aria-label="מתאריך" value={from} onChange={e => set("from", e.target.value)}/>
+          <Input type="date" aria-label="עד תאריך" value={to} onChange={e => set("to", e.target.value)}/>
           {filtersActive && (
             <Button size="sm" variant="ghost" onClick={clearFilters}>
               ניקוי מסננים ✕
@@ -279,7 +243,8 @@ export default function ExpensesPage() {
           errorTitle="לא הצלחנו לטעון את התנועות"
           skeleton={<SkeletonRows rows={6} />}
         >
-          {() => (
+          {data => (<>
+            <p role="status">{rows.length} תנועות בסינון · {formatCurrency(rows.reduce((sum,row) => sum + Math.round(Number(row.amount)*100),0)/100)} · סך החודש: {formatCurrency(data.total)}</p>
             <Table
               columns={columns}
               rows={rows}
@@ -311,7 +276,7 @@ export default function ExpensesPage() {
                 )
               }
             />
-          )}
+          </>)}
         </AsyncSection>
       </Card>
 

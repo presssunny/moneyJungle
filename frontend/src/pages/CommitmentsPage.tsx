@@ -1,3 +1,4 @@
+import { MetricExplanation } from "../components/common/MetricExplanation";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { TabbedHub } from "../components/common/TabbedHub";
@@ -23,4 +24,4 @@ function Agenda(){
  <Modal title={selected?.name??'בדיקת התחייבות'} open={!!selected} onClose={()=>!busy&&setSelected(null)}><p>סימון כשולם מציין שהסכום כבר משתקף ביתרת הבנק. הוא לא יוצר תשלום ולא משנה את היתרה.</p><Select label="מצב" value={decision} options={[{value:'unpaid',label:'טרם שולם — יש לשריין את הסכום'},{value:'paid',label:'כבר שולם ונכלל ביתרת הבנק'},{value:'duplicate',label:'כלול בחיוב אחר'}]} onChange={e=>setDecision(e.target.value)}/>{decision==='duplicate'&&<Select label="החיוב שכולל סכום זה" value={related} placeholder="בחירת חיוב" options={(resource.data??[]).filter(e=>e.key!==selected?.key&&e.decision==='unpaid').map(e=>({value:e.key,label:`${e.name} · ${formatDate(e.date)}`}))} onChange={e=>setRelated(e.target.value)}/>}<Input label="הסבר / מקור הבדיקה" value={note} onChange={e=>setNote(e.target.value)} maxLength={255}/>{error&&<p role="alert">{error}</p>}<Button disabled={busy||note.trim().length<3||(decision==='duplicate'&&!related)} onClick={save}>שמירת הבדיקה</Button></Modal>
  </Card>;
 }
-export default function CommitmentsPage(){return <TabbedHub tabs={[{key:'agenda',label:'תשלומים ובדיקה',icon:'📅',element:<Agenda/>},{key:'calendar',label:'לוח שנה',icon:'🗓️',element:<CalendarPage/>},{key:'recurring',label:'תשלומים קבועים',icon:'🔁',element:<RecurringPage/>},{key:'subscriptions',label:'מנויים',icon:'📺',element:<SubscriptionsPage/>}]}/>;}
+export default function CommitmentsPage(){return <><MetricExplanation title="סכום ההתחייבויות והמקורות" metric="commitments"/><TabbedHub tabs={[{key:'agenda',label:'תשלומים ובדיקה',icon:'📅',element:<Agenda/>},{key:'calendar',label:'לוח שנה',icon:'🗓️',element:<CalendarPage/>},{key:'recurring',label:'תשלומים קבועים',icon:'🔁',element:<RecurringPage/>},{key:'subscriptions',label:'מנויים',icon:'📺',element:<SubscriptionsPage/>}]}/></>;}

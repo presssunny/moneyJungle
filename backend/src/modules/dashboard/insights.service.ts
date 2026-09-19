@@ -25,6 +25,7 @@ export interface PaceAlert {
 export interface InsightsResponse {
   healthScore: number | null;
   scoreLabel: string;
+  scoreComponents: Array<{label:string;points:number;maximum:number;detail:string}>;
   safePerDay: number | null;
   daysLeft: number;
   projection: {
@@ -79,6 +80,7 @@ export async function buildInsights(userId: number, year: number, month: number)
   if (current.incomeTotal === 0 && current.expenseTotal === 0) {
     return {
       healthScore: null,
+      scoreComponents: [],
       scoreLabel: "אין עדיין נתונים החודש",
       safePerDay: null,
       daysLeft,
@@ -154,6 +156,7 @@ export async function buildInsights(userId: number, year: number, month: number)
 
   // ---- Health score ----
   let score = 0;
+  const scoreComponents: InsightsResponse["scoreComponents"] = [];
 
   // Spending ratio — up to 50 pts (≤70% of income = full marks, ≥110% = none)
   if (current.incomeTotal > 0) {
@@ -162,6 +165,9 @@ export async function buildInsights(userId: number, year: number, month: number)
   } else {
     score += 10; // expenses with no recorded income
   }
+
+  scoreComponents.push({label:"יחס הוצאות להכנסות",points:score,maximum:50,detail:current.incomeTotal>0?"עד 70% הוצאה מקנה 50 נקודות; מ־110% ומעלה 0; ביניהם מדרג ליניארי":"אין הכנסה רשומה — ברירת מחדל 10 נקודות"});
+  let previousScore=score;
 
   // Budget compliance — up to 20 pts
   const budgets = await prisma.budget.findMany({ where: { userId, year, month }, include: { category: true } });
@@ -173,6 +179,9 @@ export async function buildInsights(userId: number, year: number, month: number)
   } else {
     score += 12;
   }
+
+  scoreComponents.push({label:"עמידה בתקציבים",points:score-previousScore,maximum:20,detail:budgets.length?`${overruns} חריגות מתוך ${budgets.length} תקציבים; 20 כפול שיעור התקציבים ללא חריגה`:"אין תקציבים — ברירת מחדל 12 נקודות"});
+  previousScore=score;
 
   // Loans — up to 15 pts
   const loans = await loansRepository.findActive(userId);
@@ -190,6 +199,9 @@ export async function buildInsights(userId: number, year: number, month: number)
   else if (expensive.length > 0) score += 7;
   else score += 15;
 
+  scoreComponents.push({label:"הלוואות רשומות",points:score-previousScore,maximum:15,detail:"החזר שאינו מכסה ריבית: 0; הלוואה יקרה: 7; אחרת: 15. העדר הלוואות רשומות אינו הוכחה להעדר חוב"});
+  previousScore=score;
+
   // Savings habit — up to 15 pts
   const goals = await prisma.savingsGoal.findMany({ where: { userId } });
   const savedTotal = goals.reduce((sum, g) => sum + decimalToNumber(g.currentAmount), 0);
@@ -197,6 +209,7 @@ export async function buildInsights(userId: number, year: number, month: number)
   else if (goals.length > 0) score += 8;
   else score += 5;
 
+  scoreComponents.push({label:"יעדי חיסכון רשומים",points:score-previousScore,maximum:15,detail:"סכום חיובי ביעדים: 15; יעד ללא סכום: 8; אין יעדים: 5. אינו אימות של נכס"});
   score = Math.max(0, Math.min(100, score));
 
   // ---- Insights ----
@@ -298,6 +311,7 @@ export async function buildInsights(userId: number, year: number, month: number)
 
   return {
     healthScore: score,
+    scoreComponents,
     scoreLabel: scoreLabel(score),
     safePerDay,
     daysLeft,

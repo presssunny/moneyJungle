@@ -28,7 +28,7 @@ export function TabbedHub({ tabs }: { tabs: HubTab[] }) {
         next.set("tab", key);
         return next;
       },
-      { replace: true }
+      { replace: false }
     );
 
   // Arrow-key navigation between tabs (WAI-ARIA tabs pattern).

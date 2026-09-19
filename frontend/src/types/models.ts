@@ -404,6 +404,7 @@ export interface PaceAlert {
 
 export interface DashboardInsights {
   healthScore: number | null;
+  scoreComponents: Array<{label:string;points:number;maximum:number;detail:string}>;
   scoreLabel: string;
   safePerDay: number | null;
   daysLeft: number;

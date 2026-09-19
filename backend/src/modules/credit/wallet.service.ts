@@ -1,6 +1,6 @@
 import { prisma } from "../../config/database";
 import { ApiError } from "../../utils/ApiError";
-import { monthRange } from "../../utils/date.utils";
+import { businessDate, monthRange } from "../../utils/date.utils";
 import { decimalToNumber, round2 } from "../../utils/money.utils";
 import type { WalletTransaction } from "../../types/planning.types";
 
@@ -30,7 +30,7 @@ export const walletService = {
   async list(userId: number, year: number, month: number) {
     const { start } = monthRange(year, month);
     const previous = new Date(Date.UTC(year, month - 2, 1));
-    const today = new Date().toISOString().slice(0, 10);
+    const today = businessDate();
     const [cards, rows, pendingCount, lastImport] = await Promise.all([
       prisma.creditCard.findMany({ where: { userId }, orderBy: { id: "asc" } }),
       prisma.creditTransaction.findMany({

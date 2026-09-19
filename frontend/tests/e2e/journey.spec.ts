@@ -90,3 +90,30 @@ test('Weekly check-in resumes its step and saves the suggested action',async({pa
  await page.getByRole('button',{name:'המשך',exact:true}).click();await expect(page.getByRole('heading',{name:'פעולה — צעד אחד להמשך'})).toBeVisible();
  await page.getByRole('button',{name:'שמירת הבדיקה והצעד הבא'}).click();await expect(page.getByRole('status').filter({hasText:'הבדיקה נשמרה'})).toBeVisible();
 });
+
+test('Transaction filters survive reload and back without fetching analysis',async({page})=>{
+ await mockApi(page);let incomes=0;let expenses=0;
+ await page.route('**/api/expenses?**',async route=>{expenses++;await route.fulfill({json:{expenses:[{id:1,amount:20,businessName:'קפה',expenseDate:'2026-09-16',categoryId:null,isRecurring:true,source:'manual'},{id:1,amount:-5,businessName:'זיכוי',expenseDate:'2026-09-17',categoryId:1,isRecurring:false,source:'credit'}],total:15,progress:{}}});});
+ page.on('request',request=>{if(new URL(request.url()).pathname==='/api/incomes')incomes++;});
+ await page.goto('/transactions?tab=expenses&month=2026-09&q=קפה&uncat=1&recurring=1&from=2026-09-01&to=2026-09-30');
+ await expect(page.getByLabel('חיפוש חופשי')).toHaveValue('קפה');
+ await expect(page.getByRole('status').filter({hasText:'תנועות בסינון'})).toContainText('1 תנועות');
+ expect(incomes).toBe(0);expect(expenses).toBe(1);
+ await page.reload();await expect(page.getByLabel('רק תשלומים קבועים')).toBeChecked();
+ await page.getByRole('button',{name:'ניקוי מסננים ✕'}).click();await expect(page.getByRole('status').filter({hasText:'תנועות בסינון'})).toContainText('2 תנועות');
+ await page.goBack();await expect(page.getByLabel('חיפוש חופשי')).toHaveValue('קפה');
+ await page.getByRole('tab',{name:/הכנסות/}).click();await expect(page).toHaveURL(/tab=incomes/);await page.goBack();await expect(page.getByRole('tab',{name:/הוצאות/})).toHaveAttribute('aria-selected','true');
+});
+
+test('Metric details load on demand and reject mixed-version pages',async({page})=>{
+ await mockApi(page);let reads=0;
+ await page.route('**/api/journey/metrics/**',async route=>{
+  reads++;const query=new URL(route.request().url()).searchParams;
+  if(query.get('page')==='2')return route.fulfill({status:409,json:{error:{message:'המקורות השתנו. יש לרענן את המספר ואת הפירוט'}}});
+  await route.fulfill({json:{name:'cash',value:100,asOf:'2026-09-17',period:{from:'2026-09-17',to:'2026-09-30'},formula:'עוגן ועוד תנועות',coverage:'לפי המקורות הרשומים',assumptions:[],missingData:[],components:[{key:'bank:1',label:'יתרת מקור',value:100,to:'/accounts?tab=bank'}],sources:[],total:51,page:1,pageSize:50,dataVersion:'a'.repeat(64)}});
+ });
+ await page.goto('/');await expect(page.getByText('התמונה עדיין חלקית')).toBeVisible();expect(reads).toBe(0);
+ await page.getByText('מקורות יתרות הבנק',{exact:true}).click();await expect(page.getByRole('link',{name:'יתרת מקור'})).toBeVisible();expect(reads).toBe(1);
+ await page.getByRole('button',{name:'הבא',exact:true}).click();await expect(page.getByRole('alert').filter({hasText:'המקורות השתנו'})).toBeVisible();
+ await expect(page.getByRole('link',{name:'יתרת מקור'})).toHaveCount(0);
+});

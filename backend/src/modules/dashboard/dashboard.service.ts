@@ -6,7 +6,7 @@ import { dashboardRepository } from "./dashboard.repository";
 
 const SAVINGS_CATEGORY = "חיסכון";
 
-async function monthTotals(userId: number, year: number, month: number) {
+export async function monthTotals(userId: number, year: number, month: number) {
   const { start, end } = monthRange(year, month);
   const [incomes, expenses, credit] = await Promise.all([
     dashboardRepository.sumIncomes(userId, start, end),

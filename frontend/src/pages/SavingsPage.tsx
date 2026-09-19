@@ -1,3 +1,4 @@
+import { MetricExplanation } from "../components/common/MetricExplanation";
 import { useState, type FormEvent } from "react";
 import { AsyncSection } from "../components/common/AsyncSection";
 import { PageShell } from "../components/common/PageShell";
@@ -134,7 +135,8 @@ export default function SavingsPage() {
         >
           {() => (
             <>
-              <SummaryCard label="סה״כ נחסך" value={formatCurrency(totalSaved)} tone="success" />
+              <MetricExplanation title="איך נמדדת ההתקדמות?"><p>סכום ההתקדמות שנרשמה ידנית בכל יעד, חלקי סכום היעדים. זו אינה יתרת נכס מאומתת; הכסף עשוי כבר להיות כלול בחשבון הבנק. שינוי יעד אינו מעביר כסף.</p></MetricExplanation>
+              <SummaryCard label="התקדמות רשומה" value={formatCurrency(totalSaved)} tone="success" />
               <SummaryCard label="יעד כולל" value={formatCurrency(totalTarget)} />
               <SummaryCard
                 label="אחוז השלמה"

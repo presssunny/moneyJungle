@@ -35,6 +35,13 @@ Snapshots use schema version 2 and a calculation version, with at most 1,000 det
 
 Validation: 19 backend tests across snapshot comparison, journey integration and action ranking passed; desktop/mobile check-in resume-to-completion tests passed; backend typechecks and frontend production build passed.
 
+## Phase 5 — explainability and transaction UX
+
+A typed metric endpoint returns value, period/as-of, coverage, missing inputs, assumptions, formula/calculation version, source links and paginated components from one financial transaction. Cash, daily allowance (including the limiting day and all reserves), commitments, monthly income/expense/surplus and next card charge are covered. Monthly totals reuse the dashboard source of truth; a later page rejects changed data. The Home summary carries the same version contract. Metric detail loads only on expansion. Existing loan schedule and forecast detail remain in use; health-score components, budget pace and savings limitations are now explicit.
+
+Transaction tables precede analysis. Search, category/type, uncategorized, recurring and date filters live in the URL; back and refresh retain them. Filtered counts/sums are distinct from monthly totals. Analysis is lazy, shared monthly reads coalesce duplicate requests, mutation invalidation refreshes relevant table domains, and Quick Add no longer remounts the active table. Previous quick additions retain links to their records. Mobile validation exposed overflowing filter fields; their flex basis now prevents overlapping controls.
+
+Validation: 44 backend tests passed across metric reconciliation/version/ownership, allowance, wallet and API smoke suites. All 16 browser cases passed across the full run and four-case focused rerun after fixing duplicate development-mode reads and mobile filter overlap. Backend application/test typechecks and frontend production build passed.
+
 ## Remaining sequence
-5. Metric source drill-down, scoped refresh, transaction URL filters and accessible review return paths.
 6. Branding, route/UI cleanup, management groups, documentation and full release validation.

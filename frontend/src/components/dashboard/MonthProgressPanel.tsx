@@ -1,3 +1,5 @@
+import { Link } from "react-router-dom";
+import { MetricExplanation } from "../common/MetricExplanation";
 import { useState } from "react";
 import type { MonthProgress } from "../../services/finance.service";
 import { formatCurrency } from "../../utils/format";
@@ -64,6 +66,7 @@ export function MonthProgressPanel({
 
   return (
     <div className={`progress-panel tone-border-${tone}`}>
+      <MetricExplanation title="מקור היעד וחישוב הקצב"><p>הוצאה רשומה חלקי {dayOfMonth} ימים שחלפו: {formatCurrency(progress.dailyBurn)} ליום. תחזית סוף החודש מוסיפה קצב זה כפול {daysLeft} הימים שנותרו.</p><p>היעד הוא {targetSource==="goal"?"יעד שהוגדר ידנית":targetSource==="last_month"?"ההוצאה הרשומה בחודש הקודם":"לא הוגדר"}. הכיסוי עשוי להיות חלקי; הקצב אינו יתרת בנק או תקציב יומי פנוי.</p><Link to="/transactions?tab=expenses">התנועות שבבסיס ההוצאה</Link></MetricExplanation>
       <div className="progress-panel-top">
         <div>
           <div className="progress-panel-title">התקדמות החודש</div>

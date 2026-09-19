@@ -1,3 +1,4 @@
+import { useTransactionFilters } from "../hooks/useTransactionFilters";
 import { useMemo, useState, type FormEvent } from "react";
 import { AsyncSection } from "../components/common/AsyncSection";
 import { Button } from "../components/common/Button";
@@ -50,24 +51,26 @@ export default function IncomesPage() {
   const [saving, setSaving] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
-  const incomesRes = useAsync(() => listIncomes(monthKey), [monthKey, reloadKey], "לא הצלחנו לטעון את ההכנסות");
+  const incomesRes = useAsync(() => listIncomes(monthKey), [monthKey, reloadKey], "לא הצלחנו לטעון את ההכנסות", ["incomes","imports","bank","documents"]);
   const load = () => setReloadKey((k) => k + 1);
 
   // Filters, matching the expenses screen. The two sides of the same month were
   // asymmetric: expenses had search, filtering and a breakdown; incomes had a
   // bare table (UX audit §4).
-  const [search, setSearch] = useState("");
-  const [filterType, setFilterType] = useState<string>("");
+  const {params,set,clear}=useTransactionFilters();
+  const search=params.get("q")??""; const filterType=params.get("type")??"";
+  const from=params.get("from")??""; const to=params.get("to")??"";
 
   const allRows = useMemo(() => incomesRes.data?.incomes ?? [], [incomesRes.data]);
   const rows = useMemo(() => {
     const term = search.trim();
     return allRows.filter((row) => {
+      if (from && row.incomeDate.slice(0,10) < from || to && row.incomeDate.slice(0,10) > to) return false;
       if (filterType && row.type !== filterType) return false;
       if (term && !(row.description ?? "").includes(term) && !typeLabel(row.type).includes(term)) return false;
       return true;
     });
-  }, [allRows, search, filterType]);
+  }, [allRows, search, filterType, from, to]);
 
   /**
    * Income split by kind, for the visible rows. This groups rows the server
@@ -85,7 +88,7 @@ export default function IncomesPage() {
     }));
   }, [rows]);
 
-  const filtered = rows.length !== allRows.length;
+  const filtered = !!search || !!filterType || !!from || !!to;
   const biggest = byType.length > 0 ? [...byType].sort((a, b) => b.value - a.value)[0] : null;
   const recurringCount = allRows.filter((row) => row.isRecurring).length;
 
@@ -172,8 +175,76 @@ export default function IncomesPage() {
   return (
     <PageShell
       toolbar={<Button onClick={openCreate}>+ הוספת הכנסה</Button>}
-      summary={
+
+    >
+      <Card>
+        <div className="filter-bar">
+          <Input type="date" aria-label="מתאריך" value={from} onChange={e=>set("from",e.target.value)}/>
+          <Input type="date" aria-label="עד תאריך" value={to} onChange={e=>set("to",e.target.value)}/>
+          <Input
+            placeholder="חיפוש בתיאור / סוג…"
+            value={search}
+            onChange={(e) => set("q",e.target.value)}
+            aria-label="חיפוש חופשי"
+          />
+          <Select
+            options={INCOME_TYPES}
+            placeholder="כל הסוגים"
+            value={filterType}
+            onChange={(e) => set("type",e.target.value)}
+            aria-label="סינון לפי סוג הכנסה"
+          />
+          {filtered && (
+            <span className="filter-strip-note">
+              {rows.length} מתוך {allRows.length}
+              <Button size="sm" variant="ghost" onClick={() => { clear();  }}>
+                ניקוי הסינון
+              </Button>
+            </span>
+          )}
+        </div>
         <AsyncSection
+          resource={incomesRes}
+          errorTitle="לא הצלחנו לטעון את ההכנסות"
+          skeleton={<SkeletonRows rows={5} />}
+        >
+          {data => (<>
+            <p role="status">{rows.length} תנועות בסינון · {formatCurrency(rows.reduce((sum,row)=>sum+Math.round(Number(row.amount)*100),0)/100)} · סך החודש: {formatCurrency(data.total)}</p>
+            <Table
+              columns={columns}
+              rows={rows}
+              rowKey={(row) => row.id}
+              emptyState={
+                filtered ? (
+                  <EmptyState
+                    icon="🔍"
+                    title="אין הכנסות שמתאימות לסינון"
+                    hint="אפשר לנקות את הסינון ולראות את כל ההכנסות של החודש"
+                    action={
+                      <Button size="sm" variant="outline" onClick={() => { clear();  }}>
+                        ניקוי הסינון
+                      </Button>
+                    }
+                  />
+                ) : (
+                  <EmptyState
+                    icon="💰"
+                    title="אין הכנסות החודש"
+                    hint="הוסיפי משכורת, קצבה או כל הכנסה אחרת"
+                    action={
+                      <Button size="sm" onClick={openCreate}>
+                        + הוספת הכנסה
+                      </Button>
+                    }
+                  />
+                )
+              }
+            />
+          </>)}
+        </AsyncSection>
+      </Card>
+
+      <details className="home-analysis"><summary>ניתוח ההכנסות</summary><AsyncSection
           resource={incomesRes}
           errorTitle="לא הצלחנו לטעון את סיכום ההכנסות"
           skeleton={<SkeletonKpiRow count={4} label="טוען סיכום הכנסות" />}
@@ -203,8 +274,6 @@ export default function IncomesPage() {
             </div>
           )}
         </AsyncSection>
-      }
-      charts={
         <AsyncSection
           resource={incomesRes}
           errorTitle="לא הצלחנו לטעון את פילוח ההכנסות"
@@ -217,73 +286,7 @@ export default function IncomesPage() {
               <CategoryBarChart data={byType} />
             </Card>
           )}
-        </AsyncSection>
-      }
-    >
-      <Card>
-        <div className="filter-bar">
-          <Input
-            placeholder="חיפוש בתיאור / סוג…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            aria-label="חיפוש חופשי"
-          />
-          <Select
-            options={INCOME_TYPES}
-            placeholder="כל הסוגים"
-            value={filterType}
-            onChange={(e) => setFilterType(e.target.value)}
-            aria-label="סינון לפי סוג הכנסה"
-          />
-          {filtered && (
-            <span className="filter-strip-note">
-              {rows.length} מתוך {allRows.length}
-              <Button size="sm" variant="ghost" onClick={() => { setSearch(""); setFilterType(""); }}>
-                ניקוי הסינון
-              </Button>
-            </span>
-          )}
-        </div>
-        <AsyncSection
-          resource={incomesRes}
-          errorTitle="לא הצלחנו לטעון את ההכנסות"
-          skeleton={<SkeletonRows rows={5} />}
-        >
-          {() => (
-            <Table
-              columns={columns}
-              rows={rows}
-              rowKey={(row) => row.id}
-              emptyState={
-                filtered ? (
-                  <EmptyState
-                    icon="🔍"
-                    title="אין הכנסות שמתאימות לסינון"
-                    hint="אפשר לנקות את הסינון ולראות את כל ההכנסות של החודש"
-                    action={
-                      <Button size="sm" variant="outline" onClick={() => { setSearch(""); setFilterType(""); }}>
-                        ניקוי הסינון
-                      </Button>
-                    }
-                  />
-                ) : (
-                  <EmptyState
-                    icon="💰"
-                    title="אין הכנסות החודש"
-                    hint="הוסיפי משכורת, קצבה או כל הכנסה אחרת"
-                    action={
-                      <Button size="sm" onClick={openCreate}>
-                        + הוספת הכנסה
-                      </Button>
-                    }
-                  />
-                )
-              }
-            />
-          )}
-        </AsyncSection>
-      </Card>
-
+        </AsyncSection></details>
       <Modal title={editing ? "עריכת הכנסה" : "הוספת הכנסה"} open={formOpen} onClose={() => setFormOpen(false)}>
         <form onSubmit={submit}>
           {error && <ErrorMessage message={error} />}

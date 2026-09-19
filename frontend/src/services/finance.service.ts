@@ -1,3 +1,4 @@
+import { sharedGet } from "./queryCache";
 /** CRUD services for the core money domains (expenses, incomes, budgets, loans, credit). */
 
 import type {
@@ -57,8 +58,7 @@ export async function listExpenses(
   monthKey: string,
   categoryId?: number
 ): Promise<{ expenses: Expense[]; total: number; progress: MonthProgress }> {
-  const { data } = await api.get("/expenses", { params: { ...monthParams(monthKey), categoryId } });
-  return data;
+  return sharedGet("/expenses", { ...monthParams(monthKey), categoryId });
 }
 
 export async function createExpense(input: ExpenseInput): Promise<Expense> {
@@ -152,8 +152,7 @@ export interface IncomeInput {
 }
 
 export async function listIncomes(monthKey: string): Promise<{ incomes: Income[]; total: number }> {
-  const { data } = await api.get("/incomes", { params: monthParams(monthKey) });
-  return data;
+  return sharedGet("/incomes", monthParams(monthKey));
 }
 
 export async function createIncome(input: IncomeInput): Promise<Income> {

@@ -1,4 +1,5 @@
 export interface DashboardSummary {
+  dataVersion: string;
   incomeTotal: number;
   expenseTotal: number;
   balance: number;

@@ -16,7 +16,8 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => {
     if (["post", "patch", "put", "delete"].includes(response.config.method ?? "") && !response.config.url?.includes("/gate/")) {
-      window.dispatchEvent(new Event("money-jungle:changed"));
+      const domain=response.config.url?.split("/").filter(Boolean)[0]??"financial";
+      window.dispatchEvent(new CustomEvent("money-jungle:changed",{detail:{domain}}));
     }
     return response;
   },
