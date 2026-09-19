@@ -55,4 +55,38 @@ Phase validation: 22 desktop/mobile browser tests passed, including all eight th
 
 ## Final validation
 
-In progress. The final server run is performed without overlapping test suites against the same database. A preliminary run overlapped dependency repair; a subsequent overlapping run produced a database deadlock, while the isolated failing case passed. Those runs are not treated as release validation. Dependencies were restored to the existing lockfile before the release run; the lockfile remains unchanged.
+Release validation completed on 19 September 2026 with dependencies restored to the existing lockfile:
+
+| Check | Result |
+| --- | --- |
+| Backend `npm test` | **28 files / 337 tests passed**, no skipped tests (113.41 s) |
+| Frontend Playwright | **22 tests passed**, desktop + Pixel 7/mobile; all eight themes covered (1.2 min) |
+| Frontend `npm run build` | Passed |
+| Backend build | Prisma generation plus TypeScript compilation passed; Prisma cache access used the existing approved command |
+| Backend application/test typechecks | Passed |
+| Backend lint | Passed, no warnings |
+| Frontend lint | Exit 0; non-blocking React purity/effect/Fast Refresh warnings remain |
+| Real fixtures | All six source files present; all five applicable golden entries present |
+| Prisma migration status | All 19 migrations applied locally |
+| Prisma schema diff | No difference detected, exit 0 |
+| Diff whitespace | `git diff --check` passed |
+
+A preliminary test run overlapped dependency repair; another overlapping run produced a database deadlock. The isolated failing case passed, and the final full run above was executed alone. The dependency repair restored the original lockfile versions and did not change the lockfile. These preliminary failed runs are not counted as release validation. Source data/fixtures and existing work were preserved.
+
+## Phase commits
+
+| Phase | Commit | Scope |
+| --- | --- | --- |
+| 1 | `458f21a` | Financial transaction/coverage/decision correctness |
+| 2 | `5c4a75f` | Consistent Home state and ranked actions |
+| 3 | `256b7ce` | Durable imports, editable rows, lineage and rollback |
+| 4 | `9d1c713` | Bounded weekly snapshots and shared next action |
+| 5 | `2377975` | Metric source detail and persistent transaction filters |
+| 6 | `483f0d8` | Branding, canonical routes, scoped refresh and contracts |
+
+## Explicit operating limits
+
+- Daily allowance remains unavailable with missing/stale coverage, unmatched financing, unknown unpaid obligations or several accounts without funding allocation. This is the intended guard from the plan, not a guessed positive amount.
+- Statement transaction ranges do not establish complete coverage; bank/schedule monetary corrections require a corrected source file.
+- Ordinary monthly transaction tables still use the existing monthly APIs and client pagination. Import/metric detail is server paginated; whole-ledger version fingerprinting remains an optimization candidate for larger datasets.
+- Browser tests use mock HTTP. Real-file parsing, source ownership and transaction behavior are covered separately by backend integration tests.
