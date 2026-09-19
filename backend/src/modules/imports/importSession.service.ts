@@ -180,6 +180,11 @@ export const importSessions = {
         const output=session.kind==="expense_sheet"?{kind:"expense",id:expenseIds[index]}:outputIndex>=0?outputs.splice(outputIndex,1)[0]:null;
         if(!output) throw ApiError.internal("לא נמצא קישור לשורת המקור. הקליטה לא נשמרה");
         await prisma.importRow.update({where:{id:row.id},data:{outputRef:json(output)}});
+        // Reverse lineage: only for rows this commit actually created, never for
+        // a matched duplicate — that target keeps pointing at its real origin.
+        if(output.kind==="expense") await prisma.expense.update({where:{id:output.id},data:{importRowId:row.id}});
+        else if(output.kind==="bank") await prisma.bankTransaction.update({where:{id:output.id},data:{importRowId:row.id}});
+        else if(output.kind==="credit") await prisma.creditTransaction.update({where:{id:output.id},data:{importRowId:row.id}});
       }
       for(const row of staged.filter(r=>r.resolution==="duplicate")) await prisma.importRow.update({where:{id:row.id},data:{outputRef:json(row.matchRef)}});
       return prisma.importSession.update({where:{id},data:{status:"review",result:json({commitVersion:version,details:result,documentId,loanId,creditImportId,statementImportId,accountId:answers.accountId}),version:{increment:1}}});

@@ -200,16 +200,19 @@ model Expense {
   expenseDate     DateTime      @map("expense_date") @db.Date
   isRecurring     Boolean       @default(false) @map("is_recurring")
   source          ExpenseSource @default(manual)
+  importRowId     Int?          @map("import_row_id")
   createdAt       DateTime      @default(now()) @map("created_at")
   updatedAt       DateTime      @updatedAt @map("updated_at")
 
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   category      Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   paymentMethod PaymentMethod? @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
+  importRow     ImportRow?     @relation(fields: [importRowId], references: [id], onDelete: SetNull)
 
   @@index([userId, expenseDate])
   @@index([categoryId])
   @@index([paymentMethodId])
+  @@index([importRowId])
   @@map("expenses")
 }
 
@@ -319,17 +322,20 @@ model CreditTransaction {
   // "regular" | "standing_order" | "credit" | "refund" — from סוג עסקה
   transactionType String    @default("regular") @map("transaction_type") @db.VarChar(30)
   rawData         Json?     @map("raw_data")
+  importRowId     Int?      @map("import_row_id")
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
   creditImport CreditImport @relation(fields: [creditImportId], references: [id], onDelete: Cascade)
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   category     Category?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  importRow    ImportRow?   @relation(fields: [importRowId], references: [id], onDelete: SetNull)
 
   @@index([userId, transactionDate])
   @@index([userId, billingDate])
   @@index([creditImportId])
   @@index([categoryId])
+  @@index([importRowId])
   @@map("credit_transactions")
 }
 
@@ -439,6 +445,10 @@ model BankTransaction {
   /// Cascade: deleting the batch row must never silently take money rows with it.
   /// Null for rows imported before this column existed.
   statementImportId Int?     @map("statement_import_id")
+  /// Traces the row back to the staged ImportRow/ImportSession that created it.
+  /// Null for rows imported before this column existed or created outside a
+  /// session. SetNull like statementImportId — never take money rows with it.
+  importRowId       Int?     @map("import_row_id")
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
@@ -446,12 +456,14 @@ model BankTransaction {
   bankAccount     BankAccount          @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
   category        Category?            @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   statementImport BankStatementImport? @relation(fields: [statementImportId], references: [id], onDelete: SetNull)
+  importRow       ImportRow?           @relation(fields: [importRowId], references: [id], onDelete: SetNull)
 
   @@index([userId, transactionDate])
   @@index([bankAccountId])
   @@index([userId, reconcileStatus])
   @@index([userId, resolution])
   @@index([statementImportId])
+  @@index([importRowId])
   @@map("bank_transactions")
 }
 
@@ -789,6 +801,9 @@ model ImportRow {
   outputRef Json? @map("output_ref")
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
   session ImportSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  expenses Expense[]
+  creditTransactions CreditTransaction[]
+  bankTransactions BankTransaction[]
   @@unique([sessionId, rowNumber])
   @@map("import_rows")
 }
