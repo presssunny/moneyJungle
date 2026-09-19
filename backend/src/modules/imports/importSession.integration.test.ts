@@ -54,6 +54,13 @@ describe('staged import lifecycle',()=>{
   expect(await prisma.expense.count({where:{userId}})).toBe(2);
   const rows=await importRows.list(userId,session.id);expect(rows.items[0].outputRef).toMatchObject({kind:'expense',id:existing.id});
  });
+ it('keeps two genuinely identical rows in one file as two separate expenses when nothing pre-existing matches them',async()=>{
+  const file=sheet([['שם','סכום','תאריך'],['Twin coffee',18,'17/09/2026'],['Twin coffee',18,'17/09/2026']]);
+  const session=await importSessions.create(userId,'twins-fresh.xlsx',file,{kind:'expense_sheet'});
+  expect((await importRows.list(userId,session.id)).pendingCount).toBe(0);
+  await importSessions.commit(userId,session.id,session.version);
+  expect(await prisma.expense.count({where:{userId,businessName:'Twin coffee'}})).toBe(2);
+ });
  it('rejects commit when a candidate was deleted or a new duplicate appeared',async()=>{
   const session=await importSessions.create(userId,'expense.xlsx',expenseFile(),{kind:'expense_sheet'});
   await prisma.expense.create({data:{userId,businessName:'Staged coffee',amount:18,expenseDate:new Date('2026-09-17')}});
