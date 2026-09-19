@@ -108,6 +108,7 @@ model User {
   loans              Loan[]
   documents          Document[]
   savingsGoals       SavingsGoal[]
+  assets             Asset[]
   paymentMethods     PaymentMethod[]
   alerts             Alert[]
   reminders          Reminder[]
@@ -657,6 +658,27 @@ model SavingsGoal {
 
   @@index([userId])
   @@map("savings_goals")
+}
+
+// ---------- Assets (net worth) ----------
+
+// A manually declared asset outside any tracked account — investment, pension,
+// real estate, etc. Never bank balance or SavingsGoal: that money is already
+// inside the derived bank balance (see AccountsPage / netWorth metric).
+model Asset {
+  id           Int      @id @default(autoincrement())
+  userId       Int      @map("user_id")
+  name         String   @db.VarChar(120)
+  assetType    String   @map("asset_type") @db.VarChar(30) // investment | pension | real_estate | other
+  currentValue Decimal  @map("current_value") @db.Decimal(14, 2)
+  asOfDate     DateTime @map("as_of_date") @db.Date
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("assets")
 }
 
 // ---------- Payment methods ----------

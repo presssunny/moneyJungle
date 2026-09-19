@@ -5,6 +5,7 @@ import { useAsync } from "../hooks/useAsync";
 import { listLoans } from "../services/finance.service";
 import { listBankAccounts, listSavingsGoals } from "../services/planning.service";
 import { formatCurrency } from "../utils/format";
+import AssetsPage from "./AssetsPage";
 import BankPage from "./BankPage";
 import BankReconcilePage from "./BankReconcilePage";
 import CreditPage from "./CreditPage";
@@ -84,6 +85,7 @@ export default function AccountsPage() {
           { key: "reconcile", label: "התאמת בנק", icon: "🔗", element: <BankReconcilePage /> },
           { key: "loans", label: "הלוואות וחובות", icon: "📉", element: <LoansPage /> },
           { key: "savings", label: "חיסכון ויעדים", icon: "🐷", element: <SavingsPage /> },
+          { key: "assets", label: "נכסים ושווי נטו", icon: "💎", element: <AssetsPage /> },
         ]}
       />
     </>

@@ -1,9 +1,10 @@
 import { prisma } from "../../config/database";
 import { ApiError } from "../../utils/ApiError";
 import { monthRange } from "../../utils/date.utils";
-import { round2 } from "../../utils/money.utils";
+import { decimalToNumber, round2 } from "../../utils/money.utils";
 import type { FinancialMetric, MetricComponent, MetricName } from "../../types/metric.types";
 import { monthTotals } from "../dashboard/dashboard.service";
+import { loansService } from "../loans/loans.service";
 import { financialStatus } from "./coverage.service";
 
 const pageSize = 50;
@@ -85,6 +86,41 @@ export async function financialMetric(userId: number, name: MetricName, month: s
     metric.assumptions=["סכום לא ידוע אינו אפס; התחייבות בלי החלטה עדיין טעונה בדיקה"];
     components=state.events.map(e=>({key:e.key,label:e.name,value:e.decision==="paid"||e.decision==="duplicate"?0:e.amount,date:e.date,detail:e.decision==="paid"?"שולם — הוחרג":e.decision==="duplicate"?"כפילות — הוחרגה":e.decision==="unpaid"?"טרם שולם":"לבדיקה",to:e.to}));
     if(state.events.length)metric.period={from:state.events.map(e=>e.date).sort()[0],to:state.events.map(e=>e.date).sort().at(-1)!};
+  } else if (name === "netWorth") {
+    // A stock, not a flow: assets declared manually, minus active loan principal
+    // (the same figure LoansPage shows) and card debt already charged but not
+    // yet settled. Bank balance and savings goals are deliberately excluded —
+    // that money is already inside the bank balance shown elsewhere (CLAUDE.md,
+    // AccountsPage). Until every historical card bill has a decision, "unpaid"
+    // can't be told apart from "already paid" — so the figure stays unavailable
+    // rather than silently treating an undecided bill as zero debt.
+    const cardBills = state.events.filter(e => e.kind === "credit");
+    const undecided = cardBills.filter(e => !e.decision);
+    const [assets, loanSummary] = await Promise.all([
+      prisma.asset.findMany({ where: { userId }, orderBy: { id: "asc" } }),
+      loansService.list(userId).then(r => r.summary),
+    ]);
+    metric.formula = "סכום הנכסים שנרשמו ידנית, בניכוי יתרת קרן ההלוואות הפעילות וחובות אשראי שנרשמו כטרם שולמו";
+    metric.assumptions = [
+      "נכס הוא ערך שנרשם ידנית לפי מועד עדכון — אינו מאומת מול מסמך חיצוני",
+      "יתרת בנק ויעדי חיסכון אינם נכללים כנכס: הכסף עשוי כבר להיות בתוך יתרת הבנק",
+      'חיוב "אשראי מתגלגל" אינו נכלל בחישוב ההתחייבויות',
+    ];
+    metric.sources.push({ key: "assets", label: "נכסים רשומים", to: "/accounts?tab=assets" });
+    components = assets.map(a => ({ key: `asset:${a.id}`, label: a.name, value: decimalToNumber(a.currentValue), date: a.asOfDate.toISOString().slice(0, 10), detail: a.assetType, to: "/accounts?tab=assets" }));
+    if (undecided.length) {
+      metric.state = "unavailable";
+      metric.missingData = [...metric.missingData, `יש ${undecided.length} חיובי אשראי היסטוריים ללא החלטה — לא ניתן לקבוע את שווי הנטו עד שיסומנו`];
+    } else {
+      const unpaidCardDebt = round2(cardBills.filter(e => e.decision === "unpaid" && e.amount !== null).reduce((s, e) => s + Math.max(0, e.amount!), 0));
+      const liabilitiesTotal = round2(loanSummary.totalBalance + unpaidCardDebt);
+      metric.value = round2(assets.reduce((s, a) => s + decimalToNumber(a.currentValue), 0) - liabilitiesTotal);
+      metric.state = "provisional";
+      components.push(
+        { key: "loans", label: "יתרת קרן הלוואות פעילות", value: -loanSummary.totalBalance, to: "/accounts?tab=loans" },
+        ...cardBills.filter(e => e.decision === "unpaid" && e.amount !== null).map(e => ({ key: e.key, label: e.name, value: -Math.max(0, e.amount!), date: e.date, detail: "חוב אשראי טרם שולם", to: e.to })),
+      );
+    }
   } else {
     metric.value=state.allowance.amount;
     metric.state=metric.value===null?"unavailable":"provisional";

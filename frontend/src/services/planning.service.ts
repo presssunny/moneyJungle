@@ -4,6 +4,8 @@ import { sharedGet } from "./queryCache";
 
 import type {
   Alert,
+  Asset,
+  AssetType,
   BalanceDetail,
   BankStatementImport,
   BankAccount,
@@ -435,6 +437,34 @@ export async function depositToGoal(id: number, amount: number): Promise<Savings
 
 export async function deleteSavingsGoal(id: number): Promise<void> {
   await api.delete(`/savings/${id}`);
+}
+
+// ---------- Assets (net worth) ----------
+
+export interface AssetInput {
+  name: string;
+  assetType: AssetType;
+  currentValue: number;
+  asOfDate: string;
+}
+
+export async function listAssets(): Promise<Asset[]> {
+  const { data } = await api.get("/assets");
+  return data;
+}
+
+export async function createAsset(input: AssetInput): Promise<Asset> {
+  const { data } = await api.post("/assets", input);
+  return data;
+}
+
+export async function updateAsset(id: number, input: Partial<AssetInput>): Promise<Asset> {
+  const { data } = await api.patch(`/assets/${id}`, input);
+  return data;
+}
+
+export async function deleteAsset(id: number): Promise<void> {
+  await api.delete(`/assets/${id}`);
 }
 
 // ---------- Family ----------

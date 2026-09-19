@@ -355,6 +355,16 @@ export interface SavingsGoal {
   targetDate: string | null;
 }
 
+export type AssetType = "investment" | "pension" | "real_estate" | "other";
+
+export interface Asset {
+  id: number;
+  name: string;
+  assetType: AssetType;
+  currentValue: Money;
+  asOfDate: string;
+}
+
 export type FamilyRelation = "spouse" | "child" | "parent" | "other";
 
 /**

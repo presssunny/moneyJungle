@@ -1,4 +1,4 @@
-export type MetricName = "creditCharge" | "cash" | "allowance" | "commitments" | "income" | "expense" | "surplus";
+export type MetricName = "creditCharge" | "cash" | "allowance" | "commitments" | "income" | "expense" | "surplus" | "netWorth";
 export interface MetricComponent {
   key: string;
   label: string;
