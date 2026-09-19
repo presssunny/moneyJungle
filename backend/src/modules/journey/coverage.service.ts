@@ -4,8 +4,23 @@ import { businessDate, fingerprint, nextDate } from "./journey.utils";
 import { commitments } from "./commitments.service";
 import { review } from "./review.service";
 import { calculateAllowance } from "./allowance";
+async function hasPriorFinancialActivity(userId: number): Promise<boolean> {
+  const [expense, income, bankTx, creditTx] = await Promise.all([
+    prisma.expense.findFirst({ where: { userId }, select: { id: true } }),
+    prisma.income.findFirst({ where: { userId }, select: { id: true } }),
+    prisma.bankTransaction.findFirst({ where: { userId }, select: { id: true } }),
+    prisma.creditTransaction.findFirst({ where: { userId }, select: { id: true } }),
+  ]);
+  return Boolean(expense || income || bankTx || creditTx);
+}
+// A user with financial activity from before onboarding ever ran must not be
+// forced through it as if new, nor be assumed to have reviewed coverage they
+// never saw — their first profile row starts `legacy`, not `pending`.
 export async function getProfile(userId: number) {
-  return prisma.financialProfile.upsert({ where: { userId }, update: {}, create: { userId, onboarding: "pending" } });
+  const existing = await prisma.financialProfile.findUnique({ where: { userId } });
+  if (existing) return existing;
+  const legacy = await hasPriorFinancialActivity(userId);
+  return prisma.financialProfile.upsert({ where: { userId }, update: {}, create: { userId, onboarding: legacy ? "legacy" : "pending" } });
 }
 export async function financialStatus(userId: number) {
   const today = businessDate();
