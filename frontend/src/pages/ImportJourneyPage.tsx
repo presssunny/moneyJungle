@@ -12,6 +12,13 @@ import { useAsync } from "../hooks/useAsync";
 import { api, apiErrorMessage } from "../services/api";
 import { getFinancialStatus, uploadSession, getImportSession, answerSession, actOnSession, type ImportSession } from "../services/journey.service";
 
+const UPLOAD_TYPES = [
+  { icon: "🏦", label: "בנק", hint: "דף חשבון בנק" },
+  { icon: "💳", label: "אשראי", hint: "דוח כרטיס אשראי" },
+  { icon: "🧾", label: "הוצאות", hint: "גיליון הוצאות ידני" },
+  { icon: "📉", label: "הלוואה", hint: "לוח סילוקין" },
+];
+
 export default function ImportJourneyPage(){
  const [params,setParams]=useSearchParams();const id=params.get('session');
  const [session,setSession]=useState<ImportSession|null>(null);const [busy,setBusy]=useState(false);const [error,setError]=useState('');const [accepted,setAccepted]=useState(false);
@@ -31,7 +38,11 @@ export default function ImportJourneyPage(){
  return <div className="journey-page">
   <p className="text-muted">העלאה ← זיהוי ועיבוד ← השלמת מידע ← בדיקה ← תמונה מעודכנת</p>
   {error&&<p role="alert" className="error-message">{error}</p>}
-  {!id&&<Card title="עדכון המידע הפיננסי"><p>דוח בנק, דוח אשראי, גיליון הוצאות או לוח סילוקין. נזהה את הקובץ ונציג את הנתונים לבדיקה לפני קליטה.</p><DropZone onFile={file=>run(()=>uploadSession(file,Object.fromEntries(['accountId','cardId','loanId'].flatMap(k=>params.get(k)?[[k,Number(params.get(k))]]:[]))))} accept=".xlsx,.xls,.csv,.pdf" busy={busy}/><Link to="/data">קליטות קודמות והמשך תהליך</Link></Card>}
+  {!id&&<Card title="עדכון המידע הפיננסי"><p>דוח בנק, דוח אשראי, גיליון הוצאות או לוח סילוקין. נזהה את הקובץ ונציג את הנתונים לבדיקה לפני קליטה.</p>
+   <div className="upload-types" aria-hidden>
+    {UPLOAD_TYPES.map(t=><span key={t.label} className="upload-type-chip" title={t.hint}><span className="upload-type-chip-icon">{t.icon}</span>{t.label}</span>)}
+   </div>
+   <DropZone onFile={file=>run(()=>uploadSession(file,Object.fromEntries(['accountId','cardId','loanId'].flatMap(k=>params.get(k)?[[k,Number(params.get(k))]]:[]))))} accept=".xlsx,.xls,.csv,.pdf" busy={busy}/><Link to="/data">קליטות קודמות והמשך תהליך</Link></Card>}
   {busy&&!session&&<Loading/>}
   {session&&<>
    <Card title={session.fileName}><p role="status">{({failed:'עיבוד הקובץ נכשל — ניתן לתקן פרטים ולנסות שוב',uploaded:'הקובץ נשמר',processing:'העיבוד החל — אפשר לנסות שוב אם נעצר',rolled_back:'נתוני הקליטה בוטלו',needs_input:'נדרש מידע נוסף',ready_for_review:'מוכן לבדיקה לפני קליטה',review:'נקלט — נותרה בדיקה',completed:'הקליטה והבדיקה הושלמו',cancelled:'הקליטה בוטלה'} as Record<string,string>)[session.status]??session.status}</p></Card>

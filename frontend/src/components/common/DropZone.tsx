@@ -48,7 +48,7 @@ export function DropZone({
   return (
     <button
       type="button"
-      className={`dropzone ${dragActive ? "dropzone-active" : ""} ${locked ? "dropzone-disabled" : ""}`}
+      className={`dropzone ${dragActive ? "dropzone-active" : ""} ${locked ? "dropzone-disabled" : ""} ${busy ? "dropzone-busy" : ""}`}
       onClick={() => !locked && inputRef.current?.click()}
       onDrop={onDrop}
       onDragOver={onDragOver}
