@@ -117,3 +117,39 @@ test('Metric details load on demand and reject mixed-version pages',async({page}
  await page.getByRole('button',{name:'הבא',exact:true}).click();await expect(page.getByRole('alert').filter({hasText:'המקורות השתנו'})).toBeVisible();
  await expect(page.getByRole('link',{name:'יתרת מקור'})).toHaveCount(0);
 });
+
+test('All eight themes keep the product identity and persist selection',async({page})=>{
+ await mockApi(page);let theme='light';let moneyReads=0;
+ await page.route('**/api/settings',async route=>{if(route.request().method()==='PATCH')theme=route.request().postDataJSON().theme??theme;await route.fulfill({json:{theme,currency:'ILS',dateFormat:'DD/MM/YYYY'}});});
+ page.on('request',r=>{if(/\/api\/(journey|expenses|incomes)\//.test(r.url()))moneyReads++;});
+ await page.goto('/settings');
+ const choices=[['neon-purple','סגול ניאון'],['dark-luxury','כהה יוקרתי'],['red-cyan','אדום / ציאן'],['ocean','עומק האוקיינוס'],['forest','יער לילה'],['sunset','שקיעה'],['rose-gold','ורד-זהב'],['light','יום בהיר']];
+ const before=moneyReads;
+ for(const [id,label] of choices){
+  await page.getByRole('button',{name:new RegExp(label)}).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme',id);
+  await expect(page.locator('.sidebar-logo')).toContainText('Money Jungle');
+  await expect(page).toHaveTitle('Money Jungle');
+  await expect.poll(()=>theme).toBe(id);
+ }
+ expect(moneyReads).toBe(before);await page.reload();await expect(page.locator('html')).toHaveAttribute('data-theme','light');
+});
+
+test('Login uses the same name for every saved theme',async({page})=>{
+ await mockApi(page);
+ await page.route('**/api/gate/session',route=>route.fulfill({status:401,json:{error:{message:'נדרש חיבור'}}}));
+ for(const theme of ['neon-purple','dark-luxury','red-cyan','ocean','forest','sunset','rose-gold','light']){
+  await page.goto('/login');await page.evaluate(value=>localStorage.setItem('app_theme',value),theme);await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-theme',theme);await expect(page.locator('.gate-logo')).toHaveText('Money Jungle');await expect(page).toHaveTitle('Money Jungle');
+ }
+});
+
+test('Legacy links retain month, row, source and return destination',async({page})=>{
+ await mockApi(page);
+ await page.goto('/expenses?month=2026-08&q=test&returnTo=%2Freview');
+ await expect(page).toHaveURL(/\/transactions\?/);expect(new URL(page.url()).searchParams.get('month')).toBe('2026-08');await expect(page.getByRole('link',{name:'חזרה לתהליך הבדיקה'})).toHaveAttribute('href','/review');
+ await page.goto('/manage?tab=documents&source=bank&month=2026-08');
+ await expect(page).toHaveURL(/\/data\?/);expect(new URL(page.url()).searchParams.get('source')).toBe('bank');
+ await page.goto('/transactions?tab=import&session=00000000-0000-4000-8000-000000000001');
+ await expect(page).toHaveURL(/\/imports\?session=/);
+});

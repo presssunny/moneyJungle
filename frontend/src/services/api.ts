@@ -16,7 +16,13 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => {
     if (["post", "patch", "put", "delete"].includes(response.config.method ?? "") && !response.config.url?.includes("/gate/")) {
-      const domain=response.config.url?.split("/").filter(Boolean)[0]??"financial";
+      let domain=response.config.url?.split("/").filter(Boolean)[0]??"financial";
+      if(domain==="settings") {
+        try {
+          const body=typeof response.config.data==="string"?JSON.parse(response.config.data):response.config.data;
+          if(body&&Object.keys(body).every(key=>["theme","currency","dateFormat"].includes(key)))domain="appearance";
+        } catch { /* Unrecognized payload conservatively invalidates settings. */ }
+      }
       window.dispatchEvent(new CustomEvent("money-jungle:changed",{detail:{domain}}));
     }
     return response;

@@ -60,7 +60,7 @@ function hasRollbackNotice(result: RollbackResult): boolean {
  * leaves the data, ↺ undoes the import itself.
  */
 export default function DocumentsPage() {
-  const docs = useAsync(() => listDocuments(), [], "לא הצלחנו לטעון את המסמכים");
+  const docs = useAsync(() => listDocuments(), [], "לא הצלחנו לטעון את המסמכים", ["documents","imports","credit","loans","bank"]);
   const confirm = useConfirm();
   const navigate = useNavigate();
 

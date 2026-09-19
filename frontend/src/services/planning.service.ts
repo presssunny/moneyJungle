@@ -1,3 +1,5 @@
+import { uploadSession, type ImportSession } from "./journey.service";
+import { sharedGet } from "./queryCache";
 /** Services for planning domains: categories, payment methods, bank, recurring, subscriptions, savings, family, alerts, settings. */
 
 import type {
@@ -22,8 +24,7 @@ import { api } from "./api";
 // ---------- Categories & rules ----------
 
 export async function listCategories(): Promise<Category[]> {
-  const { data } = await api.get("/categories");
-  return data;
+  return sharedGet("/categories");
 }
 
 export async function createCategory(input: { name: string; type: string; color?: string | null; icon?: string | null }): Promise<Category> {
@@ -57,8 +58,7 @@ export async function deleteRule(id: number): Promise<void> {
 // ---------- Payment methods ----------
 
 export async function listPaymentMethods(): Promise<PaymentMethod[]> {
-  const { data } = await api.get("/payment-methods");
-  return data;
+  return sharedGet("/payment-methods");
 }
 
 export async function createPaymentMethod(input: { name: string; type: string }): Promise<PaymentMethod> {
@@ -133,19 +133,9 @@ export async function deleteBankTransaction(id: number): Promise<void> {
   await api.delete(`/bank/transactions/${id}`);
 }
 
-export interface BankImportResult {
-  parsed: number;
-  imported: number;
-  skippedDuplicates: number;
-  deposits: number;
-  withdrawals: number;
-}
-
-export async function importBankStatement(accountId: number, file: File): Promise<BankImportResult> {
-  const form = new FormData();
-  form.append("file", file);
-  const { data } = await api.post(`/bank/accounts/${accountId}/import`, form);
-  return data;
+export type BankImportResult = ImportSession;
+export async function importBankStatement(accountId:number,file:File):Promise<ImportSession> {
+ return uploadSession(file,{kind:"bank",accountId});
 }
 
 // ---------- Bank reconciliation ----------

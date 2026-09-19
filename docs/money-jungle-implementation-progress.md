@@ -43,5 +43,16 @@ Transaction tables precede analysis. Search, category/type, uncategorized, recur
 
 Validation: 44 backend tests passed across metric reconciliation/version/ownership, allowance, wallet and API smoke suites. All 16 browser cases passed across the full run and four-case focused rerun after fixing duplicate development-mode reads and mobile filter overlap. Backend application/test typechecks and frontend production build passed.
 
-## Remaining sequence
-6. Branding, route/UI cleanup, management groups, documentation and full release validation.
+## Phase 6 — branding, compatibility and cleanup
+
+Login and sidebar consume the shared `PRODUCT_NAME` directly; the obsolete theme-brand wrapper and old product name were removed. All eight saved theme IDs are retained. Legacy standalone/bookmark routes redirect to the canonical hubs while retaining query/hash/navigation state. The four management groups remain available, and review links now provide an allowed return destination. Source links target the actual credit import parameter and document archive.
+
+Journey contracts now live in a type module. Unused direct-upload client helpers delegate to the durable session flow with accurate response types. Domain-scoped refresh covers account overview, wallet, documents, settings, lookup data and CRM; theme changes do not trigger money queries. Transaction tabs and income analysis are lazy. Refresh/error states label old data without discarding active form components. Contracts, source boundaries and operational limitations are documented in `money-journey-contracts.md`.
+
+The final schema comparison found two missing `@default(now())` declarations for timestamps whose defaults were already present in the applied migrations. The schema now matches the database, without editing applied migrations or changing stored data.
+
+Phase validation: 22 desktop/mobile browser tests passed, including all eight themes on login/navigation, persisted choices, lazy detail, transaction history and legacy query preservation. Frontend production build passed. Backend final validation is recorded below after the phase commit.
+
+## Final validation
+
+In progress. The final server run is performed without overlapping test suites against the same database. A preliminary run overlapped dependency repair; a subsequent overlapping run produced a database deadlock, while the isolated failing case passed. Those runs are not treated as release validation. Dependencies were restored to the existing lockfile before the release run; the lockfile remains unchanged.

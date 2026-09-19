@@ -1,22 +1,24 @@
-# Monthly Finance Planner (CYBER_BUDGET) 💰
+# Money Jungle 💰
 
 עדכון ארכיטקטורה: האימות בדפדפן משתמש כעת ב־HttpOnly Cookie, הגנת CSRF ותפוגת סשן; אין לשמור טוקן התחברות ב־localStorage. לפירוט העדכני ולהכנת סביבת ייצור ראו [הוראות פריסה](docs/production-deployment.md), [סקירת הארכיטקטורה והמקורות](docs/production-architecture-review.md) ו־[תחזית וארנק כרטיסים](docs/forecast-and-wallet.md).
 
 > **English summary** — A full-stack monthly finance planner for a single family: bank/credit
 > statement import and parsing, budgets, loans with amortization schedules, subscriptions,
-> recurring payments, and a reporting dashboard. React + TypeScript frontend (RTL, Hebrew UI, 3
+> recurring payments, and a reporting dashboard. React + TypeScript frontend (RTL, Hebrew UI, 8
 > themes), Express + TypeScript + Prisma backend, MySQL/MariaDB. See **Stack** below for the full
 > list, and **אבטחה והיקף** near the bottom for the auth/security model — the rest of this README
 > is in Hebrew, the language of the app itself and its intended users.
 
 אפליקציית Fullstack לניהול ותכנון חודשי של הוצאות והכנסות למשפחה.
-עברית מלאה · RTL · עיצוב כהה בסגנון סייבר עם 3 ערכות נושא.
+עברית מלאה · RTL · עיצוב כהה בסגנון סייבר עם 8 ערכות נושא.
+
+תיעוד המסע החדש: [חוזים ומגבלות](docs/money-journey-contracts.md) · [דוח המימוש והבדיקות](docs/money-jungle-implementation-progress.md).
 
 ## Stack
 
 | שכבה | טכנולוגיה |
 |---|---|
-| Frontend | React 18 + TypeScript + Vite, React Router v6, Recharts, Axios |
+| Frontend | React 18 + TypeScript + Vite, React Router v7, Recharts, Axios |
 | Backend | Node.js + Express + TypeScript, zod, Prisma 7 |
 | Database | MySQL / MariaDB (utf8mb4) |
 

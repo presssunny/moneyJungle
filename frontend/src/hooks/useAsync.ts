@@ -64,7 +64,7 @@ export function useAsync<T>(
     let timer: ReturnType<typeof setTimeout>;
     const changed = (event: Event) => {
       const domain=(event as CustomEvent<{domain:string}>).detail?.domain;
-      const financial=!domain||!["gate","crm","alerts","updates"].includes(domain);
+      const financial=!domain||!["gate","crm","alerts","updates","appearance"].includes(domain);
       if(domainsRef.current.includes(domain??"financial") || financial&&domainsRef.current.includes("financial")) {
         clearTimeout(timer); timer = setTimeout(reload, 50);
       }

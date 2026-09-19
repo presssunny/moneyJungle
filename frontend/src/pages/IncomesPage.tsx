@@ -1,5 +1,5 @@
 import { useTransactionFilters } from "../hooks/useTransactionFilters";
-import { useMemo, useState, type FormEvent } from "react";
+import { lazy, Suspense, useMemo, useState, type FormEvent } from "react";
 import { AsyncSection } from "../components/common/AsyncSection";
 import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
@@ -12,7 +12,7 @@ import { PageShell } from "../components/common/PageShell";
 import { Select } from "../components/common/Select";
 import { SkeletonChart, SkeletonKpiRow, SkeletonRows } from "../components/common/Skeleton";
 import { Table, type Column } from "../components/common/Table";
-import { CategoryBarChart } from "../components/dashboard/CategoryBarChart";
+const CategoryBarChart=lazy(()=>import("../components/dashboard/CategoryBarChart").then(module=>({default:module.CategoryBarChart})));
 import { SummaryCard } from "../components/dashboard/SummaryCard";
 import { useMonth } from "../context/MonthContext";
 import { useAsync } from "../hooks/useAsync";
@@ -43,6 +43,7 @@ const emptyForm = (monthKey: string): IncomeInput => ({
 
 export default function IncomesPage() {
   const confirm = useConfirm();
+  const [analysisOpen,setAnalysisOpen]=useState(false);
   const { monthKey } = useMonth();
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Income | null>(null);
@@ -244,7 +245,7 @@ export default function IncomesPage() {
         </AsyncSection>
       </Card>
 
-      <details className="home-analysis"><summary>ניתוח ההכנסות</summary><AsyncSection
+      <details className="home-analysis" onToggle={e=>setAnalysisOpen(e.currentTarget.open)}><summary>ניתוח ההכנסות</summary>{analysisOpen&&<><AsyncSection
           resource={incomesRes}
           errorTitle="לא הצלחנו לטעון את סיכום ההכנסות"
           skeleton={<SkeletonKpiRow count={4} label="טוען סיכום הכנסות" />}
@@ -283,10 +284,10 @@ export default function IncomesPage() {
         >
           {() => (
             <Card title="הכנסות לפי סוג">
-              <CategoryBarChart data={byType} />
+              <Suspense fallback={<SkeletonChart/>}><CategoryBarChart data={byType} /></Suspense>
             </Card>
           )}
-        </AsyncSection></details>
+        </AsyncSection></>}</details>
       <Modal title={editing ? "עריכת הכנסה" : "הוספת הכנסה"} open={formOpen} onClose={() => setFormOpen(false)}>
         <form onSubmit={submit}>
           {error && <ErrorMessage message={error} />}

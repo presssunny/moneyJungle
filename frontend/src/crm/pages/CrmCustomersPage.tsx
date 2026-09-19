@@ -27,7 +27,7 @@ const ROLE_OPTIONS = (Object.keys(ROLE_LABELS) as CrmRole[]).map((value) => ({ v
 
 export default function CrmCustomersPage() {
   const isAdmin = currentUser()?.role === "ADMIN";
-  const customers = useAsync(() => listCrmCustomers(), [], "לא הצלחנו לטעון את רשימת הלקוחות");
+  const customers = useAsync(() => listCrmCustomers(), [], "לא הצלחנו לטעון את רשימת הלקוחות", ["crm"]);
   const [search, setSearch] = useState("");
   const [onlyActive, setOnlyActive] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("name");

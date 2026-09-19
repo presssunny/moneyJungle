@@ -45,9 +45,10 @@ export function AsyncSection<T>({
     return (
       <>
         <WidgetError title={errorTitle} detail={error} onRetry={reload} inline />
+        <p className="text-muted">מוצגים הנתונים מהטעינה האחרונה; העדכון לא אומת.</p>
         {body}
       </>
     );
   }
-  return body;
+  return <>{loading&&<p className="text-muted" role="status">מעדכן נתונים…</p>}{body}</>;
 }

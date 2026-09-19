@@ -66,7 +66,7 @@ const emptyForm: LoanInput = {
  * and is only rendered here (CLAUDE.md §4).
  */
 export default function LoansPage() {
-  const loansRes = useAsync(() => listLoans(), [], "לא הצלחנו לטעון את ההלוואות");
+  const loansRes = useAsync(() => listLoans(), [], "לא הצלחנו לטעון את ההלוואות", ["loans","bank","imports","documents"]);
   const confirm = useConfirm();
 
   const [formOpen, setFormOpen] = useState(false);

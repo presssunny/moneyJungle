@@ -1398,7 +1398,7 @@
   color: var(--text-muted);
 }
 
-/* ---------- BLACK LEDGER (red-cyan) theme identity: terminal look ---------- */
+/* ---------- Red-cyan theme: terminal appearance ---------- */
 
 [data-theme="red-cyan"] body,
 [data-theme="red-cyan"] button,

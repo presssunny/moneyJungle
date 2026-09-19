@@ -32,6 +32,12 @@ export function useLookups() {
 
   const reload = useCallback(() => setAttempt((n) => n + 1), []);
 
+  useEffect(()=>{
+    const changed=(event:Event)=>{if(["categories","payment-methods","rules"].includes((event as CustomEvent<{domain:string}>).detail?.domain))reload();};
+    window.addEventListener("money-jungle:changed",changed);
+    return ()=>window.removeEventListener("money-jungle:changed",changed);
+  },[reload]);
+
   const expenseCategories = categories.filter((c) => c.type === "expense");
 
   return { categories, expenseCategories, paymentMethods, failed, reload };

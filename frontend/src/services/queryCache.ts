@@ -1,7 +1,7 @@
 import { api } from "./api";
 import { sessionUser } from "./sessionState";
 const reads=new Map<string,{expires:number;promise:Promise<unknown>}>();
-window.addEventListener("money-jungle:changed",()=>reads.clear());
+window.addEventListener("money-jungle:changed",event=>{if((event as CustomEvent<{domain:string}>).detail?.domain!=="appearance")reads.clear();});
 /** Short shared reads coalesce table/analysis requests. Every successful mutation
  * invalidates them before subscribers reload; keys also isolate signed-in users. */
 export function sharedGet<T>(url:string,params?:Record<string,unknown>):Promise<T> {

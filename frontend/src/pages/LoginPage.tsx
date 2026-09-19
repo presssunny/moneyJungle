@@ -1,6 +1,6 @@
 import { Navigate } from "react-router-dom";
 import { LoginForm } from "../components/gate/LoginForm";
-import { themeBrand, useTheme } from "../context/ThemeContext";
+import { PRODUCT_NAME } from "../app/brand";
 import { useGateAuth } from "../hooks/useGateAuth";
 
 /**
@@ -11,7 +11,6 @@ import { useGateAuth } from "../hooks/useGateAuth";
  */
 export default function LoginPage() {
   const { login, loading, error, isLoggedIn } = useGateAuth();
-  const { theme } = useTheme();
 
   if (isLoggedIn()) return <Navigate to="/" replace />;
 
@@ -21,7 +20,7 @@ export default function LoginPage() {
         <div className="gate-mark" aria-hidden>
           🌴
         </div>
-        <div className="gate-logo">{themeBrand(theme)}</div>
+        <div className="gate-logo">{PRODUCT_NAME}</div>
         <h1 className="gate-title">ברוכה הבאה</h1>
         <p className="gate-sub">התחברי כדי להמשיך לניהול הפיננסי המשפחתי</p>
 

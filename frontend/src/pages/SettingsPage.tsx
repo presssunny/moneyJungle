@@ -12,7 +12,7 @@ export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
   const [saved, setSaved] = useState(false);
 
-  const settingsRes = useAsync(() => getSettings(), [], "לא הצלחנו לטעון את ההעדפות");
+  const settingsRes = useAsync(() => getSettings(), [], "לא הצלחנו לטעון את ההעדפות", ["settings","appearance"]);
   const settings = settingsRes.data;
   const setSettings = settingsRes.setData;
 
@@ -36,6 +36,7 @@ export default function SettingsPage() {
               type="button"
               className={`theme-card ${theme === option.id ? "theme-card-active" : ""}`}
               onClick={() => setTheme(option.id)}
+              aria-pressed={theme===option.id}
             >
               {theme === option.id && <span className="theme-card-check" aria-hidden>✓</span>}
               <span className="theme-swatches">

@@ -1,3 +1,4 @@
+import { LegacyRedirect } from "../components/common/LegacyRedirect";
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { Loading } from "../components/common/Loading";
@@ -13,33 +14,20 @@ import { RequireOnboarding } from "./RequireOnboarding";
 // it's the one page every visitor loads before there is anything to split.
 const AccountsPage = lazy(() => import("../pages/AccountsPage"));
 const AlertsPage = lazy(() => import("../pages/AlertsPage"));
-const BankPage = lazy(() => import("../pages/BankPage"));
 const BudgetsPage = lazy(() => import("../pages/BudgetsPage"));
-const CalendarPage = lazy(() => import("../pages/CalendarPage"));
-const CategoriesRulesPage = lazy(() => import("../pages/CategoriesRulesPage"));
-const ComparisonPage = lazy(() => import("../pages/ComparisonPage"));
-const CreditPage = lazy(() => import("../pages/CreditPage"));
 const CrmCustomersPage = lazy(() => import("../crm/pages/CrmCustomersPage"));
 const CrmCustomerDetailPage = lazy(() => import("../crm/pages/CrmCustomerDetailPage"));
 const DashboardPage = lazy(() => import("../pages/DashboardPage"));
 const DocumentsPage = lazy(() => import("../pages/DocumentsPage"));
-const ExpensesPage = lazy(() => import("../pages/ExpensesPage"));
-const FamilyPage = lazy(() => import("../pages/FamilyPage"));
 const ImportJourneyPage = lazy(() => import("../pages/ImportJourneyPage"));
 const FinancialDataPage = lazy(() => import("../pages/FinancialDataPage"));
 const ReviewPage = lazy(() => import("../pages/ReviewPage"));
 const CheckInPage = lazy(() => import("../pages/CheckInPage"));
 const CommitmentsPage = lazy(() => import("../pages/CommitmentsPage"));
 const SettingsHubPage = lazy(() => import("../pages/SettingsHubPage"));
-const IncomesPage = lazy(() => import("../pages/IncomesPage"));
-const LoansPage = lazy(() => import("../pages/LoansPage"));
 const ManagePage = lazy(() => import("../pages/ManagePage"));
 const OnboardingPage = lazy(() => import("../pages/OnboardingPage"));
-const PaymentMethodsPage = lazy(() => import("../pages/PaymentMethodsPage"));
-const RecurringPage = lazy(() => import("../pages/RecurringPage"));
 const ReportsHubPage = lazy(() => import("../pages/ReportsHubPage"));
-const SavingsPage = lazy(() => import("../pages/SavingsPage"));
-const SubscriptionsPage = lazy(() => import("../pages/SubscriptionsPage"));
 const TransactionsPage = lazy(() => import("../pages/TransactionsPage"));
 
 /** Every route below the login screen is behind this. */
@@ -97,20 +85,20 @@ export default function App() {
             <Route path="/manage" element={<ManagePage />} />
 
             {/* Legacy standalone routes — kept for deep links / bookmarks */}
-            <Route path="/incomes" element={<IncomesPage />} />
-            <Route path="/expenses" element={<ExpensesPage />} />
-            <Route path="/credit" element={<CreditPage />} />
-            <Route path="/bank" element={<BankPage />} />
-            <Route path="/recurring" element={<RecurringPage />} />
-            <Route path="/subscriptions" element={<SubscriptionsPage />} />
-            <Route path="/loans" element={<LoansPage />} />
-            <Route path="/savings" element={<SavingsPage />} />
-            <Route path="/calendar" element={<CalendarPage />} />
-            <Route path="/comparison" element={<ComparisonPage />} />
+            <Route path="/incomes" element={<LegacyRedirect to="/transactions?tab=incomes" />} />
+            <Route path="/expenses" element={<LegacyRedirect to="/transactions?tab=expenses" />} />
+            <Route path="/credit" element={<LegacyRedirect to="/accounts?tab=credit" />} />
+            <Route path="/bank" element={<LegacyRedirect to="/accounts?tab=bank" />} />
+            <Route path="/recurring" element={<LegacyRedirect to="/commitments?tab=recurring" />} />
+            <Route path="/subscriptions" element={<LegacyRedirect to="/commitments?tab=subscriptions" />} />
+            <Route path="/loans" element={<LegacyRedirect to="/accounts?tab=loans" />} />
+            <Route path="/savings" element={<LegacyRedirect to="/accounts?tab=savings" />} />
+            <Route path="/calendar" element={<LegacyRedirect to="/commitments?tab=calendar" />} />
+            <Route path="/comparison" element={<LegacyRedirect to="/reports?tab=comparison" />} />
             <Route path="/alerts" element={<AlertsPage />} />
-            <Route path="/categories" element={<CategoriesRulesPage />} />
-            <Route path="/payment-methods" element={<PaymentMethodsPage />} />
-            <Route path="/family" element={<FamilyPage />} />
+            <Route path="/categories" element={<LegacyRedirect to="/settings?tab=categories" />} />
+            <Route path="/payment-methods" element={<LegacyRedirect to="/settings?tab=payment-methods" />} />
+            <Route path="/family" element={<LegacyRedirect to="/settings?tab=family" />} />
             <Route path="/documents" element={<DocumentsPage />} />
             <Route path="/onboarding" element={<OnboardingPage />} />
             <Route path="/imports" element={<ImportJourneyPage />} />

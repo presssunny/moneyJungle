@@ -7,7 +7,6 @@ import type {
   CreditImportDetail,
   Expense,
   Income,
-  ImportExpensesResult,
   EarlyRepaymentQuote,
   Loan,
   LoanEvent,
@@ -20,7 +19,8 @@ import type {
 } from "../types/models";
 import type { StatementLoanActivity } from "./planning.service";
 import { api } from "./api";
-import type { AssistantAnswers, AssistantStep } from "../types/assistant";
+import type { AssistantAnswers } from "../types/assistant";
+import { uploadSession, type ImportSession } from "./journey.service";
 
 function monthParams(monthKey: string) {
   const [year, month] = monthKey.split("-").map(Number);
@@ -92,53 +92,13 @@ export async function quickAddExpense(text: string): Promise<QuickAddResult> {
   return data;
 }
 
-/** Outcome of a smart import: what the file was, and what actually went in. */
-export interface SmartImportResult {
-  kind: "bank" | "credit" | "loan_schedule" | "unknown";
-  detectionReason: string;
-  matchedSignals: string[];
-  fileName: string;
-  parsedRows: number;
-  importedRows: number;
-  skippedDuplicates: number;
-  alreadyImported: boolean;
-  message: string;
-  creditImportId?: number;
-  bankAccountId?: number;
-  /** The conversation: narration, facts, and anything still unanswered. */
-  assistant: AssistantStep;
+/** Compatibility exports use the durable session flow; no upload commits money. */
+export type SmartImportResult = ImportSession;
+export async function smartImportFile(file:File,kind?:"bank"|"credit",answers?:AssistantAnswers):Promise<ImportSession> {
+ return uploadSession(file,{...answers,...(kind?{kind}:{})});
 }
-
-/**
- * Upload a statement without saying what it is. `kind` is sent only when the
- * user overrides a detection she disagrees with.
- */
-export async function smartImportFile(
-  file: File,
-  kind?: "bank" | "credit",
-  /**
-   * Replies to a previous `assistant.questions`. The SAME file is re-sent with
-   * them — the server keeps no pending upload, so a restart mid-conversation
-   * costs nothing.
-   */
-  answers?: AssistantAnswers
-): Promise<SmartImportResult> {
-  const form = new FormData();
-  form.append("file", file);
-  if (kind) form.append("kind", kind);
-  if (answers && Object.keys(answers).length > 0) form.append("answers", JSON.stringify(answers));
-  const { data } = await api.post("/imports/smart", form);
-  return data;
-}
-
-export async function importExpensesFile(file: File, monthKey: string): Promise<ImportExpensesResult> {
-  const { year, month } = monthParams(monthKey);
-  const form = new FormData();
-  form.append("file", file);
-  form.append("year", String(year));
-  form.append("month", String(month));
-  const { data } = await api.post("/imports/expenses", form);
-  return data;
+export async function importExpensesFile(file:File,monthKey:string):Promise<ImportSession> {
+ return uploadSession(file,{kind:"expense_sheet",month:monthKey});
 }
 
 // ---------- Incomes ----------
@@ -241,32 +201,9 @@ export async function getLoanSchedule(id: number): Promise<LoanSchedule> {
   return data;
 }
 
-/** What the bank's amortisation file said, and what changed because of it. */
-export interface ScheduleImportResult {
-  loanId: number;
-  created: boolean;
-  loanName: string;
-  loanNumber: string | null;
-  trackNumber: string | null;
-  rowsStored: number;
-  message: string;
-  /** What the app could not decide alone and needs the user to answer. */
-  questions: Array<{ code: string; text: string }>;
-  /** Same conversation contract as the statement importer. */
-  assistant: AssistantStep;
-}
-
-/**
- * Upload a לוח סילוקין. The file becomes the loan's source of truth: balance,
- * rate, payment, counts and dates are all read from it, so nothing is typed in.
- * Re-uploading for the same loan updates it instead of creating a second one.
- */
-export async function importLoanSchedule(file: File, loanId?: number): Promise<ScheduleImportResult> {
-  const form = new FormData();
-  form.append("file", file);
-  if (loanId !== undefined) form.append("loanId", String(loanId));
-  const { data } = await api.post("/loans/schedule/import", form);
-  return data;
+export type ScheduleImportResult = ImportSession;
+export async function importLoanSchedule(file:File,loanId?:number):Promise<ImportSession> {
+ return uploadSession(file,loanId===undefined?{kind:"loan_schedule"}:{kind:"loan_schedule",loanId});
 }
 
 export async function closeLoan(
@@ -290,31 +227,9 @@ export async function listCreditImports(): Promise<CreditImport[]> {
   return data;
 }
 
-/**
- * A credit upload either creates an import, or finds every row already stored
- * and creates nothing. The two outcomes are different shapes, discriminated by
- * `alreadyImported`, so a caller cannot read a transaction count that isn't there.
- */
-export type CreditUploadResult =
-  | ({ alreadyImported: false; skippedDuplicates: number; parsedRows: number } & CreditImportDetail)
-  | {
-      alreadyImported: true;
-      skippedDuplicates: number;
-      parsedRows: number;
-      previousImport: { id: number; fileName: string; createdAt: string } | null;
-    };
-
-export async function uploadCreditImport(file: File, monthKey?: string, cardId?: number): Promise<CreditUploadResult> {
-  const form = new FormData();
-  form.append("file", file);
-  if (cardId !== undefined) form.append("cardId", String(cardId));
-  if (monthKey) {
-    const { year, month } = monthParams(monthKey);
-    form.append("importYear", String(year));
-    form.append("importMonth", String(month));
-  }
-  const { data } = await api.post("/credit/imports", form);
-  return data;
+export type CreditUploadResult = ImportSession;
+export async function uploadCreditImport(file:File,monthKey?:string,cardId?:number):Promise<ImportSession> {
+ return uploadSession(file,{kind:"credit",...(monthKey?{month:monthKey}:{}),...(cardId!==undefined?{cardId}:{})});
 }
 
 export async function getCreditImport(id: number): Promise<CreditImportDetail> {

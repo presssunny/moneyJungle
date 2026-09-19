@@ -47,9 +47,9 @@ function OverviewChip({ label, amount, tone = "default", loading }: ChipProps) {
  * is re-implemented. Should consume `GET /accounts/overview` once it exists.
  */
 export default function AccountsPage() {
-  const banksRes = useAsync(() => listBankAccounts(), [], "לא הצלחנו לטעון את חשבונות הבנק");
-  const savingsRes = useAsync(() => listSavingsGoals(), [], "לא הצלחנו לטעון את יעדי החיסכון");
-  const loansRes = useAsync(() => listLoans(), [], "לא הצלחנו לטעון את ההלוואות");
+  const banksRes = useAsync(() => listBankAccounts(), [], "לא הצלחנו לטעון את חשבונות הבנק", ["bank","imports","documents"]);
+  const savingsRes = useAsync(() => listSavingsGoals(), [], "לא הצלחנו לטעון את יעדי החיסכון", ["savings"]);
+  const loansRes = useAsync(() => listLoans(), [], "לא הצלחנו לטעון את ההלוואות", ["loans","bank","imports","documents"]);
 
   const loading = banksRes.loading || savingsRes.loading || loansRes.loading;
 

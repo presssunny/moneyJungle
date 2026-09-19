@@ -1,7 +1,7 @@
 {
   "name": "finance-planner-backend",
   "version": "1.0.0",
-  "description": "Monthly Finance Planner API (CYBER_BUDGET)",
+  "description": "Money Jungle API",
   "main": "dist/src/server.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",

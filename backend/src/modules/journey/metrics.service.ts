@@ -35,8 +35,8 @@ export async function financialMetric(userId: number, name: MetricName, month: s
     const [total,aggregate,rows]=await Promise.all([prisma.creditTransaction.count({where:chargeWhere}),prisma.creditTransaction.aggregate({where:chargeWhere,_sum:{amount:true}}),prisma.creditTransaction.findMany({where:chargeWhere,orderBy:{id:"asc"},skip:(page-1)*pageSize,take:pageSize,include:{card:true,creditImport:true}})]);
     metric.value=Number(aggregate._sum.amount);metric.total=total;
     metric.period={from:next.chargeDate.toISOString().slice(0,10),to:next.chargeDate.toISOString().slice(0,10)};
-    metric.components=rows.map(row=>({key:`credit:${row.id}`,label:row.businessName,value:Number(row.amount),date:row.chargeDate!.toISOString().slice(0,10),detail:`${row.card?.name??"ללא כרטיס"} · ${row.creditImport.fileName}`,to:`/accounts?tab=credit&import=${row.creditImportId}`}));
-    metric.sources.push({key:"documents",label:"מסמכי המקור",to:"/data?tab=documents"});
+    metric.components=rows.map(row=>({key:`credit:${row.id}`,label:row.businessName,value:Number(row.amount),date:row.chargeDate!.toISOString().slice(0,10),detail:`${row.card?.name??"ללא כרטיס"} · ${row.creditImport.fileName}`,to:`/accounts?tab=credit&importId=${row.creditImportId}`}));
+    metric.sources.push({key:"documents",label:"מסמכי המקור",to:"/documents"});
     return metric;
   }
   if (monthly) {
@@ -62,7 +62,7 @@ export async function financialMetric(userId: number, name: MetricName, month: s
       const take=pageSize-metric.components.length;
       if(!take)break;
       if(source===0) metric.components.push(...(await prisma.expense.findMany({where:expenseWhere,orderBy:{id:"asc"},skip,take})).map(r=>({key:`expense:${r.id}`,label:r.businessName||r.description||"הוצאה",value:Number(r.amount)*(name==="surplus"?-1:1),date:r.expenseDate.toISOString().slice(0,10),detail:r.source??"manual",to:`/transactions?tab=expenses&month=${month}&q=${encodeURIComponent(r.businessName??r.description??"")}`})));
-      if(source===1) metric.components.push(...(await prisma.creditTransaction.findMany({where:creditWhere,orderBy:{id:"asc"},skip,take})).map(r=>({key:`credit:${r.id}`,label:r.businessName,value:Number(r.amount)*(name==="surplus"?-1:1),date:r.billingDate.toISOString().slice(0,10),detail:"אשראי מאושר",to:`/accounts?tab=credit&import=${r.creditImportId}`})));
+      if(source===1) metric.components.push(...(await prisma.creditTransaction.findMany({where:creditWhere,orderBy:{id:"asc"},skip,take})).map(r=>({key:`credit:${r.id}`,label:r.businessName,value:Number(r.amount)*(name==="surplus"?-1:1),date:r.billingDate.toISOString().slice(0,10),detail:"אשראי מאושר",to:`/accounts?tab=credit&importId=${r.creditImportId}`})));
       if(source===2) metric.components.push(...(await prisma.income.findMany({where:incomeWhere,orderBy:{id:"asc"},skip,take})).map(r=>({key:`income:${r.id}`,label:r.description||"הכנסה",value:Number(r.amount),date:r.incomeDate.toISOString().slice(0,10),to:`/transactions?tab=incomes&month=${month}`})));
       skip=0;
     }

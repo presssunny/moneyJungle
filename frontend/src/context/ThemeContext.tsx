@@ -1,4 +1,3 @@
-import { PRODUCT_NAME } from "../app/brand";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { api } from "../services/api";
 import { isLoggedIn } from "../services/gate.service";
@@ -63,11 +62,6 @@ export const THEMES: Array<{ id: ThemeName; label: string; hint: string; swatche
     swatches: ["#7C3AED", "#2563EB", "#059669", "#FFFFFF"],
   },
 ];
-
-/** Product identity is independent of the visual theme. */
-export function themeBrand(_theme: ThemeName): string {
-  return PRODUCT_NAME;
-}
 
 const THEME_KEY = "app_theme";
 

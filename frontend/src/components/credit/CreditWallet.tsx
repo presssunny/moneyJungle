@@ -31,7 +31,7 @@ export function CreditWallet({ monthKey, revision, imports, onChanged, onImport 
   const [message, setMessage] = useState("");
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("");
-  const resource = useAsync(() => getWallet(monthKey), [monthKey, revision]);
+  const resource = useAsync(() => getWallet(monthKey), [monthKey, revision], undefined, ["credit","imports","documents","categories"]);
   const selectCard = (value: string) => {
     setParams((old) => { const next = new URLSearchParams(old); next.set("card", value); return next; }, { replace: true });
     setSearch(""); setCategory("");

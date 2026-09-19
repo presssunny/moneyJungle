@@ -17,7 +17,7 @@ const SEVERITY_ICONS: Record<Alert["severity"], string> = {
 };
 
 export default function AlertsPage() {
-  const alerts = useAsync(() => listAlerts(), [], "לא הצלחנו לטעון את ההתראות");
+  const alerts = useAsync(() => listAlerts(), [], "לא הצלחנו לטעון את ההתראות", ["alerts","financial"]);
 
   async function readAll() {
     await markAllAlertsRead();

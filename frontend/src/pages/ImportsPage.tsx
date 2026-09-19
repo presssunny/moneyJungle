@@ -1,2 +1,2 @@
-import { Navigate } from "react-router-dom";
-export default function ImportsPage(){return <Navigate to="/imports" replace/>;}
+import { LegacyRedirect } from "../components/common/LegacyRedirect";
+export default function ImportsPage(){return <LegacyRedirect to="/imports"/>;}

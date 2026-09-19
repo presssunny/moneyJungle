@@ -65,7 +65,7 @@ export default function CrmCustomerDetailPage() {
   const customerId = Number(id);
   const isAdmin = currentUser()?.role === "ADMIN";
   const isSelf = currentUser()?.id === customerId;
-  const detail = useAsync(() => getCrmCustomer(customerId), [customerId], "לא הצלחנו לטעון את כרטיס הלקוח");
+  const detail = useAsync(() => getCrmCustomer(customerId), [customerId], "לא הצלחנו לטעון את כרטיס הלקוח", ["crm"]);
   const confirm = useConfirm();
 
   const [editOpen, setEditOpen] = useState(false);

@@ -1,16 +1,15 @@
 import { MANAGE_NAV, PRIMARY_NAV } from "../../app/navigation";
-import { themeBrand, useTheme } from "../../context/ThemeContext";
+import { PRODUCT_NAME } from "../../app/brand";
 import { currentUser } from "../../services/gate.service";
 import { SidebarItem } from "./SidebarItem";
 
 export function Sidebar() {
-  const { theme } = useTheme();
   const role = currentUser()?.role;
   const canSeeCrm = role === "ADMIN" || role === "VIEWER";
   return (
     <aside className="sidebar">
       <div className="sidebar-logo mono">
-        <span aria-hidden>💰</span> {themeBrand(theme)}
+        <span aria-hidden>💰</span> {PRODUCT_NAME}
       </div>
       <nav className="sidebar-nav" aria-label="ניווט ראשי">
         {PRIMARY_NAV.map((item) => (
