@@ -61,8 +61,10 @@ export async function financialStatus(userId: number) {
   if (pendingDates) blockers.push("יש עסקאות אשראי ללא מועד חיוב או כרטיס — לא ניתן לקבוע התחייבות מלאה");
   if (financing) blockers.push("יש עסקאות מימון שטרם הותאמו להתחייבות ההחזר — לא ניתן לקבוע את סכום התשלום המלא");
   if (events.some(e => !e.decision || (e.amount === null && e.decision === "unpaid"))) blockers.push("יש להשלים סכומים ולבדוק אילו התחייבויות כבר שולמו או חופפות");
-  if (coverage?.date !== today || coverage.dataVersion !== dataVersion) blockers.push("יש לאשר שהמקורות וההתחייבויות מעודכנים להיום");
-  if (sources.some(s => !coverage?.sources?.some(c => c.key === s.key && c.revision === s.revision))) blockers.push("יש לבדוק ולאשר עדכניות לכל חשבון וכרטיס בנפרד");
+  const coverageStale = coverage?.date !== today || coverage.dataVersion !== dataVersion;
+  const coverageSourcesStale = sources.some(s => !coverage?.sources?.some(c => c.key === s.key && c.revision === s.revision));
+  if (coverageStale) blockers.push("יש לאשר שהמקורות וההתחייבויות מעודכנים להיום");
+  if (coverageSourcesStale) blockers.push("יש לבדוק ולאשר עדכניות לכל חשבון וכרטיס בנפרד");
   // Cash on a different account is not proof that the debit account can pay.
   if (accounts.length > 1) blockers.push("תכנון יומי משולב לכמה חשבונות אינו זמין בלי הקצאת החיובים לחשבון המשלם");
   const end = new Date(Date.UTC(Number(today.slice(0,4)), Number(today.slice(5,7)), 0)).toISOString().slice(0,10);
@@ -72,7 +74,10 @@ export async function financialStatus(userId: number) {
   const cash = balances.reduce((sum,b)=>sum+b.balance,0);
   const reserves = Number(profile.cashBuffer) + Number(profile.savedReserve) + futureCardReserve;
   const calculated = calculateAllowance(cash, reserves, Number(profile.essentialReserve), dates, unpaid.filter(e=>e.date<=end).map(e=>({date:e.date,amount:Math.max(0,e.amount!)})));
-  return { today, end, hasActivity: Boolean(expenses.length || incomes.length || bankRows.length || creditRows.length), dataVersion, profile, sources, balances, cards, events, issues, blockers,
+  // The one authoritative signal that the user has actually seen and confirmed
+  // the current coverage/limitations summary — not a client-supplied boolean.
+  const coverageAcknowledged = !coverageStale && !coverageSourcesStale;
+  return { today, end, hasActivity: Boolean(expenses.length || incomes.length || bankRows.length || creditRows.length), dataVersion, profile, sources, balances, cards, events, issues, blockers, coverageAcknowledged,
     allowance: { limitingDate: blockers.length ? null : calculated.limitingDate, amount: blockers.length ? null : calculated.daily, shortfall: blockers.length ? null : calculated.shortfall,
       state: blockers.length ? "unavailable" : "provisional", cash, reserves, essentialReserve: Number(profile.essentialReserve),
       formula: "בכל יום נבדקת היתרה לאחר כרית הביטחון, החיסכון ששוריין, חיובי אשראי עתידיים, התחייבויות שטרם שולמו והוצאות חיוניות. התקציב היומי הוא הנמוך מבין הסכומים האפשריים לאורך התקופה, כולל היום.",

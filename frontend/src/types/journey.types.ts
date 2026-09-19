@@ -6,7 +6,7 @@ export interface FinancialStatus {
  hasActivity:boolean;
  today:string;end:string;dataVersion:string;profile:Profile;
  balances:Array<{id:number;name:string;balance:number;explanation:string;anchor:{coverageTo:string;fileName:string}|null}>;
- cards:Array<{id:number;name:string}>;events:Commitment[];issues:ReviewItem[];blockers:string[];
+ cards:Array<{id:number;name:string}>;events:Commitment[];issues:ReviewItem[];blockers:string[];coverageAcknowledged:boolean;
  allowance:{amount:number|null;shortfall:number|null;state:string;cash:number;reserves:number;essentialReserve:number;formula:string;assumptions:string[]};
 }
 export interface ImportSession {

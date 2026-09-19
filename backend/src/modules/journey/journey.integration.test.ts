@@ -83,8 +83,12 @@ describe('persisted financial journey',()=>{
    if(!result.alreadyImported) await creditService.removeImport(userId,result.id);
  });
  it('cannot produce an allowance from missing bank data',async()=>{const status=await financialStatus(userId);expect(status.allowance.amount).toBeNull();expect(status.blockers.length).toBeGreaterThan(0);});
- it('marks setup complete only through server validation',async()=>{
+ it('marks setup complete only through a real server-verified coverage acknowledgement, not the client-sent reviewed flag',async()=>{
    const saved=await request(app).patch('/api/journey/profile').set(headers()).send({scope:{accountsListed:true,cardsListed:true,commitmentsListed:true,manualOnly:false}});expect(saved.status).toBe(200);
+   // The client claiming reviewed:true is not authoritative on its own — no coverage was ever acknowledged.
+   const bare=await request(app).post('/api/journey/onboarding/complete').set(headers()).send({reviewed:true});expect(bare.status).toBe(409);
+   const status=await request(app).get('/api/journey/status').set(headers());expect(status.status).toBe(200);
+   const ack=await request(app).post('/api/journey/coverage').set(headers()).send({dataVersion:status.body.dataVersion,confirmed:true,sourceKeys:status.body.sources.map((s:{key:string})=>s.key)});expect(ack.status).toBe(200);
    const done=await request(app).post('/api/journey/onboarding/complete').set(headers()).send({reviewed:true});expect(done.status).toBe(200);expect(done.body.onboarding).toBe('completed');
  });
  it('resumes one check-in and does not complete skipped steps',async()=>{

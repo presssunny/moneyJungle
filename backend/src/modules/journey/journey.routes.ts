@@ -45,6 +45,10 @@ journeyRoutes.post("/onboarding/complete",asyncHandler(async(req,res)=>{
   res.json(await withFinancialTransaction(req.userId!,async()=>{
     const state=await financialStatus(req.userId!);
     if(!state.profile.scope || state.issues.some(i=>i.blocking)) throw ApiError.conflict("יש להגדיר את המקורות ולהשלים את הקליטה והבדיקה לפני סיום ההיכרות");
+    // `reviewed:true` alone is a client claim, not proof; the server requires a
+    // real coverage acknowledgement recorded via POST /journey/coverage that
+    // still matches the current data — stale or missing coverage blocks completion.
+    if(!state.coverageAcknowledged) throw ApiError.conflict("יש לאשר את סיכום הכיסוי והמגבלות העדכני לפני סיום ההיכרות");
     const sessions=await prisma.importSession.findMany({where:{userId:req.userId!,status:"completed"}});
     const completed=(await Promise.all(sessions.map(s=>sessionSourceExists(req.userId!,s.result)))).filter(Boolean).length;
     const manual=await prisma.expense.count({where:{userId:req.userId!}})+await prisma.income.count({where:{userId:req.userId!}});
