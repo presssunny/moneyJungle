@@ -25,6 +25,14 @@ export const UPCOMING_WINDOW_DAYS = 45;
 export const HEAVY_DAY_SHARE = 0.3;
 /** Below this a missing category is noise, not a habit worth an alert. */
 export const UNCATEGORIZED_MIN_ROWS = 5;
+/** A charge this many times the personal baseline average is worth a second look. */
+export const HIGH_CHARGE_MULTIPLIER = 3;
+/** Floor so a multiple of a tiny baseline (e.g. avg 5 ₪) doesn't alert on noise. */
+export const HIGH_CHARGE_MIN_AMOUNT = 300;
+/** Below this many prior rows the average isn't a personal baseline yet. */
+export const HIGH_CHARGE_MIN_HISTORY_ROWS = 10;
+/** Trailing window the baseline average is computed over. */
+export const HIGH_CHARGE_BASELINE_MONTHS = 3;
 
 interface DetectedAlert {
   type: AlertType;
@@ -168,6 +176,63 @@ export async function scanForAlerts(userId: number): Promise<void> {
       message: `${uncategorized.length} הוצאות בסך ${formatILS(missingTotal)} עדיין בלי קטגוריה החודש — בלעדיהן הפילוח והתקציבים חלקיים.`,
       severity: "info",
     });
+  }
+
+  // A single charge worth far more than this person's usual credit spending —
+  // baseline is their own trailing-3-month average, not a fixed number, so it
+  // adapts per household. `financing` (revolving credit) and unconfirmed
+  // imports are excluded, same as every other credit sum in the app (CLAUDE.md
+  // §5): a rolling-credit line is not a spending spike, and a draft import is
+  // not a statement she stands behind yet.
+  const baselineStart = new Date(Date.UTC(year, month - 1 - HIGH_CHARGE_BASELINE_MONTHS, 1));
+  const baselineRows = await prisma.creditTransaction.findMany({
+    where: { userId, billingDate: { gte: baselineStart, lt: start }, transactionType: { not: "financing" }, creditImport: { status: "confirmed" } },
+    select: { amount: true },
+  });
+  const baselineAvg = baselineRows.length ? baselineRows.reduce((sum, row) => sum + decimalToNumber(row.amount), 0) / baselineRows.length : 0;
+  if (baselineRows.length >= HIGH_CHARGE_MIN_HISTORY_ROWS && baselineAvg > 0) {
+    const threshold = Math.max(baselineAvg * HIGH_CHARGE_MULTIPLIER, HIGH_CHARGE_MIN_AMOUNT);
+    for (const row of monthCredit) {
+      const amount = decimalToNumber(row.amount);
+      if (amount <= threshold) continue;
+      detected.push({
+        type: "high_credit_charge",
+        title: `חיוב גבוה מהרגיל: ${row.businessName}`,
+        message: `חיוב של ${formatILS(round2(amount))} אצל ${row.businessName} — פי ${Math.round(amount / baselineAvg)} מהחיוב הממוצע (${formatILS(round2(baselineAvg))}) בשלושת החודשים האחרונים.`,
+        severity: "info",
+      });
+    }
+  }
+
+  // Two expense rows nobody's import created (same amount, same date, same
+  // business name) — the classic double-tap-submit or "typed it in twice by
+  // hand" mistake. Import commits already dedupe themselves at the source
+  // (`skippedDuplicates` in smartImport/bank/credit services), so a row an
+  // import created (`importRowId` set) can never collide with itself here;
+  // this only ever catches human double-entry. Credit-card purchases can't
+  // collide with this either — they never become `Expense` rows (read-time
+  // merge only, CLAUDE.md §4), so a normal bank+credit import raises nothing.
+  const manualExpenses = monthExpenses.filter((row) => row.importRowId === null);
+  const seenDuplicateGroups = new Set<string>();
+  for (let i = 0; i < manualExpenses.length; i++) {
+    for (let j = i + 1; j < manualExpenses.length; j++) {
+      const a = manualExpenses[i];
+      const b = manualExpenses[j];
+      const name = a.businessName?.trim() || a.description?.trim();
+      if (!name) continue;
+      if (name !== (b.businessName?.trim() || b.description?.trim())) continue;
+      if (decimalToNumber(a.amount) !== decimalToNumber(b.amount)) continue;
+      if (a.expenseDate.getTime() !== b.expenseDate.getTime()) continue;
+      const groupKey = `${name}|${decimalToNumber(a.amount)}|${a.expenseDate.toISOString()}`;
+      if (seenDuplicateGroups.has(groupKey)) continue;
+      seenDuplicateGroups.add(groupKey);
+      detected.push({
+        type: "duplicate_transaction",
+        title: `כפילות אפשרית: ${name}`,
+        message: `שתי הוצאות זהות ב-${formatDayMonth(a.expenseDate)}: ${name}, ${formatILS(decimalToNumber(a.amount))} כל אחת. ייתכן שנרשמה פעמיים בטעות.`,
+        severity: "info",
+      });
+    }
   }
 
   if (detected.length === 0) return;

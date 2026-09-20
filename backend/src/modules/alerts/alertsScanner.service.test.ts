@@ -11,6 +11,7 @@ import { buildUpcoming } from "../dashboard/cashflow.service";
 import {
   AlertType,
   HEAVY_DAY_SHARE,
+  HIGH_CHARGE_MIN_HISTORY_ROWS,
   scanForAlerts,
   UNCATEGORIZED_MIN_ROWS,
   UPCOMING_WINDOW_DAYS,
@@ -42,6 +43,12 @@ function daysFromToday(days: number): Date {
 function midCurrentMonth(): Date {
   const now = new Date();
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 15));
+}
+
+/** A date safely inside the month `n` months before the current one. */
+function midMonthsAgo(n: number): Date {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - n, 15));
 }
 
 beforeAll(async () => {
@@ -262,5 +269,158 @@ describe("uncategorized_expense", () => {
 
     await scanForAlerts(userId);
     expect(await alertsOfType(userId, "uncategorized_expense")).toHaveLength(0);
+  });
+});
+
+describe("high_credit_charge", () => {
+  async function seedCreditImport(
+    userId: number,
+    rows: Array<{ amount: number; businessName: string; date: Date; type?: string }>,
+    confirmed = true
+  ): Promise<void> {
+    const date = rows[0].date;
+    const creditImport = await prisma.creditImport.create({
+      data: { userId, fileName: "test.xlsx", importMonth: date.getUTCMonth() + 1, importYear: date.getUTCFullYear(), status: confirmed ? "confirmed" : "pending" },
+    });
+    await prisma.creditTransaction.createMany({
+      data: rows.map((r) => ({
+        userId,
+        creditImportId: creditImport.id,
+        transactionDate: r.date,
+        billingDate: r.date,
+        businessName: r.businessName,
+        amount: r.amount,
+        transactionType: r.type ?? "regular",
+      })),
+    });
+  }
+
+  it("מתריע על חיוב גבוה משמעותית מהממוצע האישי בשלושת החודשים האחרונים", async ({ skip }) => {
+    if (!dbUp) skip("MariaDB אינו זמין — יש להריץ bash backend/start-db.sh");
+    const userId = await createUser("highcharge");
+    for (let i = 0; i < HIGH_CHARGE_MIN_HISTORY_ROWS; i++) {
+      await seedCreditImport(userId, [{ amount: 100, businessName: `עסק ${i}`, date: midMonthsAgo(1 + (i % 3)) }]);
+    }
+    await seedCreditImport(userId, [
+      { amount: 90, businessName: "רגיל", date: midCurrentMonth() },
+      { amount: 900, businessName: "חנות ריהוט", date: midCurrentMonth() },
+    ]);
+
+    await scanForAlerts(userId);
+    const alerts = await alertsOfType(userId, "high_credit_charge");
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0].title).toBe("חיוב גבוה מהרגיל: חנות ריהוט");
+    expect(alerts[0].severity).toBe("info");
+
+    await scanForAlerts(userId);
+    expect(await alertsOfType(userId, "high_credit_charge")).toHaveLength(1);
+  });
+
+  it("לא מתריע בלי מספיק היסטוריה אישית, גם על חיוב ענק", async ({ skip }) => {
+    if (!dbUp) skip("MariaDB אינו זמין — יש להריץ bash backend/start-db.sh");
+    const userId = await createUser("nohistory");
+    await seedCreditImport(userId, [{ amount: 5000, businessName: "חנות ריהוט", date: midCurrentMonth() }]);
+    await scanForAlerts(userId);
+    expect(await alertsOfType(userId, "high_credit_charge")).toHaveLength(0);
+  });
+
+  it("לא מתריע על אשראי מתגלגל (financing) או על ייבוא שלא אושר", async ({ skip }) => {
+    if (!dbUp) skip("MariaDB אינו זמין — יש להריץ bash backend/start-db.sh");
+    const userId = await createUser("financing");
+    for (let i = 0; i < HIGH_CHARGE_MIN_HISTORY_ROWS; i++) {
+      await seedCreditImport(userId, [{ amount: 100, businessName: `עסק ${i}`, date: midMonthsAgo(1 + (i % 3)) }]);
+    }
+    await seedCreditImport(userId, [{ amount: 5000, businessName: "אשראי מתגלגל", date: midCurrentMonth(), type: "financing" }]);
+    await seedCreditImport(userId, [{ amount: 5000, businessName: "חנות לא מאושרת", date: midCurrentMonth() }], false);
+
+    await scanForAlerts(userId);
+    expect(await alertsOfType(userId, "high_credit_charge")).toHaveLength(0);
+  });
+});
+
+describe("duplicate_transaction", () => {
+  it("מתריע כששתי הוצאות ידניות זהות (סכום, תאריך ושם עסק) נרשמות", async ({ skip }) => {
+    if (!dbUp) skip("MariaDB אינו זמין — יש להריץ bash backend/start-db.sh");
+    const userId = await createUser("dupmanual");
+    const date = midCurrentMonth();
+    await prisma.expense.createMany({
+      data: [
+        { userId, amount: 150, expenseDate: date, businessName: "סופרמרקט", source: "manual" },
+        { userId, amount: 150, expenseDate: date, businessName: "סופרמרקט", source: "manual" },
+      ],
+    });
+
+    await scanForAlerts(userId);
+    const alerts = await alertsOfType(userId, "duplicate_transaction");
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0].title).toBe("כפילות אפשרית: סופרמרקט");
+    expect(alerts[0].severity).toBe("info");
+
+    // A third, unrelated manual expense must not create a second finding.
+    await prisma.expense.create({ data: { userId, amount: 40, expenseDate: date, businessName: "אחר" } });
+    await scanForAlerts(userId);
+    expect(await alertsOfType(userId, "duplicate_transaction")).toHaveLength(1);
+  });
+
+  it("לא מתריע כשהשם, הסכום או התאריך שונים", async ({ skip }) => {
+    if (!dbUp) skip("MariaDB אינו זמין — יש להריץ bash backend/start-db.sh");
+    const userId = await createUser("nodup");
+    const date = midCurrentMonth();
+    await prisma.expense.createMany({
+      data: [
+        { userId, amount: 150, expenseDate: date, businessName: "סופרמרקט" },
+        { userId, amount: 151, expenseDate: date, businessName: "סופרמרקט" },
+        { userId, amount: 150, expenseDate: new Date(date.getTime() + 86400000), businessName: "סופרמרקט" },
+        { userId, amount: 150, expenseDate: date, businessName: "בית קפה" },
+      ],
+    });
+    await scanForAlerts(userId);
+    expect(await alertsOfType(userId, "duplicate_transaction")).toHaveLength(0);
+  });
+
+  it("לא מתריע על שורות שנוצרו מייבוא, גם אם הן זהות — הייבוא כבר מונע כפילות בעצמו", async ({ skip }) => {
+    if (!dbUp) skip("MariaDB אינו זמין — יש להריץ bash backend/start-db.sh");
+    const userId = await createUser("dupimport");
+    const session = await prisma.importSession.create({
+      data: { userId, fileName: "expenses.xlsx", fileHash: "hash", storagePath: "/tmp/x", kind: "expense_sheet" },
+    });
+    const rows = await Promise.all(
+      [1, 2].map((rowNumber) =>
+        prisma.importRow.create({ data: { sessionId: session.id, rowNumber, original: {}, normalized: {}, candidates: [] } })
+      )
+    );
+    const date = midCurrentMonth();
+    for (const row of rows) {
+      await prisma.expense.create({ data: { userId, amount: 150, expenseDate: date, businessName: "סופרמרקט", importRowId: row.id } });
+    }
+    await scanForAlerts(userId);
+    expect(await alertsOfType(userId, "duplicate_transaction")).toHaveLength(0);
+  });
+
+  /**
+   * The discriminating case: a credit-card purchase never becomes an `Expense`
+   * row (read-time merge only, CLAUDE.md §4), and its bank-side settlement is
+   * `credit_card_settled`, not `expense` — so a normal bank+credit import for
+   * the same amount/date raises nothing here, even though the two clearly
+   * "match" on amount and date.
+   */
+  it("ייבוא רגיל של בנק ואשראי לאותו חודש לא יוצר אף התרעת כפילות", async ({ skip }) => {
+    if (!dbUp) skip("MariaDB אינו זמין — יש להריץ bash backend/start-db.sh");
+    const userId = await createUser("bankcredit");
+    const date = midCurrentMonth();
+    const account = await prisma.bankAccount.create({ data: { userId, bankName: "test", accountName: "test" } });
+    await prisma.bankTransaction.create({
+      data: { userId, bankAccountId: account.id, transactionDate: date, amount: 500, type: "withdrawal", resolution: "credit_card_settled", description: "ויזה 1234" },
+    });
+    const card = await prisma.creditCard.create({ data: { userId, name: "test", issuer: "test", lastFour: "1234" } });
+    const creditImport = await prisma.creditImport.create({
+      data: { userId, fileName: "test.xlsx", importMonth: date.getUTCMonth() + 1, importYear: date.getUTCFullYear(), status: "confirmed" },
+    });
+    await prisma.creditTransaction.create({
+      data: { userId, cardId: card.id, creditImportId: creditImport.id, transactionDate: date, billingDate: date, chargeDate: date, businessName: "סופרמרקט", amount: 500 },
+    });
+
+    await scanForAlerts(userId);
+    expect(await alertsOfType(userId, "duplicate_transaction")).toHaveLength(0);
   });
 });
