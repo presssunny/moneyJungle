@@ -1,3 +1,4 @@
+import { useId } from "react";
 import type { InputHTMLAttributes } from "react";
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
@@ -6,7 +7,8 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
 }
 
 export function Input({ label, error, className = "", id, ...rest }: InputProps) {
-  const inputId = id ?? (label ? `input-${label}` : undefined);
+  const generatedId = useId();
+  const inputId = id ?? generatedId;
   return (
     <div className="field">
       {label && (
@@ -14,8 +16,8 @@ export function Input({ label, error, className = "", id, ...rest }: InputProps)
           {label}
         </label>
       )}
-      <input id={inputId} className={`field-input ${error ? "field-invalid" : ""} ${className}`} {...rest} />
-      {error && <div className="field-error">{error}</div>}
+      <input aria-invalid={error ? true : undefined} aria-describedby={error ? `${inputId}-error` : undefined} id={inputId} className={`field-input ${error ? "field-invalid" : ""} ${className}`} {...rest} />
+      {error && <div id={`${inputId}-error`} className="field-error">{error}</div>}
     </div>
   );
 }

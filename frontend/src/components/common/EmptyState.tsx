@@ -1,3 +1,4 @@
+import { Icon } from "./Icon";
 import type { ReactNode } from "react";
 
 interface EmptyStateProps {
@@ -10,7 +11,7 @@ interface EmptyStateProps {
 export function EmptyState({ icon = "🗂️", title, hint, action }: EmptyStateProps) {
   return (
     <div className="empty-state">
-      <div className="empty-state-icon">{icon}</div>
+      <div className="empty-state-icon"><Icon name={icon} size={28}/></div>
       <div className="empty-state-title">{title}</div>
       {hint && <div className="empty-state-hint">{hint}</div>}
       {action && <div className="empty-state-action">{action}</div>}

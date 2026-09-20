@@ -1,3 +1,4 @@
+import { Icon } from "./Icon";
 import { useRef, useState, type DragEvent } from "react";
 
 interface DropZoneProps {
@@ -57,7 +58,7 @@ export function DropZone({
       aria-busy={busy}
     >
       <span className="dropzone-icon" aria-hidden>
-        {busy ? "⏳" : icon}
+        <Icon name={busy ? "transactions" : icon === "📥" ? "upload" : icon} size={28}/>
       </span>
       <span className="dropzone-title">{busy ? "מעלה ומעבד..." : title}</span>
       {hint && !busy && <span className="dropzone-hint">{hint}</span>}

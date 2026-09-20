@@ -1,3 +1,4 @@
+import { Icon } from "./Icon";
 import { useId, useRef, type KeyboardEvent, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 
@@ -14,7 +15,7 @@ export interface HubTab {
  * linkable and survive refresh). Only the active tab is mounted, so each screen
  * fetches fresh data when selected — matching how the standalone pages behaved.
  */
-export function TabbedHub({ tabs }: { tabs: HubTab[] }) {
+export function TabbedHub({ tabs, overview }: { tabs: HubTab[]; overview?: ReactNode }) {
   const hubId = useId();
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const [params, setParams] = useSearchParams();
@@ -60,11 +61,12 @@ export function TabbedHub({ tabs }: { tabs: HubTab[] }) {
               onClick={() => selectTab(tab.key)}
               onKeyDown={(e) => onKeyDown(e, index)}
             >
-              <span aria-hidden>{tab.icon}</span> {tab.label}
+              <Icon name={tab.icon}/> {tab.label}
             </button>
           );
         })}
       </div>
+      {overview}
       <div
         className="hub-panel"
         role="tabpanel"

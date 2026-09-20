@@ -4,6 +4,7 @@ export interface Column<T> {
   key: string;
   header: string;
   render: (row: T) => ReactNode;
+  priority?: "primary" | "amount" | "secondary";
   align?: "right" | "left" | "center";
 }
 
@@ -14,9 +15,10 @@ interface TableProps<T> {
   emptyState?: ReactNode;
   /** Rows per page. 0 or negative disables pagination. Default 15. */
   pageSize?: number;
+  variant?: "default" | "ledger";
 }
 
-export function Table<T>({ columns, rows, rowKey, emptyState, pageSize = 15 }: TableProps<T>) {
+export function Table<T>({ columns, rows, rowKey, emptyState, pageSize = 15, variant = "default" }: TableProps<T>) {
   const paginate = pageSize > 0 && rows.length > pageSize;
   const totalPages = paginate ? Math.ceil(rows.length / pageSize) : 1;
   const [page, setPage] = useState(0);
@@ -36,25 +38,25 @@ export function Table<T>({ columns, rows, rowKey, emptyState, pageSize = 15 }: T
   return (
     <>
       <div className="table-wrap">
-        <table className="table">
-          <thead>
-            <tr>
+        <table className={`table table-${variant}`} role="table">
+          <thead role="rowgroup">
+            <tr role="row">
               {columns.map((col) => (
-                <th key={col.key} style={{ textAlign: col.align ?? "right" }}>
+                <th role="columnheader" scope="col" key={col.key} style={{ textAlign: col.align ?? "right" }}>
                   {col.header}
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody>
+          <tbody role="rowgroup">
             {visibleRows.map((row) => (
-              <tr key={rowKey(row)}>
+              <tr role="row" key={rowKey(row)}>
                 {columns.map((col) => (
                   // `data-label` carries the column header down to narrow
                   // screens, where CSS turns each row into a card and shows the
                   // header beside its value (IA §8.2 — no horizontal scrolling
                   // on mobile). One attribute here fixes every table in the app.
-                  <td key={col.key} data-label={col.header} style={{ textAlign: col.align ?? "right" }}>
+                  <td role="cell" key={col.key} data-column={col.key} data-priority={col.priority} data-label={col.header} style={{ textAlign: col.align ?? "right" }}>
                     {col.render(row)}
                   </td>
                 ))}

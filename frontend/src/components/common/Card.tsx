@@ -12,7 +12,7 @@ export function Card({ title, action, children, className = "" }: CardProps) {
     <section className={`card ${className}`}>
       {(title || action) && (
         <div className="card-header">
-          {title && <h3 className="card-title">{title}</h3>}
+          {title && <h2 className="card-title">{title}</h2>}
           {action}
         </div>
       )}

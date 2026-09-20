@@ -15,6 +15,9 @@ export function Modal({ title, open, onClose, children, footer, size = "default"
   const dialogRef = useRef<HTMLDivElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
 
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+
   useEffect(() => {
     if (!open) return;
 
@@ -31,7 +34,7 @@ export function Modal({ title, open, onClose, children, footer, size = "default"
 
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
-        onClose();
+        onCloseRef.current();
         return;
       }
       // Simple focus trap on Tab
@@ -58,7 +61,7 @@ export function Modal({ title, open, onClose, children, footer, size = "default"
       document.body.classList.remove("modal-open");
       previouslyFocused.current?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
@@ -70,6 +73,7 @@ export function Modal({ title, open, onClose, children, footer, size = "default"
         aria-modal="true"
         aria-labelledby={titleId}
         ref={dialogRef}
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal-header">

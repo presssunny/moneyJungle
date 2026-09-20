@@ -1,3 +1,4 @@
+import { Icon } from "./Icon";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -9,7 +10,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 export function Button({ variant = "primary", size = "md", className = "", children, ...rest }: ButtonProps) {
   return (
     <button className={`btn btn-${variant} btn-${size} ${className}`} {...rest}>
-      {children}
+      {typeof children === "string" && ["✏️", "🗑️"].includes(children.trim()) ? <Icon name={children.trim()} size={18}/> : children}
     </button>
   );
 }

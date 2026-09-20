@@ -39,7 +39,7 @@ export function FinancialPicturePanel({picture,compact=false,onSaved}:{picture:F
  const next=picture.next;const usefulNext=next&&next.priority<80;
  if(compact&&picture.sufficient&&!usefulNext)return <p className="picture-quiet"><span>✓ המידע נבדק להיום</span><Link to="/onboarding">מה כלול בתמונה שלי?</Link></p>;
  const title=picture.stage==='empty'?'בונים יחד את תמונת הכסף שלך':picture.stage==='reviewed'?'התמונה נבדקה להיום':picture.stage==='maintain'?'נשמור על התמונה מעודכנת':'התמונה שלך כבר מתחילה להתבהר';
- return <div className="financial-picture">
+ return <div className={`financial-picture ${compact?"financial-picture-compact":""}`}>
   <Card className="picture-lead">
    <div className="picture-heading"><span aria-hidden="true">◎</span><div><p className="picture-kicker">{picture.hasUsefulData?'אפשר כבר לעקוב אחרי המידע שנרשם':'בקצב שלך, לפי מה שרלוונטי לך'}</p><h2>{compact&&picture.stage==='maintain'?'עדכון שכדאי לבדוק':title}</h2></div></div>
    {next?<div className="picture-next"><h3>{next.title}</h3><p>{next.reason}</p><Link className="btn btn-primary btn-md" to={next.to}>{next.id==='situation'?'נתחיל מהתמונה שלי':'לצעד הבא'} <span aria-hidden="true">←</span></Link></div>:<p>אין כרגע השלמה נדרשת. אפשר להמשיך לעקוב ולהוסיף מידע כשמשהו משתנה.</p>}
