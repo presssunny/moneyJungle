@@ -30,7 +30,10 @@ export default function ReportsHubPage() {
 
   return (
     <>
-      {params.get("tab") !== "forecast" && <div className="kpi-row">
+
+
+      <TabbedHub
+        overview={params.get("tab") !== "forecast" && <div className="kpi-row">
         <AsyncSection
           resource={trendRes}
           errorTitle="לא הצלחנו לטעון את הדוח"
@@ -92,8 +95,6 @@ export default function ReportsHubPage() {
           )}
         </AsyncSection>
       </div>}
-
-      <TabbedHub
         tabs={[
           { key: "monthly", label: "דוח חודשי", icon: "📈", element: <ReportsPage /> },
           { key: "comparison", label: "השוואת חודשים", icon: "⚖️", element: <ComparisonPage /> },

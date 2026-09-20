@@ -20,7 +20,7 @@ export function CategoryPieChart({ data }: { data: CategorySlice[] }) {
     <div className="pie-layout">
       <ResponsiveContainer width="50%" height={230}>
         <PieChart>
-          <Pie
+          <Pie isAnimationActive={false}
             data={slices}
             dataKey="value"
             nameKey="name"

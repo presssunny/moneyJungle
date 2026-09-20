@@ -65,19 +65,8 @@ export default function ForecastPage() {
               {scenarioActive && metric === "balance" && <Line dataKey="scenario" name="התרחיש שלי" stroke={chrome.danger} strokeWidth={2} strokeDasharray="3 3" dot={false} isAnimationActive={false} />}
             </LineChart></ResponsiveContainer>
           </Card>
-          <Card title="בחירת חודש לפירוט">
-            <div className="future-months">{data.months.map((row, index) => <button type="button" key={row.monthKey} aria-pressed={selected === index} onClick={() => setSelected(index)} className="future-month"><span>{formatMonthKey(row.monthKey)}</span><strong>{money(scenarioActive ? row.scenarioBalance : row.balance)}</strong></button>)}</div>
-            <div className="future-detail" aria-live="polite"><h3>{formatMonthKey(month.monthKey)}</h3>
-              <p>הכנסה משוערת: {money(month.incomeTotal)} · הוצאה משוערת: {money(month.expenseTotal)} · עודף משוער: {money(month.balance)}</p>
-              {scenarioActive && <p>עודף בתרחיש שלך: <strong>{money(month.scenarioBalance)}</strong></p>}
-              <details><summary>תשלומים רשומים לחודש הזה ({commitments.events.length})</summary>
-                <p className="text-muted">רשימה נפרדת שאינה מתווספת לאומדן: חלק מהחיובים כבר נכללים בעבר. יש לבדוק רישום כפול בין מנויים לתשלומים קבועים. סכומי תזכורות והלוואות עשויים להיות משוערים.</p>
-                {commitments.events.length ? <ul className="future-events">{commitments.events.map((event, i) => <li key={`${event.date}-${i}`}><span>{formatDate(event.date)} · {event.name}</span><strong>{money(event.amount)}</strong></li>)}</ul> : <p>אין תשלומים רשומים לחודש הזה; אין בכך אישור שלא יהיו הוצאות.</p>}
-              </details>
-            </div>
-          </Card>
           <Card title="מה יקרה אם…">
-            <p className="text-muted">{saved ? "התרחיש שחושב ובחירת חודשי ההשוואה נשמרים בדפדפן הזה, בחשבון שלך, עד סוף החודש הנוכחי." : "השמירה בדפדפן אינה זמינה; התרחיש נשמר רק כל עוד המסך פתוח."}</p>
+            <details className="metric-explanation"><summary>שמירת התרחיש</summary><p className="text-muted">{saved ? "התרחיש שחושב ובחירת חודשי ההשוואה נשמרים בדפדפן הזה, בחשבון שלך, עד סוף החודש הנוכחי." : "השמירה בדפדפן אינה זמינה; התרחיש נשמר רק כל עוד המסך פתוח."}</p></details>
             <p className="text-muted">שינוי חודשי חל בכל 12 חודשי התחזית. מספר שלילי מציין הפחתה. ההדמיה אינה משנה עסקאות או תקציב.</p>
             <form onSubmit={(e) => { e.preventDefault(); setScenario({ ...draft }); }}>
               <div className="future-form">
@@ -89,6 +78,17 @@ export default function ForecastPage() {
               <div className="row-actions"><Button type="submit" disabled={!data.sufficient}>בדיקת ההשפעה</Button><Button type="button" variant="ghost" onClick={() => { setDraft(initial); setScenario(initial); }}>איפוס</Button></div>
             </form>
             {scenarioActive && <p role="status">העודף השנתי בתרחיש: <strong>{money(data.scenarioAnnualBalance)}</strong> לעומת {money(data.annualBalance)} בתחזית הבסיס.</p>}
+          </Card>
+          <Card title="בחירת חודש לפירוט">
+            <div className="future-months">{data.months.map((row, index) => <button type="button" key={row.monthKey} aria-pressed={selected === index} onClick={() => setSelected(index)} className="future-month"><span>{formatMonthKey(row.monthKey)}</span><strong>{money(scenarioActive ? row.scenarioBalance : row.balance)}</strong></button>)}</div>
+            <div className="future-detail" aria-live="polite"><h3>{formatMonthKey(month.monthKey)}</h3>
+              <p>הכנסה משוערת: {money(month.incomeTotal)} · הוצאה משוערת: {money(month.expenseTotal)} · עודף משוער: {money(month.balance)}</p>
+              {scenarioActive && <p>עודף בתרחיש שלך: <strong>{money(month.scenarioBalance)}</strong></p>}
+              <details><summary>תשלומים רשומים לחודש הזה ({commitments.events.length})</summary>
+                <p className="text-muted">רשימה נפרדת שאינה מתווספת לאומדן: חלק מהחיובים כבר נכללים בעבר. יש לבדוק רישום כפול בין מנויים לתשלומים קבועים. סכומי תזכורות והלוואות עשויים להיות משוערים.</p>
+                {commitments.events.length ? <ul className="future-events">{commitments.events.map((event, i) => <li key={`${event.date}-${i}`}><span>{formatDate(event.date)} · {event.name}</span><strong>{money(event.amount)}</strong></li>)}</ul> : <p>אין תשלומים רשומים לחודש הזה; אין בכך אישור שלא יהיו הוצאות.</p>}
+              </details>
+            </div>
           </Card>
           {!tipHidden && <Card title="צעד אחד להמשך" action={<Button variant="ghost" size="sm" onClick={() => setTipHidden(true)}>הסתרה</Button>}>
             {!data.sufficient ? <p>השלמת חודשים חסרים תאפשר להשוות תקופות בלי להניח שחודש חסר הוא חודש ללא הוצאות.</p> : data.annualBalance !== null && data.annualBalance < 0 ? <p>לפי הנתונים הרשומים, ההוצאות הממוצעות גבוהות מההכנסות. אפשר לבדוק למעלה איך שינוי חודשי משפיע על הפער.</p> : <p>אפשר לבדוק הפחתה חודשית קטנה בהוצאות ולראות כמה היא מוסיפה לעודף השנתי. עודף צפוי אינו כסף שכבר נחסך.</p>}

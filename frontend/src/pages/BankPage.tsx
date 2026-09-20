@@ -229,11 +229,12 @@ export default function BankPage() {
   }
 
   const txColumns: Column<BankTransaction>[] = [
-    { key: "date", header: "תאריך", render: (row) => formatDate(row.transactionDate) },
-    { key: "desc", header: "תיאור", render: (row) => row.description || "—" },
-    { key: "type", header: "סוג", render: (row) => TX_TYPES.find((t) => t.value === row.type)?.label ?? row.type },
+    { key: "date", priority: "secondary", header: "תאריך", render: (row) => formatDate(row.transactionDate) },
+    { key: "desc", priority: "primary", header: "תיאור", render: (row) => row.description || "—" },
+    { key: "type", priority: "secondary", header: "סוג", render: (row) => TX_TYPES.find((t) => t.value === row.type)?.label ?? row.type },
     {
       key: "amount",
+      priority: "amount",
       header: "סכום",
       align: "left",
       render: (row) => (
@@ -273,6 +274,53 @@ export default function BankPage() {
         </>
       }
     >
+
+      <AsyncSection
+        resource={accountsRes}
+        errorTitle="לא הצלחנו לטעון את חשבונות הבנק"
+        skeleton={<SkeletonRows rows={2} />}
+        isEmpty={(data) => data.length === 0}
+        emptyState={
+          <Card>
+            <EmptyState
+              icon="🏦"
+              title="אין חשבונות בנק"
+              hint="גררי דף חשבון (עו״ש) — Excel או PDF — ונפתח חשבון אוטומטית"
+            />
+          </Card>
+        }
+      >
+        {(accountList) => (
+          <div className="bank-accounts-row">
+            {accountList.map((account) => (
+            <div key={account.id} className="bank-account-choice">
+            <button
+              type="button"
+              className={`bank-account-card ${account.id === selectedId ? "bank-account-active" : ""}`}
+              aria-pressed={account.id === selectedId}
+              onClick={() => setSelectedId(account.id)}
+            >
+              <span className="bank-account-name">🏦 {account.bankName} · {account.accountName}</span>
+              <span className={`bank-account-balance mono ${Number(account.currentBalance) < 0 ? "text-danger" : "text-success"}`}>
+                {formatCurrency(Number(account.currentBalance))}
+              </span>
+              <span className="text-muted">{account._count?.transactions ?? 0} תנועות</span>
+              </button>
+              <button type="button"
+                className="bank-account-delete"
+                aria-label={`מחיקת החשבון ${account.accountName}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  removeAccount(account);
+                }}
+              >
+                ✕
+              </button>
+            </div>
+            ))}
+          </div>
+        )}
+      </AsyncSection>
 
       {/* KPI (§6.3) — the selected account, inside the selected month. */}
       <div className="kpi-row">
@@ -326,10 +374,7 @@ export default function BankPage() {
       {selected?.balanceDetail?.basis === "accumulated" && (
         <Card title="היתרה לא מאומתת">
           <p className="settings-hint">
-            אף דף חשבון שיובא לא כלל עמודת יתרה, ולכן היתרה מחושבת כסכום כל התנועות — היא עלולה
-            להיות שגויה. אפשר לתקן בשתי דרכים: לייבא דף חשבון שכולל עמודת יתרה, או להזין כאן את
-            היתרה שמופיעה בבנק ואת התאריך שאליו היא נכונה. מאותו רגע היתרה תיגזר מהמספר הזה
-            ומהתנועות שאחריו בלבד.
+            כדי לדייק, יש להזין את היתרה שמופיעה בבנק ואת התאריך שלה, או להעלות דוח הכולל יתרה.
           </p>
           <form className="form-inline" onSubmit={submitAnchor}>
             <Input
@@ -347,74 +392,12 @@ export default function BankPage() {
               value={anchorForm.asOf}
               onChange={(e) => setAnchorForm({ ...anchorForm, asOf: e.target.value })}
             />
-            <Button type="submit">עיגון היתרה</Button>
+            <Button type="submit">עדכון היתרה</Button>
           </form>
         </Card>
       )}
 
-      <Card title={selected ? `ייבוא דף חשבון — ${selected.accountName}` : "ייבוא דף חשבון (עו״ש)"}>
-        {error && <ErrorMessage message={error} />}
-        <DropZone
-          onFile={handleDroppedFile}
-          busy={uploading}
-          accept=".xlsx,.xls,.csv,.pdf"
-          icon="🏦"
-          title="גררי לכאן דף חשבון (עו״ש) — Excel או PDF — או לחצי לבחירה"
-          hint={
-            selected
-              ? `הכנסות (זכות) והוצאות (חובה) ייקלטו לחשבון "${selected.accountName}" — ההוצאות יסווגו לפי חוקים, וכפילויות ידולגו. ב-PDF הסיווג להכנסה/הוצאה נגזר מהיתרה המתגלגלת — כדאי לעבור על התנועות אחרי הייבוא`
-              : "הכנסות (זכות) והוצאות (חובה) ייקלטו אוטומטית מ-Excel או PDF. אין עדיין חשבון? גררי קובץ ותנחי ליצור אחד — הייבוא יתחיל מיד אחריו"
-          }
-        />
-        {importMsg && <div className="info-banner" style={{ marginTop: 12 }}>{importMsg}</div>}
-      </Card>
 
-      <AsyncSection
-        resource={accountsRes}
-        errorTitle="לא הצלחנו לטעון את חשבונות הבנק"
-        skeleton={<SkeletonRows rows={2} />}
-        isEmpty={(data) => data.length === 0}
-        emptyState={
-          <Card>
-            <EmptyState
-              icon="🏦"
-              title="אין חשבונות בנק"
-              hint="גררי דף חשבון (עו״ש) — Excel או PDF — ונפתח חשבון אוטומטית"
-            />
-          </Card>
-        }
-      >
-        {(accountList) => (
-          <div className="bank-accounts-row">
-            {accountList.map((account) => (
-            <button
-              key={account.id}
-              type="button"
-              className={`bank-account-card ${account.id === selectedId ? "bank-account-active" : ""}`}
-              onClick={() => setSelectedId(account.id)}
-            >
-              <span className="bank-account-name">🏦 {account.bankName} · {account.accountName}</span>
-              <span className={`bank-account-balance mono ${Number(account.currentBalance) < 0 ? "text-danger" : "text-success"}`}>
-                {formatCurrency(Number(account.currentBalance))}
-              </span>
-              <span className="text-muted">{account._count?.transactions ?? 0} תנועות</span>
-              <span
-                className="bank-account-delete"
-                role="button"
-                tabIndex={0}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  removeAccount(account);
-                }}
-                onKeyDown={(e) => e.key === "Enter" && removeAccount(account)}
-              >
-                ✕
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
-      </AsyncSection>
 
       {selected && (
         <Card title={`תנועות — ${selected.accountName} · ${formatMonthKey(monthKey)}`}>
@@ -451,6 +434,7 @@ export default function BankPage() {
           >
             {() => (
               <Table
+                variant="ledger"
                 columns={txColumns}
                 rows={visibleTx}
                 rowKey={(row) => row.id}
@@ -485,6 +469,26 @@ export default function BankPage() {
           </AsyncSection>
         </Card>
       )}
+
+      <details className="home-analysis" open={!selected || uploading || !!importMsg || !!error || undefined}><summary>העלאת דף חשבון</summary>
+      <Card title={selected ? `ייבוא דף חשבון — ${selected.accountName}` : "ייבוא דף חשבון (עו״ש)"}>
+        {error && <ErrorMessage message={error} />}
+        <DropZone
+          onFile={handleDroppedFile}
+          busy={uploading}
+          accept=".xlsx,.xls,.csv,.pdf"
+          icon="🏦"
+          title="גררי לכאן דף חשבון (עו״ש) — Excel או PDF — או לחצי לבחירה"
+          hint={
+            selected
+              ? `הכנסות (זכות) והוצאות (חובה) ייקלטו לחשבון "${selected.accountName}" — ההוצאות יסווגו לפי חוקים, וכפילויות ידולגו. ב-PDF הסיווג להכנסה/הוצאה נגזר מהיתרה המתגלגלת — כדאי לעבור על התנועות אחרי הייבוא`
+              : "הכנסות (זכות) והוצאות (חובה) ייקלטו אוטומטית מ-Excel או PDF. אין עדיין חשבון? גררי קובץ ותנחי ליצור אחד — הייבוא יתחיל מיד אחריו"
+          }
+        />
+        {importMsg && <div className="info-banner" style={{ marginTop: 12 }}>{importMsg}</div>}
+      </Card>
+
+      </details>
 
       <Modal title="חשבון בנק חדש" open={accountOpen} onClose={() => setAccountOpen(false)}>
         <form onSubmit={submitAccount}>

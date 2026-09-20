@@ -1,16 +1,15 @@
+import { TransactionFilters } from "../components/common/TransactionFilters";
 import { useTransactionFilters } from "../hooks/useTransactionFilters";
 import { ExpenseEditor } from "../components/expenses/ExpenseEditor";
 import { useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { AsyncSection } from "../components/common/AsyncSection";
 import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
 import { useConfirm } from "../components/common/ConfirmDialog";
 import { EmptyState } from "../components/common/EmptyState";
-import { Input } from "../components/common/Input";
 import { Modal } from "../components/common/Modal";
 import { PageShell } from "../components/common/PageShell";
-import { Select } from "../components/common/Select";
 import { SkeletonRows } from "../components/common/Skeleton";
 import { Table, type Column } from "../components/common/Table";
 import { useMonth } from "../context/MonthContext";
@@ -43,7 +42,7 @@ export default function ExpensesPage() {
   const { monthKey } = useMonth();
   const location = useLocation();
   const navigate = useNavigate();
-  const { params, set, clear: clearFilters } = useTransactionFilters();
+  const { params, clear: clearFilters } = useTransactionFilters();
   const { expenseCategories } = useLookups();
   const filterCategory = params.get("category") ? Number(params.get("category")) : undefined;
   const search = params.get("q") ?? "";
@@ -135,9 +134,10 @@ export default function ExpensesPage() {
   }
 
   const columns: Column<Expense>[] = [
-    { key: "date", header: "תאריך", render: (row) => formatDate(row.expenseDate) },
+    { key: "date", priority: "secondary", header: "תאריך", render: (row) => formatDate(row.expenseDate) },
     {
       key: "name",
+      priority: "primary",
       header: "שם / בית עסק",
       render: (row) => (
         <span>
@@ -153,6 +153,7 @@ export default function ExpensesPage() {
     },
     {
       key: "category",
+      priority: "secondary",
       header: "קטגוריה",
       render: (row) =>
         row.category ? (
@@ -165,14 +166,16 @@ export default function ExpensesPage() {
     },
     {
       key: "method",
+      priority: "secondary",
       header: "אמצעי תשלום",
       render: (row) => row.paymentMethod?.name ?? (row.source === "credit" ? "כרטיס אשראי" : "—"),
     },
     {
       key: "amount",
+      priority: "amount",
       header: "סכום",
       align: "left",
-      render: (row) => <span className="mono text-danger">{formatCurrency(Number(row.amount))}</span>,
+      render: (row) => <span className={Number(row.amount) < 0 ? "mono text-success" : "mono"}>{formatCurrency(Number(row.amount))}{Number(row.amount) < 0 && <span className="sr-only"> זיכוי</span>}</span>,
     },
     {
       key: "actions",
@@ -180,7 +183,7 @@ export default function ExpensesPage() {
       align: "left",
       render: (row) =>
         row.source === "credit" ? (
-          <span className="text-muted" title="עסקת אשראי — לעריכה עברי לטאב אשראי">🔒</span>
+          <Link className="ledger-source-link" to="/accounts?tab=credit" aria-label="פתיחת עסקאות האשראי">לכרטיס ←</Link>
         ) : (
           <span className="row-actions">
             <Button size="sm" variant="ghost" onClick={() => openEdit(row)} aria-label="עריכה">✏️</Button>
@@ -203,49 +206,17 @@ export default function ExpensesPage() {
 
 
       <Card>
-        <div className="filter-bar">
-          <Input
-            placeholder="חיפוש בית עסק / תיאור…"
-            value={search}
-            onChange={(e) => set("q", e.target.value)}
-            aria-label="חיפוש חופשי"
-          />
-          <Select
-            options={expenseCategories.map((c) => ({ value: c.id, label: `${c.icon ?? ""} ${c.name}` }))}
-            placeholder="כל הקטגוריות"
-            value={filterCategory ?? ""}
-            onChange={(e) => set("category", e.target.value)}
-            aria-label="סינון לפי קטגוריה"
-          />
-          <label className="filter-toggle">
-            <input
-              type="checkbox"
-              checked={onlyUncategorized}
-              onChange={(e) => set("uncat", e.target.checked ? "1" : "")}
-            />
-            רק לא מסווגות
-          </label>
-          <label className="filter-toggle">
-            <input type="checkbox" checked={onlyRecurring} onChange={(e) => set("recurring", e.target.checked ? "1" : "")} />
-            רק תשלומים קבועים
-          </label>
-          <Input type="date" aria-label="מתאריך" value={from} onChange={e => set("from", e.target.value)}/>
-          <Input type="date" aria-label="עד תאריך" value={to} onChange={e => set("to", e.target.value)}/>
-          {filtersActive && (
-            <Button size="sm" variant="ghost" onClick={clearFilters}>
-              ניקוי מסננים ✕
-            </Button>
-          )}
-        </div>
-
         <AsyncSection
           resource={expensesRes}
           errorTitle="לא הצלחנו לטעון את התנועות"
           skeleton={<SkeletonRows rows={6} />}
         >
           {data => (<>
-            <p role="status">{rows.length} תנועות בסינון · {formatCurrency(rows.reduce((sum,row) => sum + Math.round(Number(row.amount)*100),0)/100)} · סך החודש: {formatCurrency(data.total)}</p>
+            <div className="ledger-summary"><div><span className="ledger-summary-label">הוצאות החודש</span><strong className="mono">{formatCurrency(data.total)}</strong></div><span className="text-muted">{allRows.length} תנועות רשומות</span></div>
+            <TransactionFilters kind="expenses" options={expenseCategories.map(c => ({ value: c.id, label: c.name }))}/>
+            <p className="ledger-count" role="status">{rows.length} תנועות בסינון{filtersActive && <> · <strong className="mono">{formatCurrency(rows.reduce((sum,row) => sum + Math.round(Number(row.amount)*100),0)/100)}</strong></>}</p>
             <Table
+              variant="ledger"
               columns={columns}
               rows={rows}
               rowKey={(row) => `${row.source ?? "manual"}-${row.id}`}
@@ -266,7 +237,7 @@ export default function ExpensesPage() {
                   <EmptyState
                     icon="🧾"
                     title="אין הוצאות החודש"
-                    hint="הוסיפי הוצאה, ייבאי אקסל, או ייבאי דוח אשראי בטאב חשבונות"
+                    hint="אפשר להוסיף הוצאה או להעלות דוח כדי להתחיל."
                     action={
                       <Button size="sm" onClick={openCreate}>
                         + הוספת הוצאה

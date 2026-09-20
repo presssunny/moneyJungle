@@ -1,3 +1,4 @@
+import { PageShell } from "../components/common/PageShell";
 import { useState, type FormEvent } from "react";
 import { AsyncSection } from "../components/common/AsyncSection";
 import { Button } from "../components/common/Button";
@@ -93,7 +94,7 @@ export default function AssetsPage() {
   }
 
   return (
-    <>
+    <PageShell toolbar={<PageToolbar onAdd={openCreate} />}>
       <div className="kpi-row">
         <AsyncSection resource={netWorthRes} errorTitle="לא הצלחנו לחשב שווי נטו" skeleton={<SkeletonCard />}>
           {(netWorth) =>
@@ -102,6 +103,7 @@ export default function AssetsPage() {
             ) : (
               <SummaryCard
                 label="שווי נטו"
+                size="hero"
                 value={formatCurrency(netWorth.value!)}
                 tone={netWorth.value! >= 0 ? "success" : "danger"}
                 certainty="scenario"
@@ -125,7 +127,6 @@ export default function AssetsPage() {
         </MetricExplanation>
       )}
 
-      <PageToolbar onAdd={openCreate} />
 
       <AsyncSection
         resource={assetsRes}
@@ -197,7 +198,7 @@ export default function AssetsPage() {
       </Modal>
 
       {confirm.dialog}
-    </>
+    </PageShell>
   );
 }
 

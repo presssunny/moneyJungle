@@ -35,7 +35,7 @@ export function BudgetVsActualChart({ budgets }: { budgets: BudgetItem[] }) {
           <CartesianGrid stroke={chrome.grid} strokeDasharray="3 6" horizontal={false} />
           <XAxis
             type="number"
-            tick={{ fill: chrome.text, fontSize: 11, fontFamily: "JetBrains Mono" }}
+            tick={{ fill: chrome.text, fontSize: 11, fontFamily: "Heebo" }}
             tickFormatter={(v: number) => `₪${(v / 1000).toFixed(0)}K`}
             axisLine={false}
             tickLine={false}
@@ -59,8 +59,8 @@ export function BudgetVsActualChart({ budgets }: { budgets: BudgetItem[] }) {
             formatter={(value) => (value === "planned" ? "מתוכנן" : "בפועל")}
             wrapperStyle={{ fontSize: 12, color: chrome.text }}
           />
-          <Bar dataKey="planned" fill={chrome.secondary} radius={[0, 5, 5, 0]} maxBarSize={14} />
-          <Bar dataKey="actual" radius={[0, 5, 5, 0]} maxBarSize={14}>
+          <Bar isAnimationActive={false} dataKey="planned" fill={chrome.secondary} radius={[0, 5, 5, 0]} maxBarSize={14} />
+          <Bar isAnimationActive={false} dataKey="actual" radius={[0, 5, 5, 0]} maxBarSize={14}>
             {/* Overrun is coloured *and* named in the aria summary — colour is never the only signal (§8.4). */}
             {rows.map((row) => (
               <Cell key={row.name} fill={row.over ? chrome.danger : chrome.success} />

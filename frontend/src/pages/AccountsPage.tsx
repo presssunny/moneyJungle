@@ -65,6 +65,8 @@ export default function AccountsPage() {
 
   return (
     <>
+      <TabbedHub
+        overview={<div className="hub-overview">
       <div className="overview-strip" aria-label="סיכום נכסים וחובות">
         <OverviewChip label="יתרות בנק רשומות" amount={assets} tone="success" loading={loading} />
         <OverviewChip label="חובות" amount={debts} tone="danger" loading={loading} />
@@ -78,7 +80,7 @@ export default function AccountsPage() {
 
       <MetricExplanation title="מקורות יתרות הבנק" metric="cash"/>
       <MetricExplanation title="חובות וחיסכון רשום"><p>החובות הם יתרת הקרן לפי לוחות ההלוואות, ולא סכום ההחזרים הכולל ריבית. בכל הלוואה אפשר לפתוח את לוח הסילוקין ואת מסמך המקור.</p><p>התקדמות ביעדי חיסכון היא סכום הסכומים שנרשמו ביעדים. היא אינה נכס נוסף: אותו כסף עשוי כבר להיכלל בחשבון הבנק.</p></MetricExplanation>
-      <TabbedHub
+        </div>}
         tabs={[
           { key: "credit", label: "אשראי", icon: "💳", element: <CreditPage /> },
           { key: "bank", label: "בנק", icon: "🏦", element: <BankPage /> },

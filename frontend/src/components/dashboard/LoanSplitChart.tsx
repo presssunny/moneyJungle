@@ -21,7 +21,7 @@ export function LoanSplitChart({ data }: { data: LoanSplit[] }) {
         <CartesianGrid stroke={chrome.grid} strokeDasharray="3 6" vertical={false} />
         <XAxis dataKey="name" tick={{ fill: chrome.text, fontSize: 12 }} axisLine={{ stroke: chrome.grid }} tickLine={false} reversed />
         <YAxis
-          tick={{ fill: chrome.text, fontSize: 11, fontFamily: "JetBrains Mono" }}
+          tick={{ fill: chrome.text, fontSize: 11, fontFamily: "Heebo" }}
           tickFormatter={(v: number) => `₪${v.toLocaleString()}`}
           axisLine={false}
           tickLine={false}
@@ -34,8 +34,8 @@ export function LoanSplitChart({ data }: { data: LoanSplit[] }) {
           cursor={{ fill: "rgba(255,255,255,0.04)" }}
         />
         <Legend formatter={(value) => (value === "principal" ? "קרן" : "ריבית")} />
-        <Bar dataKey="principal" stackId="a" fill={chrome.secondary} radius={[0, 0, 0, 0]} />
-        <Bar dataKey="interest" stackId="a" fill={chrome.danger} radius={[4, 4, 0, 0]} />
+        <Bar isAnimationActive={false} dataKey="principal" stackId="a" fill={chrome.secondary} radius={[0, 0, 0, 0]} />
+        <Bar isAnimationActive={false} dataKey="interest" stackId="a" fill={chrome.danger} radius={[4, 4, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   );

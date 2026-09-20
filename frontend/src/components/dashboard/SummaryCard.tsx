@@ -1,3 +1,4 @@
+import { Icon } from "../common/Icon";
 import {
   certaintyAriaLabel,
   certaintyValue,
@@ -56,7 +57,7 @@ export function SummaryCard({
   const body = (
     <>
       <div className="summary-card-label">
-        {icon && <span aria-hidden>{icon} </span>}
+        {icon && <Icon name={icon} size={18}/>}
         {label}
       </div>
       <div

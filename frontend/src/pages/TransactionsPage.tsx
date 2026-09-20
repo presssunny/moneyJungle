@@ -11,9 +11,9 @@ const Analysis=lazy(()=>import('./TransactionsAnalysis'));
 export default function TransactionsPage() {
  const [params]=useSearchParams(); const [analysisOpen,setAnalysisOpen]=useState(false);
  if(params.get("tab")==="import") return <LegacyRedirect to="/imports"/>;
- return <PageShell><QuickAddBar/><TabbedHub tabs={[
+ return <PageShell><TabbedHub tabs={[
   {key:"expenses",label:"הוצאות",icon:"🧾",element:<Suspense fallback={<Loading/>}><ExpensesPage/></Suspense>},
   {key:"incomes",label:"הכנסות",icon:"💰",element:<Suspense fallback={<Loading/>}><IncomesPage/></Suspense>}
- ]}/><details className="home-analysis" onToggle={e=>setAnalysisOpen(e.currentTarget.open)}><summary>ניתוח החודש — סיכומים וגרפים</summary>
+ ]}/><details className="quick-add-disclosure"><summary>הוספה מהירה במשפט אחד</summary><QuickAddBar/></details><details className="home-analysis" onToggle={e=>setAnalysisOpen(e.currentTarget.open)}><summary>ניתוח החודש — סיכומים וגרפים</summary>
  {analysisOpen&&<Suspense fallback={<Loading/>}><Analysis/></Suspense>}</details></PageShell>;
 }

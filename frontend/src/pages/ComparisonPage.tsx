@@ -109,7 +109,7 @@ export default function ComparisonPage() {
                   <CartesianGrid stroke={chrome.grid} strokeDasharray="3 6" vertical={false} />
                   <XAxis dataKey="label" tick={{ fill: chrome.text, fontSize: 12 }} axisLine={{ stroke: chrome.grid }} tickLine={false} reversed />
                   <YAxis
-                    tick={{ fill: chrome.text, fontSize: 11, fontFamily: "JetBrains Mono" }}
+                    tick={{ fill: chrome.text, fontSize: 11, fontFamily: "Heebo" }}
                     tickFormatter={(v: number) => `₪${(v / 1000).toFixed(0)}K`}
                     axisLine={false}
                     tickLine={false}

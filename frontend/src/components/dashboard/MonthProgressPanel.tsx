@@ -66,7 +66,7 @@ export function MonthProgressPanel({
 
   return (
     <div className={`progress-panel tone-border-${tone}`}>
-      <MetricExplanation title="מקור היעד וחישוב הקצב"><p>הוצאה רשומה חלקי {dayOfMonth} ימים שחלפו: {formatCurrency(progress.dailyBurn)} ליום. תחזית סוף החודש מוסיפה קצב זה כפול {daysLeft} הימים שנותרו.</p><p>היעד הוא {targetSource==="goal"?"יעד שהוגדר ידנית":targetSource==="last_month"?"ההוצאה הרשומה בחודש הקודם":"לא הוגדר"}. הכיסוי עשוי להיות חלקי; הקצב אינו יתרת בנק או תקציב יומי פנוי.</p><Link to="/transactions?tab=expenses">התנועות שבבסיס ההוצאה</Link></MetricExplanation>
+
       <div className="progress-panel-top">
         <div>
           <div className="progress-panel-title">התקדמות החודש</div>
@@ -83,6 +83,7 @@ export function MonthProgressPanel({
                 min="0"
                 step="50"
                 placeholder="יעד ₪"
+                aria-label="יעד חודשי בשקלים"
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 autoFocus
@@ -111,6 +112,7 @@ export function MonthProgressPanel({
         <div
           className="progress-track"
           role="progressbar"
+          aria-label="ניצול היעד החודשי"
           aria-valuenow={Math.round(spentPct)}
           aria-valuemin={0}
           aria-valuemax={100}
@@ -144,6 +146,7 @@ export function MonthProgressPanel({
           <span>החודש הסתיים · סה״כ {formatCurrency(spent)}</span>
         )}
       </div>
+      <MetricExplanation title="מקור היעד וחישוב הקצב"><p>הוצאה רשומה חלקי {dayOfMonth} ימים שחלפו: {formatCurrency(progress.dailyBurn)} ליום. תחזית סוף החודש מוסיפה קצב זה כפול {daysLeft} הימים שנותרו.</p><p>היעד הוא {targetSource==="goal"?"יעד שהוגדר ידנית":targetSource==="last_month"?"ההוצאה הרשומה בחודש הקודם":"לא הוגדר"}. הכיסוי עשוי להיות חלקי; הקצב אינו יתרת בנק או תקציב יומי פנוי.</p><Link to="/transactions?tab=expenses">התנועות שבבסיס ההוצאה</Link></MetricExplanation>
     </div>
   );
 }

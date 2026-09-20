@@ -1,3 +1,4 @@
+import { Icon } from "../components/common/Icon";
 import { AsyncSection } from "../components/common/AsyncSection";
 import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
@@ -86,8 +87,9 @@ export default function AlertsPage() {
             {rows.map((alert) => (
               <Card key={alert.id} className={`alert-card severity-${alert.severity} ${alert.isRead ? "alert-read" : ""}`}>
                 <div className="alert-row">
-                  <span className="alert-icon">{SEVERITY_ICONS[alert.severity]}</span>
+                  <span className="alert-icon"><Icon name={SEVERITY_ICONS[alert.severity]} size={24}/></span>
                   <div className="alert-body">
+                    <div className="alert-status">{{info:"לעדכון",warning:"כדאי לבדוק",critical:"דחופה"}[alert.severity]} · {alert.isRead ? "נקראה" : "חדשה"}</div>
                     <div className="alert-title">{alert.title}</div>
                     <div className="alert-message text-muted">{alert.message}</div>
                     <div className="alert-date text-muted">{formatDate(alert.createdAt)}</div>

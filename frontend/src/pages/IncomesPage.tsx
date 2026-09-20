@@ -1,3 +1,4 @@
+import { TransactionFilters } from "../components/common/TransactionFilters";
 import { useTransactionFilters } from "../hooks/useTransactionFilters";
 import { lazy, Suspense, useMemo, useState, type FormEvent } from "react";
 import { AsyncSection } from "../components/common/AsyncSection";
@@ -58,7 +59,7 @@ export default function IncomesPage() {
   // Filters, matching the expenses screen. The two sides of the same month were
   // asymmetric: expenses had search, filtering and a breakdown; incomes had a
   // bare table (UX audit §4).
-  const {params,set,clear}=useTransactionFilters();
+  const {params,clear}=useTransactionFilters();
   const search=params.get("q")??""; const filterType=params.get("type")??"";
   const from=params.get("from")??""; const to=params.get("to")??"";
 
@@ -151,11 +152,12 @@ export default function IncomesPage() {
   }
 
   const columns: Column<Income>[] = [
-    { key: "date", header: "תאריך", render: (row) => formatDate(row.incomeDate) },
-    { key: "desc", header: "תיאור", render: (row) => row.description || "—" },
-    { key: "type", header: "סוג", render: (row) => typeLabel(row.type) },
+    { key: "date", priority: "secondary", header: "תאריך", render: (row) => formatDate(row.incomeDate) },
+    { key: "desc", priority: "primary", header: "תיאור", render: (row) => row.description || "—" },
+    { key: "type", priority: "secondary", header: "סוג", render: (row) => typeLabel(row.type) },
     {
       key: "amount",
+      priority: "amount",
       header: "סכום",
       align: "left",
       render: (row) => <span className="mono text-success">{formatCurrency(Number(row.amount))}</span>,
@@ -179,39 +181,17 @@ export default function IncomesPage() {
 
     >
       <Card>
-        <div className="filter-bar">
-          <Input type="date" aria-label="מתאריך" value={from} onChange={e=>set("from",e.target.value)}/>
-          <Input type="date" aria-label="עד תאריך" value={to} onChange={e=>set("to",e.target.value)}/>
-          <Input
-            placeholder="חיפוש בתיאור / סוג…"
-            value={search}
-            onChange={(e) => set("q",e.target.value)}
-            aria-label="חיפוש חופשי"
-          />
-          <Select
-            options={INCOME_TYPES}
-            placeholder="כל הסוגים"
-            value={filterType}
-            onChange={(e) => set("type",e.target.value)}
-            aria-label="סינון לפי סוג הכנסה"
-          />
-          {filtered && (
-            <span className="filter-strip-note">
-              {rows.length} מתוך {allRows.length}
-              <Button size="sm" variant="ghost" onClick={() => { clear();  }}>
-                ניקוי הסינון
-              </Button>
-            </span>
-          )}
-        </div>
         <AsyncSection
           resource={incomesRes}
           errorTitle="לא הצלחנו לטעון את ההכנסות"
           skeleton={<SkeletonRows rows={5} />}
         >
           {data => (<>
-            <p role="status">{rows.length} תנועות בסינון · {formatCurrency(rows.reduce((sum,row)=>sum+Math.round(Number(row.amount)*100),0)/100)} · סך החודש: {formatCurrency(data.total)}</p>
+            <div className="ledger-summary"><div><span className="ledger-summary-label">הכנסות החודש</span><strong className="mono">{formatCurrency(data.total)}</strong></div><span className="text-muted">{allRows.length} תנועות רשומות</span></div>
+            <TransactionFilters kind="incomes" options={INCOME_TYPES}/>
+            <p className="ledger-count" role="status">{rows.length} תנועות בסינון{filtered && <> · <strong className="mono">{formatCurrency(rows.reduce((sum,row) => sum + Math.round(Number(row.amount)*100),0)/100)}</strong></>}</p>
             <Table
+              variant="ledger"
               columns={columns}
               rows={rows}
               rowKey={(row) => row.id}

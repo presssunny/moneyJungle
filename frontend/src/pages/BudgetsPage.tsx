@@ -11,7 +11,6 @@ import { Modal } from "../components/common/Modal";
 import { Select } from "../components/common/Select";
 import { SkeletonCard, SkeletonChart, SkeletonRows } from "../components/common/Skeleton";
 import { Table, type Column } from "../components/common/Table";
-import { UNKNOWN_PLACEHOLDER } from "../components/common/UncertaintyBadge";
 import { BudgetVsActualChart } from "../components/dashboard/BudgetVsActualChart";
 import { MonthProgressPanel } from "../components/dashboard/MonthProgressPanel";
 import { SummaryCard } from "../components/dashboard/SummaryCard";
@@ -150,14 +149,6 @@ export default function BudgetsPage() {
       },
     },
     {
-      key: "trend",
-      header: "מגמה מול חודש קודם",
-      align: "left",
-      // GET /budgets has no previous-month spend (IA §9.5). Showing a dash is the
-      // honest answer; a guessed number would violate §1.2.
-      render: () => <span className="text-muted" title="אין עדיין נתוני חודש קודם ב-API">{UNKNOWN_PLACEHOLDER}</span>,
-    },
-    {
       key: "actions",
       header: "",
       align: "left",
@@ -248,17 +239,6 @@ export default function BudgetsPage() {
         {(data) => <MonthProgressPanel progress={data.progress} onSaveTarget={saveTarget} />}
       </AsyncSection>
 
-      <Card title="מתוכנן מול בפועל">
-        <AsyncSection
-          resource={budgetsRes}
-          errorTitle="לא הצלחנו לטעון את ההשוואה"
-          skeleton={<SkeletonChart />}
-          isEmpty={(data) => data.budgets.length === 0}
-          emptyState={<EmptyState icon="📊" title="אין תקציבים להשוואה" hint="הגדירי תקציב לקטגוריה כדי לראות פער" />}
-        >
-          {(data) => <BudgetVsActualChart budgets={data.budgets} />}
-        </AsyncSection>
-      </Card>
 
       <Card
         title="תקציבים לפי קטגוריה"
@@ -268,10 +248,10 @@ export default function BudgetsPage() {
               <input type="checkbox" checked={onlyOverrun} onChange={(e) => setOnlyOverrun(e.target.checked)} />
               רק חריגות
             </label>
-            <Button size="sm" variant={view === "cards" ? "primary" : "ghost"} onClick={() => setView("cards")}>
+            <Button size="sm" aria-pressed={view === "cards"} variant={view === "cards" ? "outline" : "ghost"} onClick={() => setView("cards")}>
               כרטיסים
             </Button>
-            <Button size="sm" variant={view === "table" ? "primary" : "ghost"} onClick={() => setView("table")}>
+            <Button size="sm" aria-pressed={view === "table"} variant={view === "table" ? "outline" : "ghost"} onClick={() => setView("table")}>
               טבלה
             </Button>
           </span>
@@ -343,6 +323,21 @@ export default function BudgetsPage() {
           }
         </AsyncSection>
       </Card>
+
+      <details className="home-analysis"><summary>השוואה חזותית · מתוכנן מול בפועל</summary>
+      <Card title="מתוכנן מול בפועל">
+        <AsyncSection
+          resource={budgetsRes}
+          errorTitle="לא הצלחנו לטעון את ההשוואה"
+          skeleton={<SkeletonChart />}
+          isEmpty={(data) => data.budgets.length === 0}
+          emptyState={<EmptyState icon="📊" title="אין תקציבים להשוואה" hint="הגדירי תקציב לקטגוריה כדי לראות פער" />}
+        >
+          {(data) => <BudgetVsActualChart budgets={data.budgets} />}
+        </AsyncSection>
+      </Card>
+
+      </details>
 
       <Modal title="הגדרת תקציב חודשי" open={formOpen} onClose={() => setFormOpen(false)}>
         <form onSubmit={submit}>

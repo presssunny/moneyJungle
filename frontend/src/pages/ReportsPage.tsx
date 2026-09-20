@@ -14,7 +14,7 @@ import { PageShell } from "../components/common/PageShell";
 import { Card } from "../components/common/Card";
 import { EmptyState } from "../components/common/EmptyState";
 import { SkeletonChart } from "../components/common/Skeleton";
-import { CategoryPieChart } from "../components/dashboard/CategoryPieChart";
+import { CategoryBarChart } from "../components/dashboard/CategoryBarChart";
 import { chartChrome, tooltipStyle } from "../components/dashboard/chartTheme";
 import { useMonth } from "../context/MonthContext";
 import { useAsync } from "../hooks/useAsync";
@@ -74,7 +74,7 @@ export default function ReportsPage() {
                   <CartesianGrid stroke={chrome.grid} strokeDasharray="3 6" vertical={false} />
                   <XAxis dataKey="day" tick={{ fill: chrome.text, fontSize: 11 }} axisLine={{ stroke: chrome.grid }} tickLine={false} reversed />
                   <YAxis
-                    tick={{ fill: chrome.text, fontSize: 11, fontFamily: "JetBrains Mono" }}
+                    tick={{ fill: chrome.text, fontSize: 11, fontFamily: "Heebo" }}
                     tickFormatter={(v: number) => `₪${(v / 1000).toFixed(0)}K`}
                     axisLine={false}
                     tickLine={false}
@@ -86,7 +86,7 @@ export default function ReportsPage() {
                     formatter={(value, name) => [formatCurrency(Number(value)), name === "cumulative" ? "מצטבר" : "יומי"]}
                     labelFormatter={(day) => `יום ${day}`}
                   />
-                  <Area type="monotone" dataKey="cumulative" stroke={chrome.danger} fill={chrome.danger} fillOpacity={0.15} strokeWidth={2} />
+                  <Area isAnimationActive={false} type="monotone" dataKey="cumulative" stroke={chrome.primary} fill={chrome.primary} fillOpacity={0.15} strokeWidth={2} />
                 </AreaChart>
               </ResponsiveContainer>
             )}
@@ -101,7 +101,7 @@ export default function ReportsPage() {
             isEmpty={(report) => report.byCategory.length === 0}
             emptyState={<EmptyState icon="🥧" title="אין הוצאות מסווגות בחודש הזה" />}
           >
-            {(report) => <CategoryPieChart data={report.byCategory} />}
+            {(report) => <CategoryBarChart data={report.byCategory} />}
           </AsyncSection>
         </Card>
 
@@ -119,7 +119,7 @@ export default function ReportsPage() {
                   <CartesianGrid stroke={chrome.grid} strokeDasharray="3 6" vertical={false} />
                   <XAxis dataKey="label" tick={{ fill: chrome.text, fontSize: 12 }} axisLine={{ stroke: chrome.grid }} tickLine={false} reversed />
                   <YAxis
-                    tick={{ fill: chrome.text, fontSize: 11, fontFamily: "JetBrains Mono" }}
+                    tick={{ fill: chrome.text, fontSize: 11, fontFamily: "Heebo" }}
                     tickFormatter={(v: number) => `₪${(v / 1000).toFixed(0)}K`}
                     axisLine={false}
                     tickLine={false}
@@ -127,7 +127,7 @@ export default function ReportsPage() {
                     width={55}
                   />
                   <Tooltip contentStyle={tooltipStyle()} formatter={(value) => [formatCurrency(Number(value)), "סכום"]} />
-                  <Bar dataKey="value" fill={chrome.success} radius={[6, 6, 0, 0]} maxBarSize={48} />
+                  <Bar isAnimationActive={false} dataKey="value" fill={chrome.success} radius={[6, 6, 0, 0]} maxBarSize={48} />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -155,7 +155,7 @@ export default function ReportsPage() {
                     reversed
                   />
                   <YAxis
-                    tick={{ fill: chrome.text, fontSize: 11, fontFamily: "JetBrains Mono" }}
+                    tick={{ fill: chrome.text, fontSize: 11, fontFamily: "Heebo" }}
                     tickFormatter={(v: number) => `₪${(v / 1000).toFixed(0)}K`}
                     axisLine={false}
                     tickLine={false}
@@ -167,8 +167,8 @@ export default function ReportsPage() {
                     formatter={(value, name) => [formatCurrency(Number(value)), name === "incomeTotal" ? "הכנסות" : "הוצאות"]}
                     labelFormatter={(key) => formatMonthKey(String(key))}
                   />
-                  <Bar dataKey="incomeTotal" fill={chrome.success} radius={[6, 6, 0, 0]} maxBarSize={22} />
-                  <Bar dataKey="expenseTotal" fill={chrome.danger} radius={[6, 6, 0, 0]} maxBarSize={22} />
+                  <Bar isAnimationActive={false} dataKey="incomeTotal" fill={chrome.success} radius={[6, 6, 0, 0]} maxBarSize={22} />
+                  <Bar isAnimationActive={false} dataKey="expenseTotal" fill={chrome.danger} radius={[6, 6, 0, 0]} maxBarSize={22} />
                 </BarChart>
               </ResponsiveContainer>
             )}

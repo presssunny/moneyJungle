@@ -1,3 +1,4 @@
+import { Icon } from "../components/common/Icon";
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Card } from "../components/common/Card";
@@ -36,13 +37,13 @@ export default function ImportJourneyPage(){
  const kind=String(answers.kind??session?.kind??'');
  const editable=session&&['uploaded','processing','failed','needs_input','ready_for_review'].includes(session.status);
  return <div className="journey-page import-journey-page">
-  <p className="text-muted">העלאה ← זיהוי ועיבוד ← השלמת מידע ← בדיקה ← תמונה מעודכנת</p>
+  <ol className="flow-progress" aria-label="שלבי העלאת מידע">{['בחירת קובץ','בדיקה ואישור','התמונה עודכנה'].map((label,index)=>{const current=session?.status==='completed'?2:id&&!['cancelled','rolled_back'].includes(session?.status??'')?1:0;return <li key={label} aria-current={index===current?'step':undefined} data-state={index<current?'done':index===current?'current':'upcoming'}><span className="flow-step-number" aria-hidden="true">{index<current?<Icon name="check" size={18}/>:index+1}</span><span>{label}</span></li>;})}</ol>
   {error&&<p role="alert" className="error-message">{error}</p>}
-  {!id&&<Card title="עדכון המידע הפיננסי"><p>דוח בנק, דוח אשראי, גיליון הוצאות או לוח סילוקין. נזהה את הקובץ ונציג את הנתונים לבדיקה לפני קליטה.</p>
+  {!id&&<Card title="עדכון המידע הפיננסי"><p>מעלים דוח, בודקים ומאשרים. הנתונים יתווספו רק אחרי האישור שלך.</p>
    <div className="upload-types" aria-hidden>
-    {UPLOAD_TYPES.map(t=><span key={t.label} className="upload-type-chip" title={t.hint}><span className="upload-type-chip-icon">{t.icon}</span>{t.label}</span>)}
+    {UPLOAD_TYPES.map(t=><span key={t.label} className="upload-type-chip" title={t.hint}><Icon name={t.icon} size={18}/>{t.label}</span>)}
    </div>
-   <DropZone onFile={file=>run(()=>uploadSession(file,Object.fromEntries(['accountId','cardId','loanId'].flatMap(k=>params.get(k)?[[k,Number(params.get(k))]]:[]))))} accept=".xlsx,.xls,.csv,.pdf" busy={busy}/><Link to="/data">קליטות קודמות והמשך תהליך</Link></Card>}
+   <DropZone onFile={file=>run(()=>uploadSession(file,Object.fromEntries(['accountId','cardId','loanId'].flatMap(k=>params.get(k)?[[k,Number(params.get(k))]]:[]))))} accept=".xlsx,.xls,.csv,.pdf" hint="Excel, CSV או PDF" busy={busy}/><Link to="/data">קליטות קודמות והמשך תהליך</Link></Card>}
   {busy&&!session&&<Loading/>}
   {session&&<>
    <Card title={session.fileName}><p role="status">{({failed:'עיבוד הקובץ נכשל — ניתן לתקן פרטים ולנסות שוב',uploaded:'הקובץ נשמר',processing:'העיבוד החל — אפשר לנסות שוב אם נעצר',rolled_back:'נתוני הקליטה בוטלו',needs_input:'נדרש מידע נוסף',ready_for_review:'מוכן לבדיקה לפני קליטה',review:'נקלט — נותרה בדיקה',completed:'הקליטה והבדיקה הושלמו',cancelled:'הקליטה בוטלה'} as Record<string,string>)[session.status]??session.status}</p></Card>

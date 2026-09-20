@@ -27,7 +27,7 @@ export function MonthlyTrendChart({ data }: { data: TrendPoint[] }) {
           reversed
         />
         <YAxis
-          tick={{ fill: chrome.text, fontSize: 11, fontFamily: "JetBrains Mono" }}
+          tick={{ fill: chrome.text, fontSize: 11, fontFamily: "Heebo" }}
           tickFormatter={(v: number) => `₪${(v / 1000).toFixed(0)}K`}
           axisLine={false}
           tickLine={false}
@@ -40,8 +40,8 @@ export function MonthlyTrendChart({ data }: { data: TrendPoint[] }) {
           labelFormatter={(key) => formatMonthKey(String(key))}
         />
         <Legend formatter={(value) => (value === "income" ? "הכנסות" : "הוצאות")} />
-        <Line type="monotone" dataKey="income" stroke={chrome.success} strokeWidth={2} dot={{ r: 3 }} />
-        <Line type="monotone" dataKey="expense" stroke={chrome.danger} strokeWidth={2} dot={{ r: 3 }} />
+        <Line isAnimationActive={false} type="monotone" dataKey="income" stroke={chrome.success} strokeWidth={2} dot={{ r: 3 }} />
+        <Line isAnimationActive={false} type="monotone" dataKey="expense" stroke={chrome.danger} strokeWidth={2} dot={{ r: 3 }} />
       </LineChart>
     </ResponsiveContainer>
   );
