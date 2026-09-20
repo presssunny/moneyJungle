@@ -1,3 +1,4 @@
+import { Icon } from "../common/Icon";
 import { MANAGE_NAV, PRIMARY_NAV } from "../../app/navigation";
 import { PRODUCT_NAME } from "../../app/brand";
 import { currentUser } from "../../services/gate.service";
@@ -8,8 +9,8 @@ export function Sidebar() {
   const canSeeCrm = role === "ADMIN" || role === "VIEWER";
   return (
     <aside className="sidebar">
-      <div className="sidebar-logo mono">
-        <span aria-hidden>💰</span> {PRODUCT_NAME}
+      <div className="sidebar-logo">
+        <span className="brand-mark"><Icon name="leaf" size={24}/></span> {PRODUCT_NAME}
       </div>
       <nav className="sidebar-nav" aria-label="ניווט ראשי">
         {PRIMARY_NAV.map((item) => (

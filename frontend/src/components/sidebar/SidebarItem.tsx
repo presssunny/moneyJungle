@@ -1,3 +1,4 @@
+import { Icon } from "../common/Icon";
 import { NavLink } from "react-router-dom";
 
 interface SidebarItemProps {
@@ -14,7 +15,7 @@ export function SidebarItem({ path, label, icon }: SidebarItemProps) {
       className={({ isActive }) => `sidebar-item ${isActive ? "sidebar-item-active" : ""}`}
     >
       <span className="sidebar-item-icon" aria-hidden>
-        {icon}
+        <Icon name={icon}/>
       </span>
       <span>{label}</span>
     </NavLink>

@@ -16,7 +16,7 @@ export const THEMES: Array<{ id: ThemeName; label: string; hint: string; swatche
   {
     id: "neon-purple",
     label: "סגול ניאון",
-    hint: "ברירת מחדל · סייברפאנק",
+    hint: "סגול חי על רקע כהה",
     swatches: ["#34F5C5", "#E879F9", "#A78BFA", "#150E28"],
   },
   {
@@ -28,7 +28,7 @@ export const THEMES: Array<{ id: ThemeName; label: string; hint: string; swatche
   {
     id: "red-cyan",
     label: "אדום / ציאן",
-    hint: "חדר בקרה פלילי",
+    hint: "אדום מודגש וכחול קריר",
     swatches: ["#3A0F18", "#22D3EE", "#FF2E4D", "#0A0508"],
   },
   {
@@ -59,7 +59,7 @@ export const THEMES: Array<{ id: ThemeName; label: string; hint: string; swatche
     id: "light",
     label: "יום בהיר",
     hint: "ערכה בהירה לשעות היום",
-    swatches: ["#7C3AED", "#2563EB", "#059669", "#FFFFFF"],
+    swatches: ["#7C3AED", "#2563EB", "#087b55", "#FFFFFF"],
   },
 ];
 

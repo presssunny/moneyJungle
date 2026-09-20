@@ -1,3 +1,4 @@
+import { Icon } from "../common/Icon";
 import { NavLink, useLocation } from "react-router-dom";
 import { MANAGE_NAV, routeTitle } from "../../app/navigation";
 import { useGateAuth } from "../../hooks/useGateAuth";
@@ -14,15 +15,15 @@ export function Header() {
   return (
     <header className="header">
       <h1 className="header-title">
-        <span aria-hidden>{current?.icon}</span> {current?.label ?? ""}
+        {current?.label ?? ""}
       </h1>
       <div className="header-actions">
-        <NavLink to="/imports" className="btn btn-outline btn-sm">העלאת מידע</NavLink>
+        <NavLink to="/imports" className="btn btn-ghost btn-sm"><Icon name="upload"/>העלאת מידע</NavLink>
         <NavLink to={MANAGE_NAV.path} className="header-icon-btn" title={MANAGE_NAV.label} aria-label={MANAGE_NAV.label}>
-          {MANAGE_NAV.icon}
+          <Icon name="settings"/>
         </NavLink>
-        <button className="header-logout" onClick={logout} title="יציאה">
-          יציאה ⎋
+        <button className="header-logout" onClick={logout} title="יציאה" aria-label="יציאה">
+          <Icon name="logout"/><span className="header-logout-label">יציאה</span>
         </button>
       </div>
     </header>

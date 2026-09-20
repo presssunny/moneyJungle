@@ -32,7 +32,7 @@ export function filterScope(pathname: string, tab: string | null): FilterScope {
       return { range: true, account: false, category: true, monthOnly: false };
     case "/accounts":
       // Savings goals have no time dimension — a month picker there is noise.
-      if (tab === "savings") return NONE;
+      if (tab === "savings" || tab === "assets") return NONE;
       if (tab === "loans") return { range: true, account: false, category: false, monthOnly: false };
       return { range: true, account: true, category: true, monthOnly: false };
     case "/credit":

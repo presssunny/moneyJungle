@@ -26,7 +26,7 @@ export function AppLayout() {
             <Header />
             <FilterBar />
           </div>
-          <main className="layout-content" id="main-content" tabIndex={-1} aria-live="polite">
+          <main className="layout-content" id="main-content" tabIndex={-1}>
             <JourneyReturn/>
             <Outlet />
           </main>
