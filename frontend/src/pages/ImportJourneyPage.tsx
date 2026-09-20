@@ -35,7 +35,7 @@ export default function ImportJourneyPage(){
  }catch(e){setError(apiErrorMessage(e));}finally{setBusy(false);}}
  const kind=String(answers.kind??session?.kind??'');
  const editable=session&&['uploaded','processing','failed','needs_input','ready_for_review'].includes(session.status);
- return <div className="journey-page">
+ return <div className="journey-page import-journey-page">
   <p className="text-muted">העלאה ← זיהוי ועיבוד ← השלמת מידע ← בדיקה ← תמונה מעודכנת</p>
   {error&&<p role="alert" className="error-message">{error}</p>}
   {!id&&<Card title="עדכון המידע הפיננסי"><p>דוח בנק, דוח אשראי, גיליון הוצאות או לוח סילוקין. נזהה את הקובץ ונציג את הנתונים לבדיקה לפני קליטה.</p>

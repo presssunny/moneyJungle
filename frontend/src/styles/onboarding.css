@@ -1,0 +1,75 @@
+/* Scoped to onboarding; shared cards, buttons and all eight theme palettes stay intact. */
+.mj-onboarding {
+  --mj-onboarding-muted: color-mix(in srgb, var(--text) 78%, var(--bg-card));
+  width: 100%;
+  max-width: 960px;
+  margin-inline: auto;
+  padding-block: 24px;
+  gap: 28px;
+}
+.mj-onboarding-welcome { text-align: center; display: grid; gap: 10px; }
+.mj-onboarding-brand { font-size: 14px; color: var(--mj-onboarding-muted); }
+.mj-onboarding-welcome h1 { font-size: clamp(24px, 3vw, 34px); line-height: 1.4; font-weight: 700; }
+.mj-onboarding-welcome p, .mj-onboarding-description { color: var(--mj-onboarding-muted); line-height: 1.7; }
+.mj-onboarding-progress-caption { display: flex; justify-content: space-between; gap: 12px; margin-block-end: 14px; font-size: 13px; color: var(--mj-onboarding-muted); }
+.mj-onboarding-progress-caption > :first-child { color: var(--text); font-weight: 600; }
+.mj-onboarding-stepper { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; list-style: none; padding: 0; }
+.mj-onboarding-step { position: relative; min-width: 0; }
+.mj-onboarding-step:not(:last-child)::after { content: ""; position: absolute; inset-inline-end: -14px; top: 30px; width: 14px; border-block-start: 2px solid var(--border); }
+.mj-onboarding-step-done::after { border-color: var(--success) !important; }
+.mj-onboarding-step a { display: grid; grid-template-columns: 36px 1fr; gap: 12px; height: 100%; padding: 16px; border: 1px solid var(--border); border-radius: 12px; color: var(--text); background: var(--bg-card); }
+.mj-onboarding-step-current a { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); background: color-mix(in srgb, var(--primary) 6%, var(--bg-card)); }
+.mj-onboarding-step-upcoming a { border-style: dashed; }
+.mj-onboarding-step-number { width: 36px; height: 36px; display: grid; place-items: center; border: 1px solid var(--border); border-radius: 50%; font-weight: 700; }
+.mj-onboarding-step-current .mj-onboarding-step-number { background: var(--primary); color: var(--primary-contrast); border-color: transparent; }
+.mj-onboarding-step-done .mj-onboarding-step-number { color: var(--text); background: color-mix(in srgb, var(--success) 18%, var(--bg-card)); border-color: var(--success); }
+.mj-onboarding-step-copy { display: grid; align-content: center; gap: 4px; }
+.mj-onboarding-step-copy strong { font-size: 15px; }
+.mj-onboarding-step-copy small { font-size: 12px; color: var(--mj-onboarding-muted); }
+.mj-onboarding-step-status { grid-column: 2; font-size: 12px; font-weight: 600; color: var(--mj-onboarding-muted); }
+.mj-onboarding-step-current .mj-onboarding-step-status { color: var(--text); }
+.mj-onboarding-action.card { display: flex; align-items: flex-start; gap: 24px; padding: 36px; border-radius: 16px; background: radial-gradient(ellipse at top right, color-mix(in srgb, var(--primary) 7%, transparent), transparent 65%), var(--bg-card); }
+.mj-onboarding-action-icon { display: grid; place-items: center; flex-shrink: 0; width: 64px; height: 64px; border: 1px solid color-mix(in srgb, var(--primary) 30%, var(--border)); border-radius: 18px; background: color-mix(in srgb, var(--primary) 10%, var(--bg-card)); color: var(--text); font-size: 32px; }
+.mj-onboarding-action-content { flex: 1; min-width: 0; display: grid; justify-items: start; gap: 16px; }
+.mj-onboarding-eyebrow { color: var(--mj-onboarding-muted); font-size: 13px; }
+.mj-onboarding-action h2 { font-size: clamp(22px, 2.5vw, 28px); line-height: 1.4; }
+.mj-onboarding-description { margin-block-start: -8px; }
+.mj-onboarding .mj-onboarding-cta { min-height: 48px; min-width: 230px; padding: 12px 22px; border-radius: 10px; font-size: 16px; gap: 24px; margin-block-start: 8px; }
+.mj-onboarding-manual { display: inline-flex; align-items: center; min-height: 44px; text-decoration: underline; text-underline-offset: 4px; font-size: 14px; color: var(--mj-onboarding-muted); }
+.mj-onboarding-confirm { display: flex; align-items: center; gap: 12px; min-height: 48px; font-size: 14px; line-height: 1.6; cursor: pointer; }
+.mj-onboarding-confirm input { width: 20px; height: 20px; flex-shrink: 0; accent-color: var(--primary); }
+.mj-onboarding-details { border-block: 1px solid var(--border); padding-block: 4px; color: var(--mj-onboarding-muted); font-size: 14px; }
+.mj-onboarding-details summary { cursor: pointer; padding-block: 14px; color: var(--text); font-weight: 600; }
+.mj-onboarding-details summary span { margin-inline-start: 8px; font-weight: 400; font-size: 13px; color: var(--mj-onboarding-muted); }
+.mj-onboarding-details ul { padding-inline-start: 24px; line-height: 1.8; margin-block: 8px 16px; }
+.mj-onboarding-details > a { display: inline-block; padding-block: 12px; }
+.mj-onboarding-footer { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; color: var(--mj-onboarding-muted); font-size: 13px; }
+.mj-onboarding-footer .btn { color: var(--mj-onboarding-muted); min-height: 44px; }
+.mj-onboarding :is(a, button, input, summary):focus-visible { outline: 2px solid var(--secondary); outline-offset: 4px; }
+@media (max-width: 700px) {
+  .mj-onboarding { padding-block: 8px; gap: 24px; }
+  .mj-onboarding-stepper { grid-template-columns: 1fr; gap: 10px; }
+  .mj-onboarding-step a { grid-template-columns: 32px 1fr auto; align-items: center; gap: 12px; padding: 12px; }
+  .mj-onboarding-step-number { width: 32px; height: 32px; }
+  .mj-onboarding-step-status { grid-column: 3; }
+  .mj-onboarding-step:not(:last-child)::after { inset-inline-start: 28px; top: 100%; width: 0; height: 10px; border-block-start: 0; border-inline-start: 2px solid var(--border); }
+  .mj-onboarding-action.card { padding: 24px 20px; gap: 16px; flex-direction: column; }
+  .mj-onboarding-action-icon { width: 48px; height: 48px; border-radius: 14px; font-size: 26px; }
+  .mj-onboarding-action-content { width: 100%; }
+  .mj-onboarding .mj-onboarding-cta { width: 100%; min-width: 0; }
+  .mj-onboarding-manual { justify-self: center; }
+  .mj-onboarding-details summary span { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mj-onboarding *, .mj-onboarding *::before, .mj-onboarding *::after { animation: none !important; transition: none !important; }
+}
+/* Keep the final action clear of the app's fixed mobile navigation. */
+@media (max-width: 860px) {
+  .mj-onboarding { padding-block-end: calc(72px + env(safe-area-inset-bottom, 0px)); }
+}
+/* This palette's white-on-red token misses AA for small text. Keep its red
+   accent and use the existing dark background token for readable labels. */
+[data-theme="red-cyan"] .mj-onboarding .btn-primary,
+[data-theme="red-cyan"] .mj-onboarding-step-current .mj-onboarding-step-number {
+  color: var(--bg);
+}

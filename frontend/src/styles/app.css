@@ -2889,3 +2889,8 @@
 .checkin-progress li { padding: .6rem 1rem; border: 1px solid var(--border); border-radius: .75rem; }
 .checkin-progress [aria-current="step"] { font-weight: 700; outline: 2px solid var(--primary); }
 @media (max-width: 640px) { .journey-list > li { align-items: start; } .journey-page .page-toolbar { display: flex; flex-wrap: wrap; } }
+
+/* Keep the upload and coverage confirmations above mobile navigation. */
+@media (max-width: 860px) {
+  .financial-data-page, .import-journey-page { padding-block-end: calc(72px + env(safe-area-inset-bottom, 0px)); }
+}
