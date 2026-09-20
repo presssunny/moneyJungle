@@ -1,0 +1,42 @@
+.financial-picture { --picture-muted: color-mix(in srgb,var(--text) 78%,var(--bg-card)); display:grid; gap:20px; }
+.picture-lead.card { border-radius:16px; padding:28px; background:linear-gradient(120deg,color-mix(in srgb,var(--primary) 7%,var(--bg-card)),var(--bg-card)); }
+.picture-heading { display:flex; align-items:center; gap:16px; }
+.picture-heading > span { display:grid; place-items:center; width:48px; height:48px; flex-shrink:0; border-radius:14px; background:color-mix(in srgb,var(--primary) 14%,var(--bg-card)); font-size:28px; }
+.picture-heading h2 { font-size:clamp(21px,3vw,28px); }
+.picture-kicker { color:var(--picture-muted); font-size:13px; margin-block-end:6px; }
+.picture-next { display:grid; justify-items:start; gap:12px; margin-block-start:24px; }
+.picture-next h3 { font-size:18px; }
+.financial-picture p { line-height:1.7; }
+.picture-next p,.picture-source p,.picture-capabilities p,.picture-situation p { color:var(--picture-muted); }
+.picture-next .btn { min-height:48px; min-width:200px; border-radius:10px; }
+.picture-more { display:inline-block; margin-block-start:20px; text-decoration:underline; text-underline-offset:4px; }
+.picture-situation { border:1px solid var(--border); border-radius:12px; padding:18px; background:var(--bg-card); scroll-margin-top:100px; }
+.financial-picture summary { cursor:pointer; min-height:44px; padding-block:10px; font-weight:600; }
+.picture-questions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin-block:20px; }
+.picture-cash { display:grid; align-content:start; gap:8px; font-size:14px; }
+.picture-cash select { min-height:44px; padding:10px; background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:6px; max-width:100%; }
+.picture-areas { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+.picture-areas > div { display:grid; gap:8px; padding:16px; border:1px solid var(--border); border-radius:12px; }
+.picture-areas span,.picture-areas small { color:var(--picture-muted); }
+.picture-source-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+.picture-source.card { display:grid; align-content:start; gap:12px; border-radius:12px; min-width:0; }
+.picture-source-heading { display:flex; align-items:start; justify-content:space-between; gap:12px; }
+.picture-source h3 { font-size:16px; overflow-wrap:anywhere; }
+.picture-badge { font-size:12px; padding:4px 8px; border-radius:20px; background:color-mix(in srgb,var(--warning) 12%,var(--bg-card)); white-space:nowrap; }
+.picture-source-known .picture-badge { background:color-mix(in srgb,var(--success) 14%,var(--bg-card)); }
+.picture-months { display:flex; flex-wrap:wrap; gap:8px; margin-block:10px; }
+.picture-months span { font-size:13px; padding:4px 8px; border:1px solid var(--border); border-radius:6px; }
+.picture-capabilities h2 { font-size:20px; margin-block-end:16px; }
+.picture-capabilities ul { list-style:none; display:grid; gap:18px; }
+.picture-capabilities li { display:flex; gap:12px; }
+.picture-capabilities li > span { font-size:20px; }
+.picture-capabilities p { font-size:14px; }
+.picture-quiet { display:flex; justify-content:space-between; flex-wrap:wrap; gap:12px; font-size:14px; }
+.financial-picture :is(a,button,input,select,summary):focus-visible { outline:2px solid var(--secondary); outline-offset:4px; }
+[data-theme="red-cyan"] .financial-picture .btn-primary { color:var(--bg); }
+@media(max-width:700px){ .picture-source-grid,.picture-questions { grid-template-columns:1fr; } .picture-areas { grid-template-columns:1fr; } .picture-areas > div { grid-template-columns:1fr 1fr; } .picture-lead.card { padding:20px; } .picture-next .btn { width:100%; } }
+@media(prefers-reduced-motion:reduce){ .financial-picture * { animation:none!important; transition:none!important; } }
+
+.financial-data-page :is(#picture-scope, #confirm-picture, [id^="balance-"], [id^="source-"]) { scroll-margin-block-start:100px; }
+.coverage-card-activity { display:grid; gap:12px; margin-block:12px 20px; }
+.coverage-card-activity label { display:flex; align-items:center; gap:8px; min-height:44px; }

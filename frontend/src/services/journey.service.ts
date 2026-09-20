@@ -4,7 +4,7 @@ export type { ReviewItem, Commitment, Profile, FinancialStatus, ImportSession, C
 export async function getFinancialStatus():Promise<FinancialStatus>{return (await api.get('/journey/status')).data;}
 export async function getProfile():Promise<Profile>{return (await api.get('/journey/profile')).data;}
 export async function saveProfile(input:unknown):Promise<Profile>{return (await api.patch('/journey/profile',input)).data;}
-export async function confirmCoverage(dataVersion:string,sourceKeys:string[]){return (await api.post('/journey/coverage',{dataVersion,sourceKeys,confirmed:true})).data;}
+export async function confirmCoverage(dataVersion:string,sourceKeys:string[],quietSourceKeys:string[]=[]){return (await api.post('/journey/coverage',{dataVersion,sourceKeys,quietSourceKeys,confirmed:true})).data;}
 export async function finishOnboarding(noActivity:boolean){return (await api.post('/journey/onboarding/complete',{reviewed:true,noActivity})).data;}
 export async function getReview():Promise<ReviewItem[]>{return (await api.get('/journey/review')).data;}
 export async function getCommitments():Promise<Commitment[]>{return (await api.get('/journey/commitments')).data;}
@@ -21,3 +21,5 @@ export async function completeCheckIn(id:string,token:string){return (await api.
 
 export async function getHomeStatus():Promise<HomeStatus>{return (await api.get("/journey/home")).data;}
 export async function getJourneyActions():Promise<JourneyAction[]>{return (await api.get("/journey/actions")).data;}
+
+export async function saveSituation(input:import("../types/picture.types").Situation){return (await api.patch("/journey/situation",input)).data;}

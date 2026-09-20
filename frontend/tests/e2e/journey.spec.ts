@@ -1,9 +1,13 @@
 import { test, expect, type Page } from '@playwright/test';
+function picture(phase=3) {
+ const next=phase===0?{id:'situation',title:'מה יש בתמונה שלך?',reason:'אפשר לעדכן בכל זמן.',to:'/onboarding#situation',priority:5}:phase===1?{id:'session:test',title:'נמשיך עם הדוח שלך',reason:'נשאר לבדוק את הדוח.',to:'/imports?session=test',priority:0}:phase===2?{id:'acknowledge',title:'מבט אחרון על המידע',reason:'נבדוק מה עדכני להיום.',to:'/data#confirm-picture',priority:40}:null;
+ return {stage:phase===3?'reviewed':'building',inventoryKnown:phase>0,hasUsefulData:phase>0,sufficient:phase===3,requiredGaps:[],situation:phase?{bankAccounts:0,creditCards:0,loans:0,cashActivity:false}:null,next,actions:next?[next]:[],sources:[],capabilities:[{key:'daily',title:'אומדן להוצאה יומית',available:false,reason:'אין יתרת בנק מאומתת לתכנון מזומן'}],areas:[['bankAccounts','חשבונות בנק'],['creditCards','כרטיסי אשראי'],['loans','הלוואות']].map(([key,title])=>({key,title,actual:0,expected:phase?0:null,status:phase?'not_applicable':'unknown',to:'/accounts',importTo:'/imports'}))};
+}
 async function mockApi(page:Page,{pending=false,coverageAcknowledged=true}={}){
  let draft:{id:string;step:number}|null=null;let completedAt:string|null=null;
  let profile={onboarding:pending?'pending':'completed',scope:{accountsListed:true,cardsListed:true,commitmentsListed:true,manualOnly:false},cashBuffer:'0',essentialReserve:'0',savedReserve:'0'};
  let session:any=null;let expense:any=null;let removed=false;let editedRow:{name:string;amount:number;date:string}|null=null;
- const state=()=>({today:'2026-09-17',end:'2026-09-30',dataVersion:'a'.repeat(64),profile,sources:[],balances:[],cards:[],events:[],issues:[],blockers:['אין יתרה מאומתת'],coverageAcknowledged,allowance:{amount:null,shortfall:null,state:'unavailable',cash:0,reserves:0,essentialReserve:0,formula:'יתרה פחות התחייבויות',assumptions:['הכנסה שטרם התקבלה אינה נכללת']}});
+ const state=()=>({picture:picture(coverageAcknowledged?3:2),today:'2026-09-17',end:'2026-09-30',dataVersion:'a'.repeat(64),profile,sources:[],balances:[],cards:[],events:[],issues:[],blockers:['אין יתרה מאומתת'],coverageAcknowledged,allowance:{amount:null,shortfall:null,state:'unavailable',cash:0,reserves:0,essentialReserve:0,formula:'יתרה פחות התחייבויות',assumptions:['הכנסה שטרם התקבלה אינה נכללת']}});
  await page.route('**/api/**',async route=>{
   const req=route.request(),path=new URL(req.url()).pathname,method=req.method();let body:any=[];
   if(path==='/api/gate/session')body={user:{id:1,email:'test@example.test',displayName:'Test',role:'USER'},csrfToken:'x'};
@@ -56,8 +60,8 @@ test('Quick Add shows interpreted date and supports editing and immediate undo',
  await page.getByRole('button',{name:'ביטול ההוספה'}).click();await expect(page.getByText('ההוספה בוטלה')).toBeVisible();expect(mocked.isRemoved()).toBe(true);
 });
 test('Upload questions survive reload, and completion follows review',async({page})=>{
- await mockApi(page,{pending:true});await page.goto('/');await expect(page).toHaveURL(/onboarding/);
- await page.getByRole('navigation',{name:'שלבי ההיכרות'}).getByRole('link',{name:/מוסיפים מידע/}).click();
+ await mockApi(page,{pending:true});await page.goto('/onboarding');
+ await page.getByRole('navigation',{name:'שלבי ההיכרות'}).getByRole('link',{name:/מוסיפים ובודקים/}).click();
  await page.locator('input[type=file]').setInputFiles({name:'expenses.csv',mimeType:'text/csv',buffer:Buffer.from('שם,סכום\nקפה,18')});
  await expect(page).toHaveURL(/session=/);await page.reload();await expect(page.getByText('נדרש חודש',{exact:true})).toBeVisible();
  await page.getByLabel('חודש לשורות ללא תאריך').fill('2026-09');await page.getByRole('button',{name:'בדיקת הפרטים'}).click();
@@ -68,7 +72,7 @@ test('Upload questions survive reload, and completion follows review',async({pag
 test('Onboarding directs users to coverage review before offering completion',async({page})=>{
  await mockApi(page,{pending:true,coverageAcknowledged:false});await page.goto('/onboarding');
  await expect(page.getByRole('button',{name:'סיום ההיכרות'})).toHaveCount(0);
- await expect(page.getByRole('navigation',{name:'שלבי ההיכרות'}).getByRole('link',{name:/רואים את התמונה/})).toHaveAttribute('href','/data');
+ await expect(page.getByRole('navigation',{name:'שלבי ההיכרות'}).getByRole('link',{name:/רואים את התמונה/})).toHaveAttribute('href','/onboarding#onboarding-action');
 });
 test('Legacy import and management links reach canonical destinations',async({page})=>{
  await mockApi(page);await page.goto('/transactions?tab=import');await expect(page).toHaveURL(/\/imports$/);
@@ -164,28 +168,28 @@ test('Onboarding guides upload, review and coverage without locally acknowledgin
  let phase=0;let writes=0;
  page.on('request', req=>{if(req.method()==='POST'&&req.url().includes('/journey/'))writes++;});
  await page.route('**/api/imports/sessions', route=>route.fulfill({json:phase?[{id:'test',fileName:'expenses.csv',status:'review',kind:'expense_sheet'}]:[]}));
- await page.route('**/api/journey/status', route=>route.fulfill({json:{profile:{onboarding:'pending',scope:phase===3?{manualOnly:false}:null},hasActivity:phase>0,coverageAcknowledged:phase===3,issues:phase===1?[{key:'session:test',blocking:true,title:'דוח לבדיקה',to:'/imports?session=test'}]:[],blockers:['אין יתרת בנק מאומתת לתכנון מזומן']}}));
+ await page.route('**/api/journey/status', route=>route.fulfill({json:{picture:picture(phase),profile:{onboarding:'pending',scope:phase===3?{manualOnly:false}:null},hasActivity:phase>0,coverageAcknowledged:phase===3,issues:phase===1?[{key:'session:test',blocking:true,title:'דוח לבדיקה',to:'/imports?session=test'}]:[],blockers:['אין יתרת בנק מאומתת לתכנון מזומן']}}));
  await page.goto('/onboarding');
  const nav=page.getByRole('navigation',{name:'שלבי ההיכרות'});
- await expect(nav.locator('[aria-current=step]')).toContainText('מוסיפים מידע');
+ await expect(nav.locator('[aria-current=step]')).toContainText('מכירים את הכסף');
  await expect(nav.getByText('בהמשך',{exact:true})).toHaveCount(2);
- await expect(page.getByRole('link',{name:'העלאת דוח ראשון'})).toBeVisible();
+ await expect(page.getByRole('button',{name:'שמירה והמשך'})).toBeVisible();
  await expect(page.getByRole('link',{name:'מעדיפים להזין ידנית?'})).toHaveAttribute('href','/data');
- await expect(page.getByText('אין יתרת בנק מאומתת לתכנון מזומן',{exact:true})).toBeHidden();
+ await expect(page.getByText('אין יתרת בנק מאומתת לתכנון מזומן',{exact:true}).first()).toBeHidden();
  await page.locator('.mj-onboarding-details summary').focus();await page.keyboard.press('Enter');
- await expect(page.getByText('אין יתרת בנק מאומתת לתכנון מזומן',{exact:true})).toBeVisible();
+ await expect(page.getByText('אין יתרת בנק מאומתת לתכנון מזומן',{exact:true}).first()).toBeVisible();
  for(phase=1;phase<=3;phase++){
   await page.reload();
   await expect(nav.getByText('הושלם',{exact:true})).toHaveCount(phase);
-  if(phase===1)await expect(page.getByRole('link',{name:'לבדיקת הנתונים'})).toHaveAttribute('href','/review');
-  if(phase===2)await expect(page.getByRole('link',{name:'לבדיקת המידע שלי'})).toHaveAttribute('href','/data');
+  if(phase===1)await expect(page.getByRole('link',{name:'להמשך הדוח'})).toHaveAttribute('href','/imports?session=test');
+  if(phase===2)await expect(page.getByRole('link',{name:'לבדיקת המידע שלי',exact:true})).toHaveAttribute('href','/data#confirm-picture');
   if(phase<3)await expect(page.getByRole('button',{name:'סיום ההיכרות'})).toHaveCount(0);
  }
  const finish=page.getByRole('button',{name:'סיום ההיכרות'});
  await expect(finish).toBeDisabled();
  await page.getByRole('checkbox',{name:/בדקתי את הנתונים/}).check();await expect(finish).toBeEnabled();
  expect(writes).toBe(0);
- phase=2;await page.reload();await expect(page.getByRole('link',{name:'לבדיקת המידע שלי'})).toBeVisible();
+ phase=2;await page.reload();await expect(page.getByRole('link',{name:'לבדיקת המידע שלי',exact:true})).toBeVisible();
  await expect(page.getByRole('button',{name:'סיום ההיכרות'})).toHaveCount(0);
 });
 
@@ -212,14 +216,37 @@ test('Onboarding supports all themes, narrow RTL layouts and reduced motion', as
  await expect(page.locator('.mj-onboarding-cta')).toHaveCSS('outline-style','solid');
 });
 
-test('Onboarding preserves manual no-activity payload, server errors and deferral', async ({page})=>{
+test('Onboarding preserves manual no-activity payload, server errors and access to home', async ({page})=>{
  await mockApi(page,{pending:true});let payload:unknown;let deferred=false;
- await page.route('**/api/journey/status', route=>route.fulfill({json:{profile:{onboarding:'pending',scope:{manualOnly:true}},coverageAcknowledged:true,issues:[],blockers:[]}}));
+ await page.route('**/api/journey/status', route=>route.fulfill({json:{picture:picture(),profile:{onboarding:'pending',scope:{manualOnly:true}},coverageAcknowledged:true,issues:[],blockers:[]}}));
  await page.route('**/api/journey/onboarding/complete',route=>{payload=route.request().postDataJSON();return route.fulfill({status:409,json:{error:{message:'הנתונים השתנו. יש לרענן לפני אישור העדכניות'}}});});
  await page.route('**/api/journey/onboarding/defer',async route=>{deferred=true;await route.fulfill({json:{ok:true}});});
  await page.goto('/onboarding');await page.getByRole('checkbox',{name:/בדקתי את הנתונים/}).check();
  await page.getByRole('checkbox',{name:/אין כרגע פעילות/}).check();
  await page.getByRole('button',{name:'סיום ההיכרות'}).click();
  await expect(page.getByRole('alert').filter({hasText:'הנתונים השתנו'})).toBeVisible();expect(payload).toEqual({reviewed:true,noActivity:true});
- await page.getByRole('button',{name:'להמשיך מאוחר יותר'}).click();await expect.poll(()=>deferred).toBe(true);
+ await page.getByRole('link',{name:'להמשיך לבית עם המידע הקיים'}).click();await expect(page).toHaveURL(/\/$/);expect(deferred).toBe(false);
+});
+
+test('Onboarding keeps unknown answers distinct from zero and recovers from save errors', async ({page})=>{
+ await mockApi(page,{pending:true,coverageAcknowledged:false});
+ let saved=false;let reject=true;const payloads:unknown[]=[];
+ await page.route('**/api/journey/status',route=>route.fulfill({json:{picture:picture(saved?2:0),profile:{onboarding:'pending',scope:null},hasActivity:false,coverageAcknowledged:false,issues:[],blockers:[]}}));
+ await page.route('**/api/journey/situation',route=>{
+  payloads.push(route.request().postDataJSON());
+  if(reject)return route.fulfill({status:503,json:{error:{message:'לא הצלחנו לשמור. אפשר לנסות שוב.'}}});
+  saved=true;return route.fulfill({json:{ok:true}});
+ });
+ await page.goto('/onboarding');
+ await page.getByRole('spinbutton',{name:'חשבונות בנק',exact:true}).fill('0');
+ await page.getByRole('button',{name:'שמירה והמשך'}).click();
+ await expect(page.getByRole('alert').filter({hasText:'לא הצלחנו לשמור'})).toBeVisible();
+ expect(payloads[0]).toEqual({bankAccounts:0,creditCards:null,loans:null,cashActivity:null});
+ await expect(page.getByRole('spinbutton',{name:'חשבונות בנק',exact:true})).toHaveValue('0');
+ for(const name of ['כרטיסי אשראי','הלוואות'])await page.getByRole('spinbutton',{name,exact:true}).fill('0');
+ await page.getByRole('combobox',{name:'יש גם הוצאות במזומן או מחוץ לדוחות?'}).selectOption('no');
+ reject=false;await page.getByRole('button',{name:'שמירה והמשך'}).click();
+ await expect(page.getByRole('navigation',{name:'שלבי ההיכרות'}).locator('[aria-current=step]')).toContainText('רואים את התמונה');
+ expect(payloads[1]).toEqual({bankAccounts:0,creditCards:0,loans:0,cashActivity:false});
+ await expect(page.getByRole('button',{name:'סיום ההיכרות'})).toHaveCount(0);
 });

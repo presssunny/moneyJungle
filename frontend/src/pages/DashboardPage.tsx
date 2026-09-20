@@ -1,5 +1,6 @@
 import { lazy, Suspense, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { FinancialPicturePanel } from "../components/common/FinancialPicturePanel";
 import { Card } from "../components/common/Card";
 import { Button } from "../components/common/Button";
 import { AsyncSection } from "../components/common/AsyncSection";
@@ -19,12 +20,12 @@ export default function DashboardPage(){
  return <div className="journey-page">
   <div className="page-toolbar"><Button onClick={()=>navigate('/imports')}>עדכון מידע</Button><Button variant="outline" onClick={()=>navigate('/check-in')}>בדיקת הכסף השבועית</Button><Button variant="ghost" onClick={()=>navigate('/transactions?tab=expenses',{state:{openForm:true}})}>הוספת הוצאה</Button></div>
   <AsyncSection resource={state} errorTitle="לא ניתן לבדוק את תמונת הכסף" skeleton={<Loading/>}>{data=><>
-   {['pending','deferred'].includes(data.profile.onboarding)&&<Card title="ההיכרות עדיין לא הושלמה"><Link to="/onboarding">המשך מהשלב שבו עצרת</Link></Card>}
+   {data.picture&&<FinancialPicturePanel picture={data.picture} compact onSaved={state.reload}/>}
    <Card title="איפה אנחנו עומדים היום?">
-    {!data.hasActivity&&!data.balances.length&&<p>עדיין לא נרשמה פעילות. <Link to="/imports">העלאת דוח ראשון</Link> או <Link to="/transactions?tab=expenses">רישום ידני</Link> יתחילו את התמונה.</p>}
+
     {data.blockers.length>0?<><p className="financial-status">התמונה עדיין חלקית</p><p>אין כרגע מספיק מידע לאומדן יומי לאחר התחייבויות.</p><Link to="/data">מה חסר ואיך משלימים?</Link></>:<><p className="text-muted">אומדן לתכנון הוצאה יומית עד {formatDate(data.end)}</p><p className="financial-status mono">{formatCurrency(data.allowance.amount!)}</p>{!!data.allowance.shortfall&&<p>פער צפוי בכיסוי ההתחייבויות: {formatCurrency(data.allowance.shortfall)}</p>}</>}
-    <p className="text-muted">נכון ל־{formatDate(data.today)} · {data.sources.length} חשבונות וכרטיסים ברשימה · {data.blockers.length ? "כיסוי חלקי" : "עדכניות אושרה"}</p>
-    <p>יתרות בנק רשומות: <strong>{data.balances.length?formatCurrency(data.allowance.cash):'לא ידוע'}</strong></p>
+    <p className="text-muted">נכון ל־{formatDate(data.today)} · {data.sources.length} פריטים בתמונה · {data.blockers.length ? "מידע חלקי" : "עדכניות אושרה"}</p>
+    <p>יתרות בנק רשומות: <strong>{data.balances.length&&data.balances.every(b=>b.anchor)?formatCurrency(data.allowance.cash):'לא ידוע'}</strong></p>
     <MetricExplanation metric="allowance" version={data.dataVersion}><p>{data.allowance.formula}</p><p>שריון לביטחון, חיסכון ואשראי מעבר לחודש: {formatCurrency(data.allowance.reserves)} · הוצאות חיוניות שטרם נרשמו: {formatCurrency(data.allowance.essentialReserve)}</p><ul>{data.balances.map(b=><li key={b.id}>{b.name}: {b.explanation}</li>)}{data.allowance.assumptions.map(a=><li key={a}>{a}</li>)}{data.blockers.map(b=><li key={b}>{b}</li>)}</ul><Link to="/commitments">פירוט ההתחייבויות</Link></MetricExplanation>
     <MetricExplanation title="מקורות יתרות הבנק" metric="cash" version={data.dataVersion}/>
    </Card>

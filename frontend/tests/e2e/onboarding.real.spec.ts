@@ -14,7 +14,7 @@ function fixture(code: string) {
  `], { cwd:backend, encoding:'utf8', env:process.env });
 }
 
-for (const mode of ['upload','manual'] as const) {
+for (const mode of ['upload','manual','inactive-card'] as const) {
  test(`Real onboarding: ${mode}, coverage confirmation and completion`, async ({page,context},testInfo)=>{
   test.setTimeout(90000);
   const identity=JSON.parse(fixture(`
@@ -24,15 +24,23 @@ for (const mode of ['upload','manual'] as const) {
    console.log(JSON.stringify({userId:user.id,token}));
   `).trim());
   try {
+   if(mode==='inactive-card')fixture(`await prisma.creditCard.create({data:{userId:${Number(identity.userId)},name:'כרטיס ללא חיובים',issuer:'test',lastFour:'1234'}});`);
    await context.addCookies([{name:'mj_session',value:identity.token,url:'http://127.0.0.1:5174',httpOnly:true,sameSite:'Lax'}]);
    const {csrfToken}=await (await page.request.get('/api/gate/session')).json();
    const headers={'X-CSRF-Token':csrfToken};
-   await page.goto('/');await expect(page).toHaveURL(/onboarding/);
+   await page.goto('/onboarding');
    const nav=page.getByRole('navigation',{name:'שלבי ההיכרות'});
-   await expect(nav.locator('[aria-current=step]')).toContainText('מוסיפים מידע');
+   await expect(nav.locator('[aria-current=step]')).toContainText('מכירים את הכסף');
    await page.screenshot({path:testInfo.outputPath(`real-${mode}-start.png`),fullPage:true});
+   // Use the actual situation form; zero is explicit, never inferred from blank fields.
+   for (const name of ['חשבונות בנק','כרטיסי אשראי','הלוואות']) await page.getByRole('spinbutton',{name,exact:true}).fill(mode==='inactive-card'&&name==='כרטיסי אשראי'?'1':'0');
+   await page.getByRole('combobox',{name:'יש גם הוצאות במזומן או מחוץ לדוחות?'}).selectOption('no');
+   await page.getByRole('button',{name:'שמירה והמשך'}).click();
+   await expect(nav.getByText('הושלם',{exact:true})).toHaveCount(mode==='inactive-card'?1:2);
+   await page.reload();
+   await expect(nav.locator('[aria-current=step]')).toContainText(mode==='inactive-card'?'מוסיפים ובודקים':'רואים את התמונה');
    if(mode==='upload'){
-    await page.getByRole('link',{name:'העלאת דוח ראשון'}).click();
+    await nav.getByRole('link',{name:/מוסיפים ובודקים/}).click();
     const XLSX=createRequire(resolve(backend,'package.json'))('xlsx');
     const workbook=XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook,XLSX.utils.aoa_to_sheet([['שם','סכום'],['קפה',18]]),'Data');
@@ -45,32 +53,49 @@ for (const mode of ['upload','manual'] as const) {
     await page.getByRole('button',{name:'קליטת הנתונים',exact:true}).click();
     await expect(page.getByRole('button',{name:'בדקתי — סיום הקליטה'})).toBeVisible();
     const importUrl=page.url();
-    await page.goto('/onboarding');await expect(nav.locator('[aria-current=step]')).toContainText('בודקים יחד');
+    await page.goto('/onboarding');await expect(nav.locator('[aria-current=step]')).toContainText('מוסיפים ובודקים');
     await page.screenshot({path:testInfo.outputPath('real-review.png'),fullPage:true});
-    await page.getByRole('link',{name:'לבדיקת הנתונים'}).click();
-    await expect(page).toHaveURL(/review/);
-    await page.getByRole('link',{name:/onboarding-demo.xlsx/}).click();
+    await page.getByRole('link',{name:'להמשך הדוח'}).click();
     await expect(page).toHaveURL(new RegExp(new URL(importUrl).searchParams.get('session')!));
     await page.getByRole('button',{name:'בדקתי — סיום הקליטה'}).click();
     await page.getByRole('link',{name:'השלמת ההיכרות'}).click();
     await expect(nav.locator('[aria-current=step]')).toContainText('רואים את התמונה');
-    await page.getByRole('link',{name:'לבדיקת המידע שלי'}).click();
+    await page.getByRole('link',{name:'לבדיקת המידע שלי',exact:true}).click();
    } else {
-    await page.getByRole('link',{name:'מעדיפים להזין ידנית?'}).click();
+    if(mode==='inactive-card'){
+     await page.getByRole('link',{name:'לבדיקת הפרטים',exact:true}).click();
+     await expect(page).toHaveURL(/data#source-credit-/);
+     await expect(page.getByRole('checkbox',{name:'אין כרגע חיובים שצריך לכלול עבור כרטיס ללא חיובים'})).toBeInViewport();
+    }else await page.getByRole('link',{name:'מעדיפים להזין ידנית?'}).click();
     await page.getByRole('checkbox',{name:/אני בוחר\/ת בהזנה ידנית/}).check();
    }
    await page.getByRole('checkbox',{name:/בדקתי שכל החשבונות/}).check();
    await page.getByRole('button',{name:'שמירת היקף התמונה והסכומים'}).click();
    await expect(page.getByRole('status').filter({hasText:'נשמר'})).toBeVisible();
+   if(mode==='inactive-card'){
+    const quiet=page.getByRole('checkbox',{name:'אין כרגע חיובים שצריך לכלול עבור כרטיס ללא חיובים'});
+    await expect(quiet).not.toBeChecked();await quiet.check();
+   }
+   for(const checkbox of await page.getByRole('checkbox',{name:/בדקתי את עדכניות/}).all())await checkbox.check();
    await page.getByRole('button',{name:'בדקתי — המידע מעודכן להיום'}).click();
    await expect.poll(async()=> (await (await page.request.get('/api/journey/status',{headers})).json()).coverageAcknowledged).toBe(true);
-   await page.goto('/');await expect(page).toHaveURL(/onboarding/);await expect(nav.getByText('הושלם',{exact:true})).toHaveCount(3);
+   await page.goto('/onboarding');await expect(nav.getByText('הושלם',{exact:true})).toHaveCount(3);
    const finish=page.getByRole('button',{name:'סיום ההיכרות'});await expect(finish).toBeDisabled();
    await page.getByRole('checkbox',{name:/בדקתי את הנתונים/}).check();
-   if(mode==='manual')await page.getByRole('checkbox',{name:/אין כרגע פעילות/}).check();
+   if(mode!=='upload')await page.getByRole('checkbox',{name:/אין כרגע פעילות/}).check();
    await page.screenshot({path:testInfo.outputPath(`real-${mode}-finish.png`),fullPage:true});
    await finish.click();await expect(page).toHaveURL(/\/$/);await page.reload();await expect(page).toHaveURL(/\/$/);
    expect((await (await page.request.get('/api/journey/profile',{headers})).json()).onboarding).toBe('completed');
+   if(mode==='inactive-card'){
+    await page.goto('/onboarding');
+    await page.getByText('מה כלול בתמונה שלי? · שינוי',{exact:true}).click();
+    await page.getByRole('spinbutton',{name:/חשבונות בנק/}).fill('1');
+    await page.getByRole('button',{name:'שמירת התמונה שלי',exact:true}).click();
+    await expect(nav.locator('[aria-current=step]')).toContainText('מוסיפים ובודקים');
+    await page.goto('/data');
+    await expect(page.getByRole('checkbox',{name:'אין כרגע חיובים שצריך לכלול עבור כרטיס ללא חיובים'})).not.toBeChecked();
+    expect((await (await page.request.get('/api/journey/status',{headers})).json()).coverageAcknowledged).toBe(false);
+   }
   } finally {
    fixture(`
     const user=await prisma.user.findFirstOrThrow({where:{id:${Number(identity.userId)},name:'__onboarding_browser_test'}});

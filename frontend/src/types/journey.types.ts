@@ -1,7 +1,9 @@
+import type { FinancialPicture, Situation } from "./picture.types";
 export interface ReviewItem {key:string;title:string;to:string;blocking:boolean;fingerprint:string}
 export interface Commitment {key:string;date:string;name:string;amount:number|null;kind:string;fingerprint:string;decision:string|null;note:string|null;to:string}
-export interface Profile {onboarding:string;scope:{accountsListed:boolean;cardsListed:boolean;commitmentsListed:boolean;manualOnly:boolean}|null;cashBuffer:string;essentialReserve:string;savedReserve:string}
+export interface Profile {situation?:Situation|null;onboarding:string;scope:{accountsListed:boolean;cardsListed:boolean;commitmentsListed:boolean;manualOnly:boolean}|null;cashBuffer:string;essentialReserve:string;savedReserve:string}
 export interface FinancialStatus {
+ picture?:FinancialPicture;quietSourceKeys?:string[];
  sources:Array<{key:string;name:string;kind:string;asOf:string|null;observedFrom:string|null;observedTo:string|null;limitation:string}>;
  hasActivity:boolean;
  today:string;end:string;dataVersion:string;profile:Profile;

@@ -73,3 +73,49 @@
 [data-theme="red-cyan"] .mj-onboarding-step-current .mj-onboarding-step-number {
   color: var(--bg);
 }
+
+.mj-onboarding-anchor, .mj-onboarding #situation { scroll-margin-block-start: 100px; }
+.mj-onboarding-initial, .mj-onboarding-form, .mj-onboarding-finish { width: 100%; }
+.mj-onboarding-form .picture-questions { margin-block: 0 12px; }
+.mj-onboarding-form .field-input { min-height: 46px; }
+.mj-onboarding-form-hint { display: block; margin-block-start: 12px; color: var(--mj-onboarding-muted); font-size: 13px; }
+.mj-onboarding-section-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-block-end: 14px; }
+.mj-onboarding-section-heading h2 { font-size: 18px; }
+.mj-onboarding-section-heading a { font-size: 14px; min-height: 44px; display: inline-flex; align-items: center; text-decoration: underline; text-underline-offset: 4px; }
+.mj-onboarding-areas { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.mj-onboarding-area.card { display: grid; justify-items: start; gap: 12px; border-radius: 14px; padding: 22px; }
+.mj-onboarding-area h3 { font-size: 15px; }
+.mj-onboarding-area-icon { font-size: 24px; color: var(--mj-onboarding-muted); }
+.mj-onboarding-area-count { font-size: 28px; font-weight: 700; }
+.mj-onboarding-area-count small { font-size: 13px; font-weight: 400; color: var(--mj-onboarding-muted); }
+.mj-onboarding-badge { font-size: 12px; padding: 5px 10px; border-radius: 20px; background: color-mix(in srgb, var(--warning) 12%, var(--bg-card)); }
+.mj-onboarding-badge-added { background: color-mix(in srgb, var(--success) 12%, var(--bg-card)); }
+.mj-onboarding-area a { font-size: 14px; min-height: 44px; display: inline-flex; align-items: center; }
+.mj-onboarding-details p { line-height: 1.7; }
+.mj-onboarding-details li + li { margin-block-start: 12px; }
+.mj-onboarding-footer a { min-height: 44px; display: inline-flex; align-items: center; text-decoration: underline; text-underline-offset: 4px; }
+.mj-onboarding h2, .mj-onboarding-details, .mj-onboarding-area { overflow-wrap: anywhere; }
+@media (max-width: 700px) {
+  .mj-onboarding-step-copy small { display: none; }
+  .mj-onboarding-progress-caption > :last-child { display: none; }
+  .mj-onboarding-welcome { gap: 6px; }
+  .mj-onboarding-action.card { gap: 12px; }
+  .mj-onboarding-action-content { gap: 12px; }
+  .mj-onboarding-areas { grid-template-columns: 1fr; gap: 10px; }
+  .mj-onboarding-area.card { grid-template-columns: 30px 1fr auto; align-items: center; gap: 8px 12px; padding: 14px; }
+  .mj-onboarding-area-count { grid-column: 3; grid-row: 1 / span 2; font-size: 24px; }
+  .mj-onboarding-badge { grid-column: 2; justify-self: start; }
+  .mj-onboarding-area a { grid-column: 2 / span 2; }
+}
+/* Form labels use the readable onboarding token in every theme. */
+.mj-onboarding .field-label, .mj-onboarding input::placeholder { color: var(--mj-onboarding-muted); }
+.mj-onboarding :is(select, h2[tabindex]):focus-visible { outline: 2px solid var(--secondary); outline-offset: 4px; }
+/* Keep the next action near the top on phones, with all three steps in view. */
+@media (max-width: 700px) {
+  .mj-onboarding-stepper { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .mj-onboarding-step a { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 12px 4px; text-align: center; }
+  .mj-onboarding-step-copy { flex: 1; }
+  .mj-onboarding-step-copy strong { font-size: 12px; line-height: 1.5; }
+  .mj-onboarding-step-status { font-size: 11px; }
+  .mj-onboarding-step:not(:last-child)::after { inset-inline-start: auto; inset-inline-end: -8px; top: 28px; width: 8px; height: 0; border-inline-start: 0; border-block-start: 2px solid var(--border); }
+}
