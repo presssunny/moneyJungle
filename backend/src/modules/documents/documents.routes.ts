@@ -1,4 +1,5 @@
 import { Request, Response, Router } from "express";
+import { z } from "zod";
 import { gateAuth } from "../../middlewares/gateAuth.middleware";
 import { validate } from "../../middlewares/validation.middleware";
 import { asyncHandler } from "../../utils/asyncHandler";
@@ -34,6 +35,20 @@ documentsRoutes.get(
       `inline; filename*=UTF-8''${encodeURIComponent(fileName)}`
     );
     stream.pipe(res);
+  })
+);
+
+/**
+ * What was recognized from the file, row by row — so a preview can show it
+ * alongside (or instead of) the raw bytes, before the numbers are trusted.
+ */
+documentsRoutes.get(
+  "/:id/rows",
+  validate({ params: idParamSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = validatedParams<IdParam>(req);
+    const { page } = z.object({ page: z.coerce.number().int().min(1).max(100000).default(1) }).parse(req.query);
+    res.json(await documentsService.rows(req.userId!, id, page));
   })
 );
 

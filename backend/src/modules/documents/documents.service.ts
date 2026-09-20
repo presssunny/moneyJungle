@@ -1,10 +1,19 @@
 import { invalidateImportSessions } from "../imports/importLifecycle.service";
+import type { PreviewRow } from "../imports/importRows.service";
 import { prisma, withFinancialTransaction, afterFinancialCommit } from "../../config/database";
 import { ApiError } from "../../utils/ApiError";
 import { accountBalanceService } from "../bank/accountBalance.service";
 import { reconciliationService } from "../bank/reconciliation.service";
 import { loanLifecycleService } from "../loans/loanLifecycle.service";
 import { documentStorage } from "./documentStorage.service";
+
+const DOCUMENT_ROWS_PAGE_SIZE = 50;
+/** Hebrew label for what became of a recognized row, mirroring the in-session review screen. */
+const RESOLUTION_LABELS: Record<string, string> = {
+  include: "נקלט",
+  duplicate: "כפילות — דולגה, כבר קיימת",
+  review: "ממתין לבדיקה",
+};
 
 /**
  * The record of every uploaded file and what came of it. Recording is best-effort:
@@ -399,6 +408,52 @@ export const documentsService = {
       const [documents,sessions]=await Promise.all([prisma.document.count({where:{storagePath:existing.storagePath}}),prisma.importSession.count({where:{storagePath:existing.storagePath!}})]);
       if(!documents&&!sessions) await documentStorage.remove(existing.storagePath!);
     }));
+  },
+
+  /**
+   * What the system recognized from this file, row by row — so a person can
+   * check the extraction before trusting the numbers it produced, not just
+   * after. Found via the import session that created this document (same
+   * file hash): its `ImportRow`s already carry exactly this, computed once at
+   * commit time, never recomputed here. Documents from before the unified
+   * import pipeline existed (or whose session was cleaned up) have none —
+   * reported as unavailable, never guessed at.
+   */
+  async rows(userId: number, id: number, page = 1) {
+    const doc = await prisma.document.findFirst({ where: { id, userId } });
+    if (!doc) throw ApiError.notFound("המסמך לא נמצא");
+    const session = await prisma.importSession.findFirst({
+      where: { userId, fileHash: doc.fileHash, status: { notIn: ["cancelled", "rolled_back"] } },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!session) return { available: false as const, total: 0, page: 1, pageSize: DOCUMENT_ROWS_PAGE_SIZE, rows: [] };
+    const [rows, total] = await Promise.all([
+      prisma.importRow.findMany({
+        where: { sessionId: session.id },
+        orderBy: { rowNumber: "asc" },
+        skip: (page - 1) * DOCUMENT_ROWS_PAGE_SIZE,
+        take: DOCUMENT_ROWS_PAGE_SIZE,
+      }),
+      prisma.importRow.count({ where: { sessionId: session.id } }),
+    ]);
+    return {
+      available: true as const,
+      total,
+      page,
+      pageSize: DOCUMENT_ROWS_PAGE_SIZE,
+      rows: rows.map((row) => {
+        const normalized = row.normalized as unknown as PreviewRow;
+        return {
+          rowNumber: row.rowNumber,
+          date: normalized.date,
+          name: normalized.name,
+          amount: normalized.amount,
+          chargeDate: normalized.chargeDate ?? null,
+          resolution: row.resolution,
+          resolutionLabel: RESOLUTION_LABELS[row.resolution] ?? row.resolution,
+        };
+      }),
+    };
   },
 
   /** The stored bytes, for download or preview. */

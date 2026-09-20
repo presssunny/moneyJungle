@@ -5,6 +5,7 @@ import { AsyncSection } from "../components/common/AsyncSection";
 import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
 import { useConfirm } from "../components/common/ConfirmDialog";
+import { DocumentPreviewModal } from "../components/documents/DocumentPreviewModal";
 import { DropZone } from "../components/common/DropZone";
 import { EmptyState } from "../components/common/EmptyState";
 import { PageShell } from "../components/common/PageShell";
@@ -67,6 +68,7 @@ export default function DocumentsPage() {
   const [busy, setBusy] = useState(false);
   /** What the last undo cost. Kept on screen — a toast is gone too fast to act on. */
   const [undone, setUndone] = useState<RollbackResult | null>(null);
+  const [previewing, setPreviewing] = useState<DocumentRecord | null>(null);
 
   /**
    * One turn of the import conversation. The same file is re-sent with the
@@ -160,7 +162,7 @@ export default function DocumentsPage() {
     );
   }
 
-  async function openFile(doc: DocumentRecord) {
+  async function download(doc: DocumentRecord) {
     try {
       await downloadDocumentFile(doc.id, doc.fileName);
     } catch (err) {
@@ -229,15 +231,24 @@ export default function DocumentsPage() {
       align: "left",
       render: (row) => (
         <span className="row-actions">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setPreviewing(row)}
+            title="תצוגה מקדימה — הקובץ ומה שזוהה ממנו"
+            aria-label={`תצוגה מקדימה של ${row.fileName}`}
+          >
+            👁️
+          </Button>
           {row.hasFile && (
             <Button
               size="sm"
               variant="ghost"
-              onClick={() => openFile(row)}
-              title="צפייה בקובץ המקורי"
-              aria-label={`צפייה בקובץ המקורי של ${row.fileName}`}
+              onClick={() => download(row)}
+              title="הורדת הקובץ המקורי"
+              aria-label={`הורדת הקובץ המקורי של ${row.fileName}`}
             >
-              👁️
+              ⬇️
             </Button>
           )}
           {row.linkedLoanId && (
@@ -388,6 +399,8 @@ export default function DocumentsPage() {
           )}
         </AsyncSection>
       </Card>
+
+      <DocumentPreviewModal doc={previewing} onClose={() => setPreviewing(null)} />
 
       {confirm.dialog}
     </PageShell>

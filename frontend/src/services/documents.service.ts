@@ -84,6 +84,35 @@ export async function fetchDocumentFile(id: number): Promise<Blob> {
   return data;
 }
 
+/** One row the system recognized from the file, and what became of it. */
+export interface DocumentRow {
+  rowNumber: number;
+  date: string | null;
+  name: string;
+  amount: number;
+  chargeDate: string | null;
+  resolution: string;
+  resolutionLabel: string;
+}
+
+export interface DocumentRowsPage {
+  available: boolean;
+  total: number;
+  page: number;
+  pageSize: number;
+  rows: DocumentRow[];
+}
+
+/**
+ * What the file produced, row by row — the extraction behind the numbers,
+ * so it can be checked before it's trusted. `available: false` for a
+ * document from before row-level tracking existed; never guessed rows.
+ */
+export async function getDocumentRows(id: number, page = 1): Promise<DocumentRowsPage> {
+  const { data } = await api.get(`/documents/${id}/rows`, { params: { page } });
+  return data;
+}
+
 /**
  * Hand the file to the browser under its own name. A download anchor rather than
  * window.open — a popup blocker stops the latter without saying why.

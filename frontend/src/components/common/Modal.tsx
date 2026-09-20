@@ -6,9 +6,11 @@ interface ModalProps {
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
+  /** "wide" fits content that needs more room, e.g. a file preview. */
+  size?: "default" | "wide";
 }
 
-export function Modal({ title, open, onClose, children, footer }: ModalProps) {
+export function Modal({ title, open, onClose, children, footer, size = "default" }: ModalProps) {
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
@@ -63,7 +65,7 @@ export function Modal({ title, open, onClose, children, footer }: ModalProps) {
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div
-        className="modal"
+        className={`modal ${size === "wide" ? "modal-wide" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}

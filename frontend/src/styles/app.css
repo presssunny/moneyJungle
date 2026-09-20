@@ -856,6 +856,45 @@
   overflow-y: auto;
 }
 
+.modal-wide {
+  max-width: 880px;
+}
+
+/* ---------- Document preview ---------- */
+
+.doc-preview-frame {
+  width: 100%;
+  height: 60vh;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-card);
+}
+
+.doc-preview-unavailable {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 28px 16px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.modal-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 8px;
+}
+
+.doc-preview-rows-table {
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
 .modal-header {
   display: flex;
   align-items: center;
