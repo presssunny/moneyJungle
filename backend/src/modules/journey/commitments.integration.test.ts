@@ -72,7 +72,7 @@ describe("commitment evidence and coverage", () => {
     expect(response.status).toBe(200);
     expect(response.body.upcoming.some((e:{name:string})=>e.name==="old home debt")).toBe(true);
     expect(response.body.actions.length).toBeLessThanOrEqual(3);
-    expect(response.body.actions.some((a:{id:string})=>a.id==="coverage")).toBe(true);
+    expect(response.body.actions).toEqual(expect.arrayContaining([expect.objectContaining({id:"situation",to:"/onboarding#situation"})]));
   });
 
   it("keeps an unpaid obligation more than 31 days overdue", async () => {

@@ -36,7 +36,7 @@ export async function journeyActions(userId: number, state: Awaited<ReturnType<t
     id:issue.key, topic:issue.topic ?? issue.key, title:issue.title, to:issue.to,
     reason:issue.blocking ? "המידע הזה חוסם תמונה פיננסית שניתן לבדוק" : "השלמת הפירוט תקל על מעקב ההוצאות", priority:issue.blocking ? 0 : 50,
   }));
-  if (state.blockers.length) candidates.push({id:"coverage",topic:"coverage",title:"בדיקת המקורות וההתחייבויות",reason:state.blockers[0],to:"/data",priority:10});
+  for(const action of state.picture.actions.filter(a=>a.priority<80)) candidates.push({...action,topic:action.id});
   for (const event of upcomingCommitments(state)) {
     if (event.amount !== null && event.amount <= 0) continue;
     candidates.push({id:event.key,topic:event.key,dueDate:event.date,title:`${event.date < state.today ? "חוב פתוח" : "חיוב קרוב"}: ${event.name}`,reason:event.date < state.today ? `מועד התשלום ${event.date} עבר ולא נמצא אישור סילוק` : `יש לוודא כיסוי לחיוב בתאריך ${event.date}`,to:"/commitments",priority:event.date < state.today ? 15 : 20});

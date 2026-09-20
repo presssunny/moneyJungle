@@ -13,6 +13,12 @@ import { journeyActions, upcomingCommitments } from "./actions.service";
 import { sessionSourceExists } from "../imports/importLifecycle.service";
 import { checkIns } from "./checkin.service";
 export const journeyRoutes=Router(); journeyRoutes.use(gateAuth);
+const situationSchema=z.object({bankAccounts:z.number().int().min(0).max(100).nullable(),creditCards:z.number().int().min(0).max(100).nullable(),loans:z.number().int().min(0).max(100).nullable(),cashActivity:z.boolean().nullable()}).strict();
+journeyRoutes.patch("/situation",asyncHandler(async(req,res)=>{
+ const situation=situationSchema.parse(req.body);
+ await getProfile(req.userId!);
+ res.json(await withFinancialTransaction(req.userId!,()=>prisma.financialProfile.update({where:{userId:req.userId!},data:{situation:json(situation),reviewedAt:null,revision:{increment:1}}})));
+}));
 const money=z.number().finite().min(0).max(9999999999);
 journeyRoutes.get("/metrics/:name",asyncHandler(async(req,res)=>{
   const name=z.enum(["creditCharge","cash","allowance","commitments","income","expense","surplus","netWorth"]).parse(req.params.name);
@@ -33,11 +39,12 @@ journeyRoutes.patch("/profile",asyncHandler(async(req,res)=>{
   res.json(await prisma.financialProfile.update({where:{userId:req.userId!},data:{...body,scope:body.scope?json(body.scope):undefined,reviewedAt:null}}));
 }));
 journeyRoutes.post("/coverage",asyncHandler(async(req,res)=>{
-  const body=z.object({dataVersion:z.string().length(64),confirmed:z.literal(true),sourceKeys:z.array(z.string()).default([])}).parse(req.body);
+  const body=z.object({dataVersion:z.string().length(64),confirmed:z.literal(true),sourceKeys:z.array(z.string()).default([]),quietSourceKeys:z.array(z.string()).default([])}).parse(req.body);
   const state=await financialStatus(req.userId!);
   if(state.dataVersion!==body.dataVersion) throw ApiError.conflict("הנתונים השתנו. יש לרענן לפני אישור העדכניות");
   if(state.sources.some(s=>!body.sourceKeys.includes(s.key)) || body.sourceKeys.some(key=>!state.sources.some(s=>s.key===key))) throw ApiError.conflict("יש לבדוק ולאשר כל מקור ברשימה העדכנית");
-  res.json(await prisma.financialProfile.update({where:{userId:req.userId!},data:{coverage:json({date:businessDate(),dataVersion:state.dataVersion,sources:state.sources.map(s=>({key:s.key,revision:s.revision,verifiedAt:new Date().toISOString(),reportedFrom:s.reportedFrom,reportedTo:s.reportedTo,observedFrom:s.observedFrom,observedTo:s.observedTo}))}),reviewedAt:new Date()}}));
+  if(body.quietSourceKeys.some(key=>!state.sources.some(s=>s.key===key))) throw ApiError.badRequest("האישור מתייחס לפריט שאינו ברשימה");
+  res.json(await prisma.financialProfile.update({where:{userId:req.userId!},data:{coverage:json({date:businessDate(),dataVersion:state.dataVersion,quietSourceKeys:body.quietSourceKeys,sources:state.sources.map(s=>({key:s.key,revision:s.revision,verifiedAt:new Date().toISOString(),reportedFrom:s.reportedFrom,reportedTo:s.reportedTo,observedFrom:s.observedFrom,observedTo:s.observedTo}))}),reviewedAt:new Date()}}));
 }));
 journeyRoutes.post("/onboarding/defer",asyncHandler(async(req,res)=>{await getProfile(req.userId!);await prisma.financialProfile.updateMany({where:{userId:req.userId!,onboarding:"pending"},data:{onboarding:"deferred"}});res.json({ok:true});}));
 journeyRoutes.post("/onboarding/complete",asyncHandler(async(req,res)=>{
@@ -49,11 +56,12 @@ journeyRoutes.post("/onboarding/complete",asyncHandler(async(req,res)=>{
     // real coverage acknowledgement recorded via POST /journey/coverage that
     // still matches the current data — stale or missing coverage blocks completion.
     if(!state.coverageAcknowledged) throw ApiError.conflict("יש לאשר את סיכום הכיסוי והמגבלות העדכני לפני סיום ההיכרות");
+    if(state.picture.requiredGaps.length) throw ApiError.conflict(state.picture.requiredGaps[0]);
     const sessions=await prisma.importSession.findMany({where:{userId:req.userId!,status:"completed"}});
     const completed=(await Promise.all(sessions.map(s=>sessionSourceExists(req.userId!,s.result)))).filter(Boolean).length;
     const manual=await prisma.expense.count({where:{userId:req.userId!}})+await prisma.income.count({where:{userId:req.userId!}});
     const scope=state.profile.scope as {manualOnly?:boolean};
-    if(!completed && (!scope.manualOnly || (!manual && !body.noActivity))) throw ApiError.conflict("יש להשלים קליטה ראשונה או לבחור בהזנה ידנית ולבדוק את המידע שנרשם");
+    if(!state.picture.hasUsefulData && !completed && (!scope.manualOnly || (!manual && !body.noActivity))) throw ApiError.conflict("יש להשלים קליטה ראשונה או לבחור בהזנה ידנית ולבדוק את המידע שנרשם");
     return prisma.financialProfile.update({where:{userId:req.userId!},data:{onboarding:"completed",completedAt:new Date(),reviewedAt:new Date()}});
   }));
 }));

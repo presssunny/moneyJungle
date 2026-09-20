@@ -766,6 +766,7 @@ model FinancialProfile {
   revision       Int      @default(0)
   onboarding     String   @default("pending") @db.VarChar(20)
   scope          Json?
+  situation      Json?
   coverage       Json?
   cashBuffer     Decimal  @default(0) @map("cash_buffer") @db.Decimal(12, 2)
   essentialReserve Decimal @default(0) @map("essential_reserve") @db.Decimal(12, 2)

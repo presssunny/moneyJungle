@@ -3,6 +3,7 @@ import { accountBalanceService } from "../bank/accountBalance.service";
 import { businessDate, fingerprint, nextDate } from "./journey.utils";
 import { commitments } from "./commitments.service";
 import { review } from "./review.service";
+import { buildPicture, situationOf } from "./picture.service";
 import { calculateAllowance } from "./allowance";
 async function hasPriorFinancialActivity(userId: number): Promise<boolean> {
   const [expense, income, bankTx, creditTx] = await Promise.all([
@@ -24,15 +25,17 @@ export async function getProfile(userId: number) {
 }
 export async function financialStatus(userId: number) {
   const today = businessDate();
-  const [profile, accounts, cards, events, issues, pendingDates, expenses, incomes, bankRows, creditRows, financing] = await Promise.all([
+  const [profile, accounts, cards, events, issues, pendingDates, expenses, incomes, bankRows, creditRows, financing, loans, sessions] = await Promise.all([
     getProfile(userId), prisma.bankAccount.findMany({ where: { userId }, orderBy: { id: "asc" } }),
     prisma.creditCard.findMany({ where: { userId }, orderBy: { id: "asc" } }), commitments(userId), review(userId),
     prisma.creditTransaction.count({ where: { userId, creditImport: { status: "confirmed" }, OR: [{ chargeDate: null }, { cardId: null }] } }),
     prisma.expense.findMany({ where: { userId }, orderBy: { id: "asc" } }),
     prisma.income.findMany({ where: { userId }, orderBy: { id: "asc" } }),
     prisma.bankTransaction.findMany({ where: { userId }, orderBy: { id: "asc" } }),
-    prisma.creditTransaction.findMany({ where: { userId, creditImport: { status: "confirmed" } }, select: { id: true, amount: true, cardId: true, chargeDate: true, transactionType: true, updatedAt: true }, orderBy: { id: "asc" } }),
+    prisma.creditTransaction.findMany({ where: { userId, creditImport: { status: "confirmed" } }, select: { id: true, amount: true, cardId: true, chargeDate: true, transactionType: true, updatedAt: true, transactionDate:true, creditImport:{select:{importMonth:true,importYear:true}} }, orderBy: { id: "asc" } }),
     prisma.creditTransaction.count({ where: { userId, creditImport: { status: "confirmed" }, transactionType: "financing" } }),
+    prisma.loan.findMany({where:{userId,status:"active"},include:{schedule:{orderBy:{paymentDate:"asc"}}},orderBy:{id:"asc"}}),
+    prisma.importSession.findMany({where:{userId},select:{id:true,fileName:true,status:true}}),
   ]);
   const balances = await Promise.all(accounts.map(async a => ({ id: a.id, name: a.accountName, ...(await accountBalanceService.derive(userId, a.id)) })));
   const statements = await prisma.bankStatementImport.findMany({ where: { userId }, orderBy: { id: "asc" } });
@@ -47,12 +50,15 @@ export async function financialStatus(userId: number) {
         limitation: "טווח התנועות אינו הוכחת רציפות. האישור כולל בדיקת דוחות חסרים ותשלומים שכבר נכללו ביתרה." };
     }),
     ...cards.map(c => ({ key: `credit:${c.id}`, name: c.name, kind: "credit", asOf: null,
-      reportedFrom: null, reportedTo: null, observedFrom: null, observedTo: null,
+      reportedFrom: null, reportedTo: null, observedFrom: creditRows.filter(r=>r.cardId===c.id).map(r=>r.transactionDate.toISOString().slice(0,10)).sort()[0]??null, observedTo: creditRows.filter(r=>r.cardId===c.id).map(r=>r.transactionDate.toISOString().slice(0,10)).sort().at(-1)??null,
       revision: fingerprint({ card: c, rows: creditRows.filter(r => r.cardId === c.id) }),
       limitation: "יש לבדוק שכל הדוחות והחיובים העתידיים של הכרטיס נרשמו; קובץ אחרון לבדו אינו כיסוי מלא." })),
+    ...loans.map(l=>({key:`loan:${l.id}`,name:l.loanName,kind:"loan",asOf:null,reportedFrom:null,reportedTo:null,observedFrom:l.schedule[0]?.paymentDate.toISOString().slice(0,10)??null,observedTo:l.schedule.at(-1)?.paymentDate.toISOString().slice(0,10)??null,revision:fingerprint(l),limitation:"לוח התשלומים מתאר את הצפוי. תשלום נחשב שבוצע רק לאחר בדיקה."})),
+    ...(situationOf(profile.situation)?.cashActivity||expenses.some(e=>["manual","recurring"].includes(e.source))?[{key:"manual",name:"מזומן והוצאות נוספות",kind:"manual",asOf:null,reportedFrom:null,reportedTo:null,observedFrom:null,observedTo:null,revision:fingerprint(expenses.filter(e=>["manual","recurring"].includes(e.source))),limitation:"נכללות רק הוצאות שנרשמו. יש לבדוק שלא נרשמו שוב רכישות שכבר מופיעות באשראי."}]:[]),
+    ...(incomes.length?[{key:"income",name:"הכנסות",kind:"income",asOf:null,reportedFrom:null,reportedTo:null,observedFrom:null,observedTo:null,revision:fingerprint(incomes),limitation:"יש לבדוק הכנסות שטרם נרשמו; הכנסה צפויה אינה כסף שכבר התקבל."}]:[]),
   ];
-  const dataVersion = fingerprint({ revision: profile.revision, balances, cards, events, issues, pendingDates, expenses, incomes, bankRows, creditRows, sources, scope: profile.scope, reserves: [profile.cashBuffer, profile.essentialReserve, profile.savedReserve] });
-  const coverage = profile.coverage as { date?: string; dataVersion?: string; sources?: Array<{ key: string; revision: string }> } | null;
+  const dataVersion = fingerprint({ revision: profile.revision, balances, cards, events, issues, pendingDates, expenses, incomes, bankRows, creditRows, sources, scope: profile.scope, situation:profile.situation, reserves: [profile.cashBuffer, profile.essentialReserve, profile.savedReserve] });
+  const coverage = profile.coverage as { date?: string; dataVersion?: string; quietSourceKeys?:string[]; sources?: Array<{ key: string; revision: string }> } | null;
   const blockers: string[] = [];
   if (!profile.scope) blockers.push("יש לאשר אילו מקורות כלולים בתמונה הפיננסית");
   if (!accounts.length) blockers.push("אין יתרת בנק מאומתת לתכנון מזומן");
@@ -77,9 +83,17 @@ export async function financialStatus(userId: number) {
   // The one authoritative signal that the user has actually seen and confirmed
   // the current coverage/limitations summary — not a client-supplied boolean.
   const coverageAcknowledged = !coverageStale && !coverageSourcesStale;
-  return { today, end, hasActivity: Boolean(expenses.length || incomes.length || bankRows.length || creditRows.length), dataVersion, profile, sources, balances, cards, events, issues, blockers, coverageAcknowledged,
+  const state = { today, end, hasActivity: Boolean(expenses.length || incomes.length || bankRows.length || creditRows.length), dataVersion, profile, sources, balances, cards, events, issues, blockers, coverageAcknowledged,
     allowance: { limitingDate: blockers.length ? null : calculated.limitingDate, amount: blockers.length ? null : calculated.daily, shortfall: blockers.length ? null : calculated.shortfall,
       state: blockers.length ? "unavailable" : "provisional", cash, reserves, essentialReserve: Number(profile.essentialReserve),
       formula: "בכל יום נבדקת היתרה לאחר כרית הביטחון, החיסכון ששוריין, חיובי אשראי עתידיים, התחייבויות שטרם שולמו והוצאות חיוניות. התקציב היומי הוא הנמוך מבין הסכומים האפשריים לאורך התקופה, כולל היום.",
       assumptions: ["לפי המקורות הרשומים ואישור העדכניות שלך; ייתכנו הוצאות שלא נרשמו", "הכנסה שטרם התקבלה אינה נכללת", "חיוב שכבר שולם אינו מנוכה שוב מהיתרה", "האומדן הוא לתכנון יומי עד סוף החודש ואינו הבטחה ליתרה בבנק"] } };
+  const quietSourceKeys=coverageAcknowledged?coverage?.quietSourceKeys??[]:[];
+  const picture=buildPicture({...state,quietSourceKeys},{bankRows,creditRows,expenses,incomes,loans,sessions});
+  if(picture.requiredGaps.length){
+    state.blockers.push(...picture.requiredGaps);
+    state.allowance={...state.allowance,amount:null,shortfall:null,limitingDate:null,state:"unavailable"};
+  }
+  return {...state,quietSourceKeys,picture};
+
 }
