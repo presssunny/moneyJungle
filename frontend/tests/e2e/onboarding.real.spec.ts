@@ -70,11 +70,14 @@ for (const mode of ['upload','manual','inactive-card'] as const) {
     await page.getByRole('checkbox',{name:/אני בוחר\/ת בהזנה ידנית/}).check();
    }
    await page.getByRole('checkbox',{name:/בדקתי שכל החשבונות/}).check();
+   // Saving changes the data version; confirmations are keyed to it, so wait for the refreshed status before ticking.
+   const refreshed=page.waitForResponse(r=>r.url().endsWith('/api/journey/status')&&r.request().method()==='GET');
    await page.getByRole('button',{name:'שמירת היקף התמונה והסכומים'}).click();
    await expect(page.getByRole('status').filter({hasText:'נשמר'})).toBeVisible();
+   await refreshed;
    if(mode==='inactive-card'){
     const quiet=page.getByRole('checkbox',{name:'אין כרגע חיובים שצריך לכלול עבור כרטיס ללא חיובים'});
-    await expect(quiet).not.toBeChecked();await quiet.check();
+    await expect(quiet).not.toBeChecked();await quiet.click();await expect(quiet).toBeChecked();
    }
    for(const checkbox of await page.getByRole('checkbox',{name:/בדקתי את עדכניות/}).all())await checkbox.check();
    await page.getByRole('button',{name:'בדקתי — המידע מעודכן להיום'}).click();
