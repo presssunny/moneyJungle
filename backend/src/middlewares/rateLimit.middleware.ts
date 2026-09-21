@@ -11,13 +11,13 @@ interface Bucket {
  * Enough to blunt brute-force attempts against the single shared gate password.
  * State is per-process; fine for this single-instance app.
  */
-export function rateLimit(options: { windowMs: number; max: number; message?: string }) {
+export function rateLimit(options: { windowMs: number; max: number; message?: string; key?: (req: Request) => string }) {
   const { windowMs, max, message = "יותר מדי ניסיונות, נסי שוב מאוחר יותר" } = options;
   const buckets = new Map<string, Bucket>();
   let nextCleanup = 0;
 
   return (req: Request, res: Response, next: NextFunction) => {
-    const key = req.ip ?? req.socket.remoteAddress ?? "unknown";
+    const key = options.key?.(req) ?? req.ip ?? req.socket.remoteAddress ?? "unknown";
     const now = Date.now();
     if (now >= nextCleanup) {
       for (const [ip, entry] of buckets) if (entry.resetAt <= now) buckets.delete(ip);

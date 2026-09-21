@@ -5,6 +5,18 @@ import { rateLimit } from "./rateLimit.middleware";
 import { errorMiddleware } from "./error.middleware";
 
 afterEach(() => vi.restoreAllMocks());
+it("can isolate authenticated users sharing one IP without sharing their allowance", async () => {
+  let authenticatedUser = 1;
+  const app = express();
+  app.use((req, _res, next) => { req.userId = authenticatedUser; next(); });
+  app.use(rateLimit({ windowMs: 60000, max: 1, key: req => `user:${req.userId!}` }));
+  app.get("/", (_req, res) => res.json({ ok: true }));
+  app.use(errorMiddleware);
+  expect((await request(app).get("/")).status).toBe(200);
+  expect((await request(app).get("/")).status).toBe(429);
+  authenticatedUser = 2;
+  expect((await request(app).get("/")).status).toBe(200);
+});
 it("does not trust spoofed forwarding headers and recovers after the limit window", async () => {
   const now = vi.spyOn(Date, "now").mockReturnValue(100000);
   const app = express();

@@ -1,4 +1,5 @@
 import { journeyRoutes } from "./modules/journey/journey.routes";
+import { householdAssistantRoutes } from "./modules/householdAssistant/householdAssistant.routes";
 import { importSessionRoutes } from "./modules/imports/importSession.routes";
 import cors from "cors";
 import express from "express";
@@ -71,6 +72,7 @@ app.use("/api/savings", savingsRoutes);
 app.use("/api/assets", assetsRoutes);
 app.use("/api/family", familyRoutes);
 app.use("/api/journey", journeyRoutes);
+app.use("/api/household-assistant", householdAssistantRoutes);
 app.use("/api/imports/sessions", importSessionRoutes);
 app.use("/api/imports", importsRoutes);
 app.use("/api/documents", documentsRoutes);

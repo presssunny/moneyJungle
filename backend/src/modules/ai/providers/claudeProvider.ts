@@ -17,20 +17,21 @@ const DEFAULT_MAX_TOKENS = 4096;
  * test pass a plain fake instead of mocking the module.
  */
 export type ClaudeMessagesCreate = (
-  body: MessageCreateParamsNonStreaming
+  body: MessageCreateParamsNonStreaming,
+  options?: { signal?: AbortSignal }
 ) => Promise<Message>;
 
 let client: Anthropic | undefined;
 
 /** Built on first use, not at import, so the app boots with no key configured. */
-function realMessagesCreate(body: MessageCreateParamsNonStreaming): Promise<Message> {
+function realMessagesCreate(body: MessageCreateParamsNonStreaming, options?: { signal?: AbortSignal }): Promise<Message> {
   if (!client) {
     if (!env.ANTHROPIC_API_KEY) {
       throw new Error("ANTHROPIC_API_KEY is not set — cannot reach the Claude API");
     }
     client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
   }
-  return client.messages.create(body);
+  return client.messages.create(body, options);
 }
 
 export class ClaudeProvider implements AiProvider {
@@ -42,7 +43,9 @@ export class ClaudeProvider implements AiProvider {
   ) {}
 
   async complete(request: AiRequest): Promise<AiResponse> {
-    const response = await this.createMessage(this.toClaudeRequest(request));
+    const response = request.signal
+      ? await this.createMessage(this.toClaudeRequest(request), { signal: request.signal })
+      : await this.createMessage(this.toClaudeRequest(request));
     return toAiResponse(response);
   }
 

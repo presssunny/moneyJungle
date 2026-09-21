@@ -22,6 +22,7 @@ export interface AiRequest {
   /** Prepended to any `system`-role messages the provider hoists out. */
   system?: string;
   maxTokens?: number;
+  signal?: AbortSignal;
 }
 
 export interface AiUsage {

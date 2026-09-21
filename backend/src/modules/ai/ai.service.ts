@@ -2,6 +2,10 @@ import { env } from "../../config/env";
 import type { AiProvider } from "./ai.types";
 import { ClaudeProvider } from "./providers/claudeProvider";
 
+export function aiAvailable(): boolean {
+  return env.AI_PROVIDER === "claude" && Boolean(env.ANTHROPIC_API_KEY);
+}
+
 /**
  * The only place that names a vendor. Callers ask for `getAiProvider()` and get
  * the `AiProvider` contract, so adding a second vendor is one more case below —

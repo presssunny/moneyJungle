@@ -53,6 +53,16 @@ const baseRequest: AiRequest = {
 };
 
 describe("getAiProvider — the single vendor-selection point", () => {
+  it("passes cancellation to the SDK so abandoned assistant requests stop", async () => {
+    const signal = new AbortController().signal;
+    let received: AbortSignal | undefined;
+    const provider = new ClaudeProvider(async (_body, options) => {
+      received = options?.signal;
+      return textReply("ok");
+    });
+    await provider.complete({ ...baseRequest, signal });
+    expect(received).toBe(signal);
+  });
   it("returns the Claude provider for the default configuration", () => {
     expect(getAiProvider("claude").name).toBe("claude");
   });
