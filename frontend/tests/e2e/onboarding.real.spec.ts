@@ -111,3 +111,38 @@ for (const mode of ['upload','manual','inactive-card'] as const) {
   }
  });
 }
+
+test('Real coverage save shows an updating state until the status refresh lands', async ({page,context})=>{
+ test.setTimeout(60000);
+ const identity=JSON.parse(fixture(`
+  const crypto=require('node:crypto');const token=crypto.randomBytes(32).toString('hex');
+  const user=await prisma.user.create({data:{name:'__onboarding_browser_test',email:crypto.randomUUID()+'@example.test'}});
+  await prisma.gateSession.create({data:{userId:user.id,tokenHash:crypto.createHash('sha256').update(token).digest('hex'),expiresAt:new Date(Date.now()+600000)}});
+  await prisma.creditCard.create({data:{userId:user.id,name:'כרטיס ללא חיובים',issuer:'test',lastFour:'1234'}});
+  console.log(JSON.stringify({userId:user.id,token}));
+ `).trim());
+ try {
+  await context.addCookies([{name:'mj_session',value:identity.token,url:'http://127.0.0.1:5174',httpOnly:true,sameSite:'Lax'}]);
+  await page.goto('/data');
+  const quiet=page.getByRole('checkbox',{name:'אין כרגע חיובים שצריך לכלול עבור כרטיס ללא חיובים'});
+  await expect(quiet).toBeEnabled();
+  let release=()=>{};const gate=new Promise<void>(resolve=>{release=resolve;});let hold=false;
+  await page.route('**/api/journey/status',async route=>{if(hold&&route.request().method()==='GET')await gate;await route.continue();});
+  await page.getByRole('checkbox',{name:/בדקתי שכל החשבונות/}).check();
+  const saved=page.waitForResponse(r=>r.url().endsWith('/api/journey/profile')&&r.request().method()==='PATCH');
+  hold=true;
+  await page.getByRole('button',{name:'שמירת היקף התמונה והסכומים'}).click();
+  await saved;
+  // The saved profile changed the data version; nothing tied to the old one may look final or be tickable.
+  await expect(page.getByRole('status').filter({hasText:'שומרים ומעדכנים'})).toBeVisible();
+  await expect(page.getByRole('status').filter({hasText:'נשמר'})).toHaveCount(0);
+  await expect(quiet).toBeDisabled();
+  await expect(page.getByRole('button',{name:'בדקתי — המידע מעודכן להיום'})).toBeDisabled();
+  release();
+  await expect(page.getByRole('status').filter({hasText:'נשמר'})).toBeVisible();
+  await expect(quiet).toBeEnabled();
+  await quiet.click();await expect(quiet).toBeChecked();
+ } finally {
+  fixture(`await prisma.user.deleteMany({where:{id:${Number(identity.userId)},name:'__onboarding_browser_test'}});`);
+ }
+});

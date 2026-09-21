@@ -6,13 +6,14 @@ import { Input } from "./Input";
 import { api, apiErrorMessage } from "../../services/api";
 import { saveProfile, confirmCoverage, type FinancialStatus } from "../../services/journey.service";
 import { formatCurrency } from "../../utils/format";
-export function CoveragePanel({data,onSaved}:{data:FinancialStatus;onSaved:()=>void}){
+export function CoveragePanel({data,onSaved,refreshing=false}:{data:FinancialStatus;onSaved:()=>void|Promise<unknown>;refreshing?:boolean}){
  const [checked,setChecked]=useState<Record<string,boolean>>({});
  const [quiet,setQuiet]=useState<Record<string,boolean>>({});
  const emptyCards=data.picture?.sources.filter(source=>source.kind==='credit'&&source.count===0)??[];
  const isQuiet=(key:string)=>quiet[`${data.dataVersion}:${key}`]??data.quietSourceKeys?.includes(key)??false;
  const [busy,setBusy]=useState(false);const [error,setError]=useState('');const [saved,setSaved]=useState('');
- async function run(action:()=>Promise<unknown>){setBusy(true);setError('');setSaved('');try{await action();setSaved('נשמר');onSaved();}catch(e){setError(apiErrorMessage(e));}finally{setBusy(false);}}
+ const syncing=busy||refreshing;
+ async function run(action:()=>Promise<unknown>){setBusy(true);setError('');setSaved('');try{await action();await onSaved();setSaved('נשמר');}catch(e){setError(apiErrorMessage(e));}finally{setBusy(false);}}
  return <>
   <Card title="המקורות שבתמונה"><p>יש לרשום את כל חשבונות הבנק, הכרטיסים וההתחייבויות הרלוונטיים לפני אישור העדכניות. אפשר להמשיך עם תמונה חלקית; היא תסומן בהתאם.</p>
    <div className="row-actions"><Link to="/imports">העלאת מידע</Link><Link to="/accounts?tab=bank">ניהול חשבונות</Link><Link to="/accounts?tab=credit">ניהול כרטיסים</Link><Link to="/commitments">בדיקת התחייבויות</Link></div>
@@ -24,21 +25,21 @@ export function CoveragePanel({data,onSaved}:{data:FinancialStatus;onSaved:()=>v
     <p className="text-muted">יש לשריין רק סכומים שלא נכללו כבר ברשימת ההתחייבויות. יעד חיסכון לבדו אינו העברה שבוצעה.</p>
     <Button type="submit" disabled={busy}>שמירת היקף התמונה והסכומים</Button>
    </form>
-   {error&&<p role="alert" className="error-message">{error}</p>}{saved&&<p role="status">{saved}</p>}
+   {error&&<p role="alert" className="error-message">{error}</p>}<p role="status">{busy?'שומרים ומעדכנים…':saved}</p>
   </Card>
   <section id="confirm-picture" aria-label="עדכניות המידע">
    <Card title="עדכניות המידע">
     {data.sources.map(s=><div id={`source-${s.key.replace(':','-')}`} key={s.key}>
-     <label><input type="checkbox" checked={!!checked[`${data.dataVersion}:${s.key}`]} onChange={e=>setChecked({...checked,[`${data.dataVersion}:${s.key}`]:e.target.checked})}/> בדקתי את עדכניות {s.name}</label>
+     <label><input type="checkbox" disabled={syncing} checked={!!checked[`${data.dataVersion}:${s.key}`]} onChange={e=>setChecked({...checked,[`${data.dataVersion}:${s.key}`]:e.target.checked})}/> בדקתי את עדכניות {s.name}</label>
      <p className="text-muted">{s.asOf?`יתרה נכון ל־${s.asOf}. `:""}{s.limitation}</p>
      {emptyCards.some(card=>card.key===s.key)&&<div className="coverage-card-activity">
       <Link to={`/imports?kind=credit&cardId=${s.key.split(':')[1]}`}>הוספת דוח עבור {s.name}</Link>
-      <label><input type="checkbox" checked={isQuiet(s.key)} onChange={e=>setQuiet({...quiet,[`${data.dataVersion}:${s.key}`]:e.target.checked})}/> אין כרגע חיובים שצריך לכלול עבור {s.name}</label>
+      <label><input type="checkbox" disabled={syncing} checked={isQuiet(s.key)} onChange={e=>setQuiet({...quiet,[`${data.dataVersion}:${s.key}`]:e.target.checked})}/> אין כרגע חיובים שצריך לכלול עבור {s.name}</label>
      </div>}
     </div>)}
     <ul>{data.blockers.map(b=><li key={b}>{b}</li>)}</ul>
     <p>אישור זה מתייחס למקורות שהזנת נכון ל־{data.today}. לאחר שינוי בנתונים או ביום חדש נבקש לבדוק שוב.</p>
-    <Button disabled={busy||!data.profile.scope||data.sources.some(s=>!checked[`${data.dataVersion}:${s.key}`])} onClick={()=>run(()=>confirmCoverage(data.dataVersion,data.sources.map(s=>s.key),emptyCards.filter(s=>isQuiet(s.key)).map(s=>s.key)))}>בדקתי — המידע מעודכן להיום</Button>
+    <Button disabled={syncing||!data.profile.scope||data.sources.some(s=>!checked[`${data.dataVersion}:${s.key}`])} onClick={()=>run(()=>confirmCoverage(data.dataVersion,data.sources.map(s=>s.key),emptyCards.filter(s=>isQuiet(s.key)).map(s=>s.key)))}>בדקתי — המידע מעודכן להיום</Button>
    </Card>
   </section>
  </>;

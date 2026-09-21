@@ -7,8 +7,8 @@ export interface AsyncResource<T> {
   /** Hebrew message to show the user; null when the last load succeeded. */
   error: string | null;
   loading: boolean;
-  /** Re-run the loader (wired to the "נסי שוב" button of every widget). */
-  reload: () => void;
+  /** Re-run the loader (wired to the "נסי שוב" button of every widget). Resolves once a load has settled. */
+  reload: () => Promise<void>;
   /** Patch the loaded value locally after a mutation, without a round-trip. */
   setData: Dispatch<SetStateAction<T | null>>;
 }
@@ -28,6 +28,7 @@ export function useAsync<T>(
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [attempt, setAttempt] = useState(0);
+  const waiters = useRef<Array<() => void>>([]);
 
   // Keep the latest loader without making it a dependency (callers pass inline arrows).
   const loaderRef = useRef(loader);
@@ -50,7 +51,9 @@ export function useAsync<T>(
         setError(apiErrorMessage(err, messageRef.current));
       })
       .finally(() => {
-        if (alive) setLoading(false);
+        if (!alive) return;
+        setLoading(false);
+        waiters.current.splice(0).forEach((resolve) => resolve());
       });
     return () => {
       alive = false;
@@ -58,7 +61,10 @@ export function useAsync<T>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...deps, attempt]);
 
-  const reload = useCallback(() => setAttempt((n) => n + 1), []);
+  const reload = useCallback(() => new Promise<void>((resolve) => {
+    waiters.current.push(resolve);
+    setAttempt((n) => n + 1);
+  }), []);
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;

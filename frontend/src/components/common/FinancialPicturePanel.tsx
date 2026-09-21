@@ -12,13 +12,13 @@ import '../../styles/picture.css';
 const icons:Record<string,string>={bank:'🏦',credit:'💳',loan:'📅',manual:'✎',income:'↙'};
 const statuses:Record<string,string>={known:'יש מידע',missing:'חסר מידע',review:'לבדיקה',update:'כדאי לעדכן',estimate:'לפי הערכה'};
 
-export function SituationForm({picture,onSaved,guided=false}:{picture:FinancialPicture;onSaved?:()=>void;guided?:boolean}){
+export function SituationForm({picture,onSaved,guided=false}:{picture:FinancialPicture;onSaved?:()=>void|Promise<unknown>;guided?:boolean}){
  const [busy,setBusy]=useState(false);const [error,setError]=useState('');
  async function submit(event:React.FormEvent<HTMLFormElement>){
   event.preventDefault();const form=new FormData(event.currentTarget);
   const count=(key:string)=>form.get(key)===''?null:Number(form.get(key));
   const input:Situation={bankAccounts:count('bankAccounts'),creditCards:count('creditCards'),loans:count('loans'),cashActivity:form.get('cashActivity')===''?null:form.get('cashActivity')==='yes'};
-  setBusy(true);setError('');try{await saveSituation(input);onSaved?.();}catch(e){setError(apiErrorMessage(e));}finally{setBusy(false);}
+  setBusy(true);setError('');try{await saveSituation(input);await onSaved?.();}catch(e){setError(apiErrorMessage(e));}finally{setBusy(false);}
  }
  const form = <form onSubmit={submit} className={guided?"mj-onboarding-form":undefined}>
    <div className="picture-questions">{picture.areas.map(area=><Input key={area.key} name={area.key} type="number" min="0" max="100" step="1" label={guided?area.title:`${area.title} · ${area.actual} כבר ברשימה`} defaultValue={area.expected??(area.actual||'')} placeholder={guided?"0 אם אין": "כמה יש לך? 0 אם אין"}/>)}
