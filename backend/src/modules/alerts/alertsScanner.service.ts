@@ -1,3 +1,4 @@
+import { reviewedExpenseGroups } from "../householdAssistant/duplicateReview.service";
 import { prisma } from "../../config/database";
 import { monthRange } from "../../utils/date.utils";
 import { decimalToNumber, formatILS, percent, round2 } from "../../utils/money.utils";
@@ -212,12 +213,14 @@ export async function scanForAlerts(userId: number): Promise<void> {
   // this only ever catches human double-entry. Credit-card purchases can't
   // collide with this either — they never become `Expense` rows (read-time
   // merge only, CLAUDE.md §4), so a normal bank+credit import raises nothing.
+  const reviewedGroups = await reviewedExpenseGroups(userId);
   const manualExpenses = monthExpenses.filter((row) => row.importRowId === null);
   const seenDuplicateGroups = new Set<string>();
   for (let i = 0; i < manualExpenses.length; i++) {
     for (let j = i + 1; j < manualExpenses.length; j++) {
       const a = manualExpenses[i];
       const b = manualExpenses[j];
+      if (reviewedGroups.some(group => group.has(`expense:${a.id}`) && group.has(`expense:${b.id}`))) continue;
       const name = a.businessName?.trim() || a.description?.trim();
       if (!name) continue;
       if (name !== (b.businessName?.trim() || b.description?.trim())) continue;
@@ -235,6 +238,9 @@ export async function scanForAlerts(userId: number): Promise<void> {
     }
   }
 
+  // These automatic findings follow current evidence; the review audit lives separately.
+  await prisma.alert.deleteMany({ where: { userId, type: "duplicate_transaction", createdAt: { gte: start },
+    title: { notIn: detected.filter(a => a.type === "duplicate_transaction").map(a => a.title) } } });
   if (detected.length === 0) return;
 
   // Persist only alerts not already recorded this month (read or unread)

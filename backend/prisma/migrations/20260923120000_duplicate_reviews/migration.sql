@@ -1,0 +1,20 @@
+CREATE TABLE `duplicate_reviews` (
+  `id` VARCHAR(36) NOT NULL,
+  `user_id` INTEGER NOT NULL,
+  `request_id` VARCHAR(36) NOT NULL,
+  `request_hash` VARCHAR(64) NOT NULL,
+  `candidate_id` VARCHAR(64) NOT NULL,
+  `evidence_version` VARCHAR(64) NOT NULL,
+  `decision` VARCHAR(24) NOT NULL,
+  `evidence` JSON NOT NULL,
+  `removed_key` VARCHAR(40) NULL,
+  `kept_key` VARCHAR(40) NULL,
+  `removed_record` JSON NULL,
+  `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `undone_at` DATETIME(3) NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE INDEX `duplicate_reviews_user_id_request_id_key` (`user_id`, `request_id`),
+  INDEX `duplicate_reviews_user_id_candidate_id_undone_at_idx` (`user_id`, `candidate_id`, `undone_at`),
+  INDEX `duplicate_reviews_user_id_created_at_id_idx` (`user_id`, `created_at`, `id`),
+  CONSTRAINT `duplicate_reviews_user_id_fkey` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;

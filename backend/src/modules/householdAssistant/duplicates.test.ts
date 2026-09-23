@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { duplicateCandidates, type ScanRecord } from "./duplicates";
 
-const row = (key: string, patch: Partial<ScanRecord> = {}): ScanRecord => ({ key, kind: "expense", name: "סופר השכונה", amount: 123.45, date: "2026-09-20", scope: "unknown", manual: true, cardEligible: true, to: "/transactions", ...patch });
+const row = (key: string, patch: Partial<ScanRecord> = {}): ScanRecord => ({ key, version: key, kind: "expense", name: "סופר השכונה", amount: 123.45, date: "2026-09-20", scope: "unknown", manual: true, cardEligible: true, to: "/transactions", ...patch });
 
 describe("duplicate review evidence", () => {
   it("groups repeated entries without losing their multiplicity", () => {

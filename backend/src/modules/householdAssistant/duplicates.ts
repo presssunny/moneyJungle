@@ -42,6 +42,7 @@ function candidate(reason: DuplicateCandidate["reason"], rows: ScanRecord[]): Du
     id: `duplicate:${fingerprint([reason, sorted.map(r => r.key)]).slice(0, 24)}`,
     reason,
     recordCount: rows.length,
-    records: sorted.slice(0, 20).map(({ manual: _manual, cardEligible: _eligible, ...record }) => record),
+    version: fingerprint([reason, sorted.map(r => [r.key, r.version])]),
+    records: sorted.map(({ manual: _manual, cardEligible: _eligible, ...record }) => record),
   };
 }

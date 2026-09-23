@@ -89,6 +89,7 @@ model User {
   financialProfile   FinancialProfile?
   commitmentDecisions CommitmentDecision[]
   checkIns           MoneyCheckIn[]
+  duplicateReviews   DuplicateReview[]
   familyMembers      FamilyMember[]
   sessions           GateSession[]
   settings           Settings?
@@ -829,4 +830,26 @@ model ImportRow {
   bankTransactions BankTransaction[]
   @@unique([sessionId, rowNumber])
   @@map("import_rows")
+}
+
+model DuplicateReview {
+  id              String    @id @default(uuid()) @db.VarChar(36)
+  userId          Int       @map("user_id")
+  requestId       String    @map("request_id") @db.VarChar(36)
+  requestHash     String    @map("request_hash") @db.VarChar(64)
+  candidateId     String    @map("candidate_id") @db.VarChar(64)
+  evidenceVersion String    @map("evidence_version") @db.VarChar(64)
+  decision        String    @db.VarChar(24)
+  evidence        Json
+  removedKey      String?   @map("removed_key") @db.VarChar(40)
+  keptKey         String?   @map("kept_key") @db.VarChar(40)
+  removedRecord   Json?     @map("removed_record")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  undoneAt        DateTime? @map("undone_at")
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, requestId])
+  @@index([userId, candidateId, undoneAt])
+  @@index([userId, createdAt, id])
+  @@map("duplicate_reviews")
 }

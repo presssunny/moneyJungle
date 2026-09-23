@@ -7,9 +7,33 @@ import { ApiError } from "../../utils/ApiError";
 import { getAiProvider } from "../ai/ai.service";
 import { householdSnapshot } from "./householdAssistant.service";
 import { prioritizePlan } from "./plan.service";
+import { decideDuplicate, duplicateDetail, duplicateHistory, duplicateReviewInput, undoDuplicate } from "./duplicateReview.service";
 
 export const householdAssistantRoutes = Router();
 householdAssistantRoutes.use(gateAuth);
+householdAssistantRoutes.get("/duplicates/:id", asyncHandler(async (req, res) => {
+  const id = z.string().regex(/^duplicate:[a-f0-9]{24}$/).safeParse(req.params.id);
+  if (!id.success) throw ApiError.badRequest("מזהה בדיקה לא תקין.");
+  res.setHeader("Cache-Control", "no-store");
+  res.json(await duplicateDetail(req.userId!, id.data));
+}));
+householdAssistantRoutes.get("/duplicate-reviews", asyncHandler(async (req, res) => {
+  const query = z.object({ cursor: z.uuid().optional(), followUp: z.enum(["true", "false"]).optional() }).strict().safeParse(req.query);
+  if (!query.success) throw ApiError.badRequest("בקשת היסטוריה לא תקינה.");
+  res.setHeader("Cache-Control", "no-store");
+  res.json(await duplicateHistory(req.userId!, query.data.cursor, query.data.followUp === "true"));
+}));
+householdAssistantRoutes.post("/duplicate-reviews", asyncHandler(async (req, res) => {
+  const input = duplicateReviewInput.safeParse(req.body);
+  if (!input.success) throw ApiError.badRequest("יש לבחור החלטה ולאשר את השפעתה על הרשומות.");
+  res.json(await decideDuplicate(req.userId!, input.data));
+}));
+householdAssistantRoutes.post("/duplicate-reviews/:id/undo", asyncHandler(async (req, res) => {
+  const input = z.object({ version: z.string().regex(/^[a-f0-9]{64}$/), confirmed: z.literal(true) }).strict().safeParse(req.body);
+  const id = z.uuid().safeParse(req.params.id);
+  if (!input.success || !id.success) throw ApiError.badRequest("יש לאשר ביטול של החלטה עדכנית.");
+  res.json(await undoDuplicate(req.userId!, id.data, input.data.version));
+}));
 householdAssistantRoutes.get("/", rateLimit({ windowMs: 60000, max: 30, key: req => `user:${req.userId!}` }), asyncHandler(async (req, res) => {
   res.setHeader("Cache-Control", "no-store");
   res.json(await householdSnapshot(req.userId!));

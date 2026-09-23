@@ -86,7 +86,7 @@ function alertCandidate(alert: AlertRow, dismissed: boolean): AttentionCandidate
     id: `alert-${alert.id}`,
     icon: TONE_ICON[alert.severity],
     text: alert.title,
-    to: "/manage?tab=alerts",
+    to: alert.type === "duplicate_transaction" ? "/assistant#duplicates" : "/manage?tab=alerts",
     tone: alert.severity,
     source: "alert",
     topic: SHARED_ALERT_TOPIC[alert.type] ?? `alert:${alert.type}:${alert.id}`,
