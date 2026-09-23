@@ -712,10 +712,15 @@ model Alert {
   severity  AlertSeverity @default(info)
   isRead    Boolean       @default(false) @map("is_read")
   createdAt DateTime      @default(now()) @map("created_at")
+  /// Identifies the finding, not the wording: lets a scan withdraw exactly what it no longer sees.
+  evidenceKey String?     @map("evidence_key") @db.VarChar(64)
+  /// Withdrawn findings stay readable; nothing the user was once shown is destroyed.
+  withdrawnAt DateTime?   @map("withdrawn_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, isRead, createdAt])
+  @@index([userId, type, withdrawnAt])
   @@map("alerts")
 }
 

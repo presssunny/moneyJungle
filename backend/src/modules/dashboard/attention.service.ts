@@ -79,6 +79,7 @@ interface AlertRow {
   type: string;
   title: string;
   severity: AttentionTone;
+  evidenceKey: string | null;
 }
 
 function alertCandidate(alert: AlertRow, dismissed: boolean): AttentionCandidate {
@@ -89,7 +90,7 @@ function alertCandidate(alert: AlertRow, dismissed: boolean): AttentionCandidate
     to: alert.type === "duplicate_transaction" ? "/assistant#duplicates" : "/manage?tab=alerts",
     tone: alert.severity,
     source: "alert",
-    topic: SHARED_ALERT_TOPIC[alert.type] ?? `alert:${alert.type}:${alert.id}`,
+    topic: SHARED_ALERT_TOPIC[alert.type] ?? `alert:${alert.type}:${alert.evidenceKey ?? alert.id}`,
     priority: PRIORITY.alert,
     dismissed,
   };
@@ -121,11 +122,11 @@ export async function collectAttentionCandidates(
     buildUpcoming(userId, UPCOMING_WINDOW_DAYS),
     remindersRepository.findUpcoming(userId, today, addDays(today, REMINDER_WINDOW_DAYS)),
     prisma.alert.findMany({
-      where: { userId, isRead: false, createdAt: { gte: monthStart, lt: monthEnd } },
+      where: { userId, isRead: false, withdrawnAt: null, createdAt: { gte: monthStart, lt: monthEnd } },
       orderBy: { createdAt: "desc" },
     }),
     prisma.alert.findMany({
-      where: { userId, isRead: true, createdAt: { gte: monthStart, lt: monthEnd } },
+      where: { userId, isRead: true, withdrawnAt: null, createdAt: { gte: monthStart, lt: monthEnd } },
       orderBy: { createdAt: "desc" },
     }),
   ]);

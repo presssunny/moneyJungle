@@ -79,7 +79,7 @@ export const updatesService = {
 
     // Unread alerts
     const alerts = await prisma.alert.findMany({
-      where: { userId, isRead: false },
+      where: { userId, isRead: false, withdrawnAt: null },
       orderBy: { createdAt: "desc" },
       take: 10,
     });

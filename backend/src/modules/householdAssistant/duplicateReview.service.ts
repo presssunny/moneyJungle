@@ -106,6 +106,18 @@ async function changedMoney(userId: number) {
   await prisma.financialProfile.upsert({ where: { userId }, create: { userId, revision: 1 }, update: { revision: { increment: 1 } } });
 }
 
+// Income carries no source column, unlike Expense: a bank row resolved as income
+// whose link was lost is the only remaining trace that this row came from a
+// statement. Deleting it would break the rolling balance with nothing left to show.
+async function requireUnbankedIncome(userId: number, income: unknown) {
+  const row = z.object({ amount: z.unknown(), incomeDate: z.date() }).parse(income);
+  const orphan = await prisma.bankTransaction.findFirst({
+    where: { userId, resolution: "income", linkedIncomeId: null, amount: row.amount as never, transactionDate: row.incomeDate },
+    select: { id: true },
+  });
+  if (orphan) throw ApiError.conflict("להכנסה הזאת יש תנועת בנק מקבילה שאינה מקושרת. יש להשלים את ההתאמה במסך הבנק לפני הסרה.");
+}
+
 export async function decideDuplicate(userId: number, input: DuplicateReviewInput): Promise<DuplicateReviewResult> {
   return withFinancialTransaction(userId, async () => {
     const requestHash = fingerprint([input.requestId, input.candidateId, input.version, input.decision, input.removedKey ?? null, input.keptKey ?? null]);
@@ -131,7 +143,7 @@ export async function decideDuplicate(userId: number, input: DuplicateReviewInpu
       removedRecord = current.get(removed.key)!.raw;
       const id = Number(removed.key.split(":")[1]);
       if (removed.kind === "expense") { await expensesService.remove(userId, id); financialDomain = "expenses"; }
-      else { await incomesService.remove(userId, id); financialDomain = "incomes"; }
+      else { await requireUnbankedIncome(userId, removedRecord); await incomesService.remove(userId, id); financialDomain = "incomes"; }
     }
     const review = await prisma.duplicateReview.create({ data: {
       userId, requestId: input.requestId, requestHash, candidateId: candidate.id, evidenceVersion: candidate.version, decision: input.decision,
@@ -185,13 +197,4 @@ export async function undoDuplicate(userId: number, id: string, version: string)
     const refreshed = await currentEvidence(userId, records.map(r => r.key));
     return { review: await reviewView(userId, undone, refreshed), financialDomain };
   });
-}
-
-// Legacy expense alerts use the same persisted evidence, without changing their matching rules.
-export async function reviewedExpenseGroups(userId: number): Promise<Set<string>[]> {
-  const reviews = await prisma.duplicateReview.findMany({ where: { userId, decision: "separate", undoneAt: null } });
-  const groups = reviews.map(r => evidenceSchema.parse(r.evidence).records);
-  const current = await currentEvidence(userId, groups.flatMap(rows => rows.map(r => r.key)));
-  return groups.filter(rows => rows.every(r => current.get(r.key)?.version === r.version))
-    .map(rows => new Set(rows.filter(r => r.kind === "expense").map(r => r.key)));
 }

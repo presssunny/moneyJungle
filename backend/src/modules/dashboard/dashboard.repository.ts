@@ -119,7 +119,7 @@ export const dashboardRepository = {
 
   recentAlerts(userId: number, take = 5) {
     return prisma.alert.findMany({
-      where: { userId },
+      where: { userId, withdrawnAt: null },
       orderBy: { createdAt: "desc" },
       take,
     });

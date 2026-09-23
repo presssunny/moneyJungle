@@ -1,4 +1,4 @@
-import { reviewedExpenseGroups } from "../householdAssistant/duplicateReview.service";
+import { scanDuplicates } from "../householdAssistant/duplicateReview.service";
 import { prisma } from "../../config/database";
 import { monthRange } from "../../utils/date.utils";
 import { decimalToNumber, formatILS, percent, round2 } from "../../utils/money.utils";
@@ -40,6 +40,8 @@ interface DetectedAlert {
   title: string;
   message: string;
   severity: "info" | "warning" | "critical";
+  /** Set by scans that withdraw their own stale findings; the title is wording, not identity. */
+  evidenceKey?: string;
 }
 
 export function formatDayMonth(date: Date): string {
@@ -59,9 +61,10 @@ export function isHeavyDay(upcoming: UpcomingResponse): boolean {
 }
 
 /**
- * Detect alert conditions and persist any that aren't already recorded this month.
- * Runs lazily on every alerts fetch — dedupe is by (type, title) within the
- * current calendar month, so a fixed condition re-alerts next month only.
+ * Detect alert conditions and persist any that aren't already showing this month.
+ * Runs lazily on every alerts fetch — dedupe is by evidence key where a scan
+ * provides one and by (type, title) otherwise, within the current calendar
+ * month, so a fixed condition re-alerts next month only.
  */
 export async function scanForAlerts(userId: number): Promise<void> {
   const now = new Date();
@@ -205,53 +208,45 @@ export async function scanForAlerts(userId: number): Promise<void> {
     }
   }
 
-  // Two expense rows nobody's import created (same amount, same date, same
-  // business name) — the classic double-tap-submit or "typed it in twice by
-  // hand" mistake. Import commits already dedupe themselves at the source
-  // (`skippedDuplicates` in smartImport/bank/credit services), so a row an
-  // import created (`importRowId` set) can never collide with itself here;
-  // this only ever catches human double-entry. Credit-card purchases can't
-  // collide with this either — they never become `Expense` rows (read-time
-  // merge only, CLAUDE.md §4), so a normal bank+credit import raises nothing.
-  const reviewedGroups = await reviewedExpenseGroups(userId);
-  const manualExpenses = monthExpenses.filter((row) => row.importRowId === null);
-  const seenDuplicateGroups = new Set<string>();
-  for (let i = 0; i < manualExpenses.length; i++) {
-    for (let j = i + 1; j < manualExpenses.length; j++) {
-      const a = manualExpenses[i];
-      const b = manualExpenses[j];
-      if (reviewedGroups.some(group => group.has(`expense:${a.id}`) && group.has(`expense:${b.id}`))) continue;
-      const name = a.businessName?.trim() || a.description?.trim();
-      if (!name) continue;
-      if (name !== (b.businessName?.trim() || b.description?.trim())) continue;
-      if (decimalToNumber(a.amount) !== decimalToNumber(b.amount)) continue;
-      if (a.expenseDate.getTime() !== b.expenseDate.getTime()) continue;
-      const groupKey = `${name}|${decimalToNumber(a.amount)}|${a.expenseDate.toISOString()}`;
-      if (seenDuplicateGroups.has(groupKey)) continue;
-      seenDuplicateGroups.add(groupKey);
-      detected.push({
-        type: "duplicate_transaction",
-        title: `כפילות אפשרית: ${name}`,
-        message: `שתי הוצאות זהות ב-${formatDayMonth(a.expenseDate)}: ${name}, ${formatILS(decimalToNumber(a.amount))} כל אחת. ייתכן שנרשמה פעמיים בטעות.`,
-        severity: "info",
-      });
-    }
+  // Human double-entry: the same expense typed in twice. The candidates come
+  // from the review scan, so the alert and the screen that resolves it can
+  // never disagree about what counts as a duplicate (CLAUDE.md §4). That scan
+  // already drops groups the household has judged, and already excludes
+  // imported, bank-linked and card rows — an import dedupes at its own source,
+  // and credit purchases never become `Expense` rows at all.
+  const withinMonth = (date: string) => date >= start.toISOString().slice(0, 10) && date < end.toISOString().slice(0, 10);
+  const duplicateGroups = (await scanDuplicates(userId)).candidates
+    .filter(c => c.reason === "same_entry" && c.records.every(r => r.kind === "expense" && withinMonth(r.date)));
+  for (const group of duplicateGroups) {
+    const [first] = group.records;
+    detected.push({
+      type: "duplicate_transaction",
+      evidenceKey: group.id,
+      title: `כפילות אפשרית: ${first.name}`,
+      message: `${group.recordCount} הוצאות זהות ב-${formatDayMonth(new Date(first.date))}: ${first.name}, ${formatILS(first.amount)} כל אחת. ייתכן שנרשמה פעמיים בטעות.`,
+      severity: "info",
+    });
   }
 
-  // These automatic findings follow current evidence; the review audit lives separately.
-  await prisma.alert.deleteMany({ where: { userId, type: "duplicate_transaction", createdAt: { gte: start },
-    title: { notIn: detected.filter(a => a.type === "duplicate_transaction").map(a => a.title) } } });
+  // A finding the scan no longer sees is withdrawn from view, never deleted —
+  // the household was shown it, and why it went away is not always recorded.
+  const liveKeys = detected.map(a => a.evidenceKey).filter((key): key is string => Boolean(key));
+  await prisma.alert.updateMany({
+    where: { userId, type: "duplicate_transaction", withdrawnAt: null, createdAt: { gte: start },
+      ...(liveKeys.length ? { OR: [{ evidenceKey: null }, { evidenceKey: { notIn: liveKeys } }] } : {}) },
+    data: { withdrawnAt: new Date() },
+  });
   if (detected.length === 0) return;
 
-  // Persist only alerts not already recorded this month (read or unread)
+  // Persist only alerts not already showing this month (read or unread)
   const existing = await prisma.alert.findMany({
-    where: { userId, createdAt: { gte: start } },
-    select: { type: true, title: true },
+    where: { userId, createdAt: { gte: start }, withdrawnAt: null },
+    select: { type: true, title: true, evidenceKey: true },
   });
-  const existingKeys = new Set(existing.map((a) => `${a.type}|${a.title}`));
+  const existingKeys = new Set(existing.map((a) => a.evidenceKey ?? `${a.type}|${a.title}`));
 
   for (const alert of detected) {
-    if (existingKeys.has(`${alert.type}|${alert.title}`)) continue;
+    if (existingKeys.has(alert.evidenceKey ?? `${alert.type}|${alert.title}`)) continue;
     await alertsRepository.create(userId, alert);
   }
 }

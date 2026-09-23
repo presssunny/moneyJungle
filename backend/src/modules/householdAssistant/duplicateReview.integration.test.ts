@@ -18,6 +18,7 @@ let token: string;
 const today = businessDate();
 const [year, month] = today.split("-").map(Number);
 const base = "/api/household-assistant";
+const showing = () => prisma.alert.count({ where: { userId, type: "duplicate_transaction", withdrawnAt: null } });
 const headers = () => ({ Cookie: `${sessionCookieName}=${token}`, "X-CSRF-Token": csrfForSession(token), Origin: "http://localhost:5173" });
 beforeEach(async () => {
   userId = (await prisma.user.create({ data: { name: "__duplicate_review_test", email: `${crypto.randomUUID()}@example.test` } })).id;
@@ -47,18 +48,54 @@ describe("persisted duplicate review", () => {
     const c = await expenses();
     const before = await monthTotals(userId, year, month);
     await scanForAlerts(userId);
-    expect(await prisma.alert.count({ where: { userId, type: "duplicate_transaction" } })).toBe(1);
+    expect(await showing()).toBe(1);
     const { review } = await decideDuplicate(userId, input(c));
     expect((await scanDuplicates(userId)).candidateCount).toBe(0);
     expect((await duplicateHistory(userId)).items[0]).toMatchObject({ id: review.id, status: "active", canUndo: true });
     expect(await monthTotals(userId, year, month)).toEqual(before);
     await scanForAlerts(userId);
-    expect(await prisma.alert.count({ where: { userId, type: "duplicate_transaction" } })).toBe(0);
+    expect(await showing()).toBe(0);
+    // Withdrawn from view, not destroyed: what the household was once told survives.
+    expect(await prisma.alert.count({ where: { userId, type: "duplicate_transaction" } })).toBe(1);
     await undoDuplicate(userId, review.id, review.version);
     expect((await scanDuplicates(userId)).candidateCount).toBe(1);
     expect((await duplicateHistory(userId)).items[0].status).toBe("undone");
     await scanForAlerts(userId);
-    expect(await prisma.alert.count({ where: { userId, type: "duplicate_transaction" } })).toBe(1);
+    expect(await showing()).toBe(1);
+  });
+  it("identifies an alert by its evidence, so a resolved group cannot leave a stale amount on screen", async () => {
+    await expenses();
+    await prisma.expense.createMany({ data: [1, 2].map(() => ({ userId, businessName: "רישום לבדיקה", amount: 980, expenseDate: new Date(today) })) });
+    await scanForAlerts(userId);
+    expect(await showing()).toBe(2);
+    const cheap = (await scanDuplicates(userId)).candidates.find(c => c.records[0].amount === 120.5)!;
+    await decideDuplicate(userId, input(cheap));
+    await scanForAlerts(userId);
+    // Same merchant name, different evidence: the resolved group goes, the open one stays intact.
+    const live = await prisma.alert.findMany({ where: { userId, type: "duplicate_transaction", withdrawnAt: null } });
+    expect(live).toHaveLength(1);
+    expect(live[0].message).toContain("980");
+    expect(live[0].message).not.toContain("120.5");
+  });
+  it("never raises an alert the review screen cannot resolve", async () => {
+    // Recurring rows and bank-linked rows are outside the review scan by design,
+    // so they must not raise an alert that links to a screen with nothing on it.
+    await prisma.expense.createMany({ data: [1, 2].map(() => ({ userId, businessName: "מנוי חודשי", amount: 75, expenseDate: new Date(today), source: "recurring" as const })) });
+    const linked = await expenses();
+    const account = await prisma.bankAccount.create({ data: { userId, bankName: "test", accountName: "test" } });
+    await prisma.bankTransaction.create({ data: { userId, bankAccountId: account.id, amount: 120.5, type: "withdrawal", transactionDate: new Date(today), linkedExpenseId: Number(linked.records[0].key.split(":")[1]) } });
+    await scanForAlerts(userId);
+    expect(await showing()).toBe(0);
+    expect((await scanDuplicates(userId)).candidateCount).toBe(0);
+  });
+  it("refuses to remove an income that a bank row still points at through a lost link", async () => {
+    await prisma.income.createMany({ data: [1, 2].map(() => ({ userId, amount: 500, description: "משכורת", type: "salary", incomeDate: new Date(today) })) });
+    const account = await prisma.bankAccount.create({ data: { userId, bankName: "test", accountName: "test" } });
+    await prisma.bankTransaction.create({ data: { userId, bankAccountId: account.id, amount: 500, type: "deposit", transactionDate: new Date(today), resolution: "income", linkedIncomeId: null } });
+    const c = (await scanDuplicates(userId)).candidates[0];
+    await expect(decideDuplicate(userId, input(c, "remove_manual"))).rejects.toMatchObject({ statusCode: 409 });
+    expect(await prisma.income.count({ where: { userId } })).toBe(2);
+    expect(await prisma.duplicateReview.count({ where: { userId } })).toBe(0);
   });
   it("removes exactly the selected manual row once, invalidates coverage, and restores all original fields", async () => {
     const c = await expenses();

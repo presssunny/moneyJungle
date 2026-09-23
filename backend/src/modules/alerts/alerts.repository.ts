@@ -4,7 +4,7 @@ import { Prisma } from "../../../generated/prisma/client";
 export const alertsRepository = {
   findAll(userId: number, onlyUnread = false) {
     return prisma.alert.findMany({
-      where: { userId, ...(onlyUnread ? { isRead: false } : {}) },
+      where: { userId, withdrawnAt: null, ...(onlyUnread ? { isRead: false } : {}) },
       orderBy: { createdAt: "desc" },
       take: 100,
     });

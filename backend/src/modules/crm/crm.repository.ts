@@ -200,7 +200,7 @@ export const crmRepository = {
 
   alerts(userId: number, take = 20) {
     return prisma.alert.findMany({
-      where: { userId },
+      where: { userId, withdrawnAt: null },
       orderBy: [{ isRead: "asc" }, { createdAt: "desc" }],
       take,
     });
