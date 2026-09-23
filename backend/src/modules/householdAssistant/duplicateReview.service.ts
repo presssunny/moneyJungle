@@ -39,14 +39,23 @@ async function currentEvidence(userId: number, keys: string[]): Promise<CurrentE
   return result;
 }
 
-export async function scanDuplicates(userId: number, today = businessDate()) {
+/**
+ * Every unresolved group in the scan window, before the response cap. Callers
+ * that decide what is still open — rather than what to show — need all of them:
+ * a capped list would report a live group as gone.
+ */
+export async function pendingDuplicates(userId: number, today = businessDate()) {
   const [scan, reviews] = await Promise.all([
     scanDuplicateEvidence(userId, today),
     prisma.duplicateReview.findMany({ where: { userId, undoneAt: null }, select: { candidateId: true, evidenceVersion: true, evidence: true, decision: true } }),
   ]);
   const resolved = new Set(reviews.map(r => `${r.candidateId}:${r.evidenceVersion}`));
   const reviewedKeys = new Set(reviews.flatMap(r => evidenceSchema.parse(r.evidence).records.map(record => record.key)));
-  const pending = scan.candidates.filter(c => !resolved.has(`${c.id}:${c.version}`));
+  return { scan, reviews, reviewedKeys, pending: scan.candidates.filter(c => !resolved.has(`${c.id}:${c.version}`)) };
+}
+
+export async function scanDuplicates(userId: number, today = businessDate()) {
+  const { scan, reviews, reviewedKeys, pending } = await pendingDuplicates(userId, today);
   return { ...scan, followUpCount: reviews.filter(r => r.decision === "source_charge").length, candidateCount: pending.length, candidates: pending.slice(0, 50).map(c => ({ ...c, reopened: c.records.some(r => reviewedKeys.has(r.key)), records: c.records.slice(0, 20) })) };
 }
 

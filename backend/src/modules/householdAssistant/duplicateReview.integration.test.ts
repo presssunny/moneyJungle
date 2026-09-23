@@ -88,6 +88,29 @@ describe("persisted duplicate review", () => {
     expect(await showing()).toBe(0);
     expect((await scanDuplicates(userId)).candidateCount).toBe(0);
   });
+  it("withdraws a finding resolved in a later month than the one it was raised in", async () => {
+    const c = await expenses();
+    await scanForAlerts(userId);
+    expect(await showing()).toBe(1);
+    // The alert outlives the calendar month it was raised in; resolving the group
+    // must still withdraw it, or it stays on screen pointing at an empty review.
+    await prisma.alert.updateMany({ where: { userId, type: "duplicate_transaction" }, data: { createdAt: new Date(nextDate(today, -45)) } });
+    await decideDuplicate(userId, input(c));
+    await scanForAlerts(userId);
+    expect(await showing()).toBe(0);
+    expect(await prisma.alert.count({ where: { userId, type: "duplicate_transaction" } })).toBe(1);
+  });
+  it("keeps every open finding showing when there are more groups than the response cap", async () => {
+    const groups = 55;
+    await prisma.expense.createMany({ data: Array.from({ length: groups * 2 }, (_, i) => ({ userId, businessName: `עסק ${Math.floor(i / 2)}`, amount: 10 + Math.floor(i / 2), expenseDate: new Date(today) })) });
+    expect((await scanDuplicates(userId)).candidates).toHaveLength(50);
+    await scanForAlerts(userId);
+    expect(await showing()).toBe(groups);
+    // A second pass must not withdraw the groups the capped response left out.
+    await scanForAlerts(userId);
+    expect(await showing()).toBe(groups);
+    expect(await prisma.alert.count({ where: { userId, type: "duplicate_transaction", withdrawnAt: { not: null } } })).toBe(0);
+  });
   it("refuses to remove an income that a bank row still points at through a lost link", async () => {
     await prisma.income.createMany({ data: [1, 2].map(() => ({ userId, amount: 500, description: "משכורת", type: "salary", incomeDate: new Date(today) })) });
     const account = await prisma.bankAccount.create({ data: { userId, bankName: "test", accountName: "test" } });

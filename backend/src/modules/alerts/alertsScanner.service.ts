@@ -1,4 +1,4 @@
-import { scanDuplicates } from "../householdAssistant/duplicateReview.service";
+import { pendingDuplicates } from "../householdAssistant/duplicateReview.service";
 import { prisma } from "../../config/database";
 import { monthRange } from "../../utils/date.utils";
 import { decimalToNumber, formatILS, percent, round2 } from "../../utils/money.utils";
@@ -215,9 +215,9 @@ export async function scanForAlerts(userId: number): Promise<void> {
   // imported, bank-linked and card rows — an import dedupes at its own source,
   // and credit purchases never become `Expense` rows at all.
   const withinMonth = (date: string) => date >= start.toISOString().slice(0, 10) && date < end.toISOString().slice(0, 10);
-  const duplicateGroups = (await scanDuplicates(userId)).candidates
-    .filter(c => c.reason === "same_entry" && c.records.every(r => r.kind === "expense" && withinMonth(r.date)));
-  for (const group of duplicateGroups) {
+  const duplicates = await pendingDuplicates(userId);
+  const openGroups = duplicates.pending.filter(c => c.reason === "same_entry" && c.records.every(r => r.kind === "expense"));
+  for (const group of openGroups.filter(c => c.records.every(r => withinMonth(r.date)))) {
     const [first] = group.records;
     detected.push({
       type: "duplicate_transaction",
@@ -230,9 +230,12 @@ export async function scanForAlerts(userId: number): Promise<void> {
 
   // A finding the scan no longer sees is withdrawn from view, never deleted —
   // the household was shown it, and why it went away is not always recorded.
-  const liveKeys = detected.map(a => a.evidenceKey).filter((key): key is string => Boolean(key));
-  await prisma.alert.updateMany({
-    where: { userId, type: "duplicate_transaction", withdrawnAt: null, createdAt: { gte: start },
+  // Withdrawal spans the whole scan window, not the month an alert was raised
+  // in: a finding resolved on the 1st is no longer live, whatever day it began.
+  // A truncated scan cannot prove a group is gone, so it withdraws nothing.
+  const liveKeys = openGroups.map(group => group.id);
+  if (!duplicates.scan.limited) await prisma.alert.updateMany({
+    where: { userId, type: "duplicate_transaction", withdrawnAt: null,
       ...(liveKeys.length ? { OR: [{ evidenceKey: null }, { evidenceKey: { notIn: liveKeys } }] } : {}) },
     data: { withdrawnAt: new Date() },
   });
