@@ -17,6 +17,7 @@ api.interceptors.response.use(
   (response) => {
     if (["post", "patch", "put", "delete"].includes(response.config.method ?? "") && !response.config.url?.includes("/gate/") && response.config.url !== "/household-assistant/plan") {
       let domain=response.config.url?.split("/").filter(Boolean)[0]??"financial";
+      if (domain === "household-assistant" && ["expenses", "incomes"].includes(response.data?.financialDomain)) domain = response.data.financialDomain;
       if(domain==="settings") {
         try {
           const body=typeof response.config.data==="string"?JSON.parse(response.config.data):response.config.data;

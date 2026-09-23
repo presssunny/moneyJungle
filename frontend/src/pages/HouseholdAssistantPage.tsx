@@ -1,3 +1,4 @@
+import { DuplicateReview } from "../components/assistant/DuplicateReview";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { AsyncSection } from "../components/common/AsyncSection";
@@ -10,8 +11,6 @@ import { getHouseholdSnapshot, requestHouseholdPlan } from "../services/househol
 import type { AssistantPlan } from "../types/models";
 import { formatCurrency, formatDate, formatMonthKey } from "../utils/format";
 import "../styles/household-assistant.css";
-
-const sourceNames = { expense: "הוצאה ידנית", credit: "פירוט אשראי", income: "הכנסה" };
 
 export default function HouseholdAssistantPage() {
   const resource = useAsync(getHouseholdSnapshot, []);
@@ -53,19 +52,7 @@ export default function HouseholdAssistantPage() {
               <p role="status">{plan?.mode === "stale" || plan && plan.version !== data.version ? "המידע השתנה. יש לרענן ולבחור צעדים מחדש." : currentPlan?.mode === "ai" ? "הצעדים נבחרו בעזרת AI. בדיקות דחופות נשארו בראש הרשימה." : currentPlan?.mode === "rules" ? "ה־AI לא היה זמין או שלא התקבלה בחירה תקינה. מוצג סדר הבדיקה הרגיל." : "לא נשלח מידע ל־AI ללא הפעלה מפורשת."}</p>
             </details>
           </Card>
-          <section id="duplicates" tabIndex={-1}>
-            <Card title={`רישומים דומים לבדיקה · ${data.duplicates.candidateCount}`}>
-              <p className="text-muted">אותו שם, יום וסכום עשויים לתאר שתי עסקאות אמיתיות. לא נמחקה אף רשומה.</p>
-              {data.duplicates.limited && <p role="status">הבדיקה חלקית גם בתוך התקופה: נבדקו עד 2,000 רשומות מכל סוג.</p>}
-              {data.duplicates.candidates.length ? <ul className="household-duplicates">{data.duplicates.candidates.map(candidate => <li key={candidate.id}>
-                <h3>{candidate.records[0].name}</h3><p>{candidate.reason === "manual_and_card" ? "רישום ידני ופירוט כרטיס דומים" : "כמה רשומות דומות מאותו סוג"} · {candidate.recordCount} רשומות</p>
-                <ul>{candidate.records.map(record => <li key={record.key}><div><strong>{sourceNames[record.kind]}</strong><span className="text-muted">{formatDate(record.date)} · מזהה {record.key.split(":")[1]}</span></div><bdi>{formatCurrency(record.amount)}</bdi><Link to={record.to} aria-label={`פתיחת ${sourceNames[record.kind]} ${record.key.split(":")[1]}`}>למקור</Link></li>)}</ul>
-                {candidate.recordCount > candidate.records.length && <p>מוצגות {candidate.records.length} הרשומות הראשונות בקבוצה.</p>}
-              </li>)}</ul> : <p>לא נמצאו רישומים דומים בבדיקה הזאת. זו אינה בדיקה מלאה של כל הכפילויות האפשריות.</p>}
-              {data.duplicates.candidateCount > data.duplicates.candidates.length && <p>מוצגות 50 הקבוצות הראשונות.</p>}
-              <details><summary>היקף הבדיקה</summary><p>{formatDate(data.duplicates.from)}–{formatDate(data.duplicates.to)} · {data.duplicates.scanned} רשומות נסרקו.</p><p>הבדיקה משווה הוצאות ידניות, הכנסות לא מקושרות ורכישות אשראי מאושרות המשויכות לכרטיס. היא לא כוללת תשלומים, מימון, זיכויים, רשומות שכבר קושרו לבנק או התאמות לפי שמות דומים בלבד. בדיקת דוחות חופפים והתאמת חיובי בנק מתבצעות במסכי הייבוא והחשבונות.</p></details>
-            </Card>
-          </section>
+          <DuplicateReview scan={data.duplicates} disabled={resource.loading || Boolean(resource.error)} />
           <Card title="חיובים קרובים וחובות פתוחים">
             {data.upcoming.length ? <ul className="household-upcoming">{data.upcoming.slice(0, 8).map(event => <li key={event.key}><div><Link to={event.to}>{event.name}</Link><span className="text-muted">{formatDate(event.date)}</span></div><bdi>{event.amount === null ? "סכום לא ידוע" : formatCurrency(event.amount)}</bdi></li>)}</ul> : <p>אין חיובים קרובים במידע הרשום. בדקו שגם תשלומים שנתיים ותקופתיים נכללו.</p>}
             <Link to="/commitments">לכל ההתחייבויות</Link>
