@@ -51,6 +51,7 @@ const ROUTE_TITLES: Record<string, NavItem> = {
   "/settings": { path: "/settings", label: "הגדרות", icon: "⚙️" },
   "/data": { path: "/data", label: "מידע ומסמכים", icon: "📁" },
   "/review": { path: "/review", label: "פריטים לבדיקה", icon: "🔎" },
+  "/assistant": { path: "/assistant", label: "העוזר המשפחתי", icon: "🌿" },
   "/check-in": { path: "/check-in", label: "בדיקת הכסף השבועית", icon: "🌿" },
   "/commitments": { path: "/commitments", label: "התחייבויות קרובות", icon: "📅" },
   "/onboarding": { path: "/onboarding", label: "ברוכה הבאה", icon: "👋" },

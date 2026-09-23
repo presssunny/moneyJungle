@@ -77,7 +77,8 @@ test('Onboarding directs users to coverage review before offering completion',as
 test('Legacy import and management links reach canonical destinations',async({page})=>{
  await mockApi(page);await page.goto('/transactions?tab=import');await expect(page).toHaveURL(/\/imports$/);
  await page.goto('/manage?tab=documents');await expect(page).toHaveURL(/\/data$/);
- await page.goto('/manage');await expect(page.getByRole('link',{name:'פתיחה ←'})).toHaveCount(4);
+ await page.goto('/manage');await expect(page.getByRole('link',{name:'פתיחה ←'})).toHaveCount(5);
+ await expect(page.locator('a[href="/assistant"]')).toBeVisible();
 });
 
 test('A staged row can be corrected before commit and survives reload',async({page})=>{

@@ -22,6 +22,7 @@ const DocumentsPage = lazy(() => import("../pages/DocumentsPage"));
 const ImportJourneyPage = lazy(() => import("../pages/ImportJourneyPage"));
 const FinancialDataPage = lazy(() => import("../pages/FinancialDataPage"));
 const ReviewPage = lazy(() => import("../pages/ReviewPage"));
+const HouseholdAssistantPage = lazy(() => import("../pages/HouseholdAssistantPage"));
 const CheckInPage = lazy(() => import("../pages/CheckInPage"));
 const CommitmentsPage = lazy(() => import("../pages/CommitmentsPage"));
 const SettingsHubPage = lazy(() => import("../pages/SettingsHubPage"));
@@ -104,6 +105,7 @@ export default function App() {
             <Route path="/imports" element={<ImportJourneyPage />} />
             <Route path="/data" element={<FinancialDataPage />} />
             <Route path="/review" element={<ReviewPage />} />
+            <Route path="/assistant" element={<HouseholdAssistantPage />} />
             <Route path="/check-in" element={<CheckInPage />} />
             <Route path="/commitments" element={<CommitmentsPage />} />
             <Route path="/settings" element={<SettingsHubPage />} />

@@ -1,0 +1,27 @@
+.household-assistant { max-width: 1120px; margin-inline: auto; overflow-wrap: anywhere; }
+.household-heading, .household-actions > li, .household-upcoming > li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
+.household-heading { flex-wrap: wrap; }
+.household-assistant h3 { font-size: 1rem; margin: 0 0 var(--space-2); }
+.household-assistant p { margin-block: var(--space-2) var(--space-4); }
+.household-numbers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-6); margin-block: var(--space-2) var(--space-6); }
+.household-numbers dt { color: var(--text-muted); font-size: .875rem; }
+.household-numbers dd { margin: var(--space-2) 0 0; font-size: clamp(1.25rem, 3vw, 1.8rem); font-weight: 700; text-align: start; font-variant-numeric: tabular-nums; }
+.household-assistant details { margin-block-start: var(--space-4); }
+.household-assistant summary { cursor: pointer; min-height: 44px; padding-block: var(--space-3); font-weight: 600; }
+.household-actions, .household-duplicates, .household-duplicates ul, .household-upcoming { list-style: none; padding: 0; margin: 0; }
+.household-actions > li, .household-upcoming > li { padding-block: var(--space-4); border-block-end: 1px solid var(--divider); }
+.household-actions .btn { flex-shrink: 0; }
+.household-duplicates > li { padding-block: var(--space-6); border-block-end: 1px solid var(--divider); }
+.household-duplicates ul > li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: var(--space-4); padding: var(--space-3); background: var(--surface-inset); margin-block: var(--space-2); border-radius: var(--radius-control); }
+.household-duplicates span, .household-upcoming span { display: block; font-size: .875rem; }
+.household-duplicates a { display: inline-flex; align-items: center; min-height: 44px; }
+.household-assistant bdi { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.household-consent { display: flex; align-items: flex-start; gap: var(--space-3); padding-block: var(--space-4); }
+.household-consent input { flex-shrink: 0; width: 22px; height: 22px; margin-block-start: 2px; }
+.household-assistant #duplicates { scroll-margin-block-start: 100px; }
+@media (max-width: 600px) {
+  .household-numbers { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .household-numbers > div:last-child { grid-column: 1 / -1; }
+  .household-actions > li { align-items: flex-start; flex-direction: column; }
+  .household-duplicates ul > li { gap: var(--space-2); }
+}

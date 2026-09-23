@@ -5,7 +5,7 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: {
-    proxy: { '/api': { target: 'http://127.0.0.1:3000' } },
+    proxy: { '/api': { target: process.env.MONEY_JUNGLE_API_TARGET ?? 'http://127.0.0.1:3000' } },
     // The dev server runs in WSL while the source lives on the Windows
     // filesystem (/mnt/c). Native inotify events don't cross that boundary,
     // so HMR misses edits — poll for changes instead.
