@@ -78,15 +78,6 @@ export interface DashboardCharts {
   loanSplit: LoanSplit[];
 }
 
-export interface TickerItem {
-  id: string;
-  type: string;
-  icon: string;
-  text: string;
-  severity: "info" | "warning" | "critical";
-  linkTo: string;
-  date: string | null;
-}
 
 export interface Reminder {
   id: number;

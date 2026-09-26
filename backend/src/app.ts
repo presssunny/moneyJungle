@@ -30,7 +30,6 @@ import { reportsRoutes } from "./modules/reports/reports.routes";
 import { savingsRoutes } from "./modules/savings/savings.routes";
 import { settingsRoutes } from "./modules/settings/settings.routes";
 import { subscriptionsRoutes } from "./modules/subscriptions/subscriptions.routes";
-import { updatesRoutes } from "./modules/updates/updates.routes";
 
 const app = express();
 
@@ -53,7 +52,6 @@ app.use("/api/gate/login", rateLimit({ windowMs: 15 * 60 * 1000, max: 10 }));
 
 app.use("/api/gate", gateRoutes);
 app.use("/api/dashboard", dashboardRoutes);
-app.use("/api/updates", updatesRoutes);
 app.use("/api/reminders", remindersRoutes);
 app.use("/api/alerts", alertsRoutes);
 app.use("/api/settings", settingsRoutes);

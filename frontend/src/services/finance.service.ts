@@ -19,8 +19,6 @@ import type {
 } from "../types/models";
 import type { StatementLoanActivity } from "./planning.service";
 import { api } from "./api";
-import type { AssistantAnswers } from "../types/assistant";
-import { uploadSession, type ImportSession } from "./journey.service";
 
 function monthParams(monthKey: string) {
   const [year, month] = monthKey.split("-").map(Number);
@@ -92,14 +90,6 @@ export async function quickAddExpense(text: string): Promise<QuickAddResult> {
   return data;
 }
 
-/** Compatibility exports use the durable session flow; no upload commits money. */
-export type SmartImportResult = ImportSession;
-export async function smartImportFile(file:File,kind?:"bank"|"credit",answers?:AssistantAnswers):Promise<ImportSession> {
- return uploadSession(file,{...answers,...(kind?{kind}:{})});
-}
-export async function importExpensesFile(file:File,monthKey:string):Promise<ImportSession> {
- return uploadSession(file,{kind:"expense_sheet",month:monthKey});
-}
 
 // ---------- Incomes ----------
 
@@ -201,10 +191,6 @@ export async function getLoanSchedule(id: number): Promise<LoanSchedule> {
   return data;
 }
 
-export type ScheduleImportResult = ImportSession;
-export async function importLoanSchedule(file:File,loanId?:number):Promise<ImportSession> {
- return uploadSession(file,loanId===undefined?{kind:"loan_schedule"}:{kind:"loan_schedule",loanId});
-}
 
 export async function closeLoan(
   id: number,
@@ -227,10 +213,6 @@ export async function listCreditImports(): Promise<CreditImport[]> {
   return data;
 }
 
-export type CreditUploadResult = ImportSession;
-export async function uploadCreditImport(file:File,monthKey?:string,cardId?:number):Promise<ImportSession> {
- return uploadSession(file,{kind:"credit",...(monthKey?{month:monthKey}:{}),...(cardId!==undefined?{cardId}:{})});
-}
 
 export async function getCreditImport(id: number): Promise<CreditImportDetail> {
   const { data } = await api.get(`/credit/imports/${id}`);

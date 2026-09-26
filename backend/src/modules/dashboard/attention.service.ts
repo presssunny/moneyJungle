@@ -17,7 +17,7 @@ import { dashboardService } from "./dashboard.service";
 
 export type AttentionTone = "info" | "warning" | "critical";
 
-/** Exactly what `AttentionPanel` renders — mirrored in frontend/src/types/models.ts. */
+/** One deduplicated attention line; journey actions rank these (`journey/actions.service.ts`). */
 export interface AttentionItem {
   id: string;
   icon: string;
@@ -268,6 +268,3 @@ export function mergeAttention(candidates: AttentionCandidate[]): AttentionItem[
   return items;
 }
 
-export async function buildAttention(userId: number, year: number, month: number): Promise<AttentionItem[]> {
-  return mergeAttention(await collectAttentionCandidates(userId, year, month));
-}

@@ -448,44 +448,6 @@ export interface Achievements {
   badges: Badge[];
 }
 
-export interface UpcomingEvent {
-  amountKnown?: boolean;
-  date: string;
-  kind: "recurring" | "subscription" | "loan" | "reminder";
-  name: string;
-  amount: number;
-  icon: string;
-}
-
-export interface Upcoming {
-  windowDays: number;
-  from: string;
-  to: string;
-  total: number;
-  events: UpcomingEvent[];
-  heaviestDay: { date: string; total: number; count: number } | null;
-}
-
-/**
- * One line of "מוקדי תשומת לב". Merged on the server from alerts, reminders, the
- * forward forecast and the review counters — mirrors backend
- * `dashboard/attention.service.ts`, which is where the dedupe lives.
- */
-export interface AttentionItem {
-  id: string;
-  icon: string;
-  text: string;
-  to: string;
-  tone: "info" | "warning" | "critical";
-}
-
-export interface ImportExpensesResult {
-  parsed: number;
-  created: number;
-  skipped: number;
-  totalAmount: number;
-  months?: string[];
-}
 export interface ForecastScenario {
   monthlyIncomeChange: number;
   monthlyExpenseChange: number;

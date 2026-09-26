@@ -1,5 +1,5 @@
 import type { DashboardCharts, DashboardSummary, RecentLists } from "../types/dashboard.types";
-import type { Achievements, AttentionItem, DashboardInsights, Upcoming } from "../types/models";
+import type { Achievements, DashboardInsights } from "../types/models";
 import { api } from "./api";
 
 function monthParams(monthKey: string) {
@@ -32,12 +32,3 @@ export async function getAchievements(monthKey: string): Promise<Achievements> {
   return data;
 }
 
-export async function getAttention(monthKey: string): Promise<AttentionItem[]> {
-  const { data } = await api.get("/dashboard/attention", { params: monthParams(monthKey) });
-  return data;
-}
-
-export async function getUpcoming(days = 45): Promise<Upcoming> {
-  const { data } = await api.get("/dashboard/upcoming", { params: { days } });
-  return data;
-}
