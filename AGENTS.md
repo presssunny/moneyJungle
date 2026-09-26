@@ -1,6 +1,6 @@
 # AGENTS.md — The Money Jungle (handoff for Codex)
 
-Written 2026-09-26 at commit `d485c43` (branch `main`, clean tree).
+Written 2026-09-26 at commit `d485c43`; state re-verified against the code on 2026-09-26.
 Read this first, then `CLAUDE.md` (the project constitution, in Hebrew) — its rules are binding for you too.
 
 ## 1. What the app is
@@ -74,10 +74,18 @@ cd frontend && npm run dev         # port 5173
 
 ## 6. Open items / known issues
 
-1. **Cal credit dedup bug (not fixed).** Cal statements contain a triple per purchase: immediate charge (חיוב מיידי) + reversal + regular billing. The credit dedup key `date|business|amount|paymentCount` collapses the two positive legs into one but keeps the negative reversal, so the purchase nets to zero (one file: raw net ₪21,189 → stored ₪14,549). Needs a fix before credit statements are re-imported. Financial change → needs a failing test first and banker-level care.
+1. **Cal credit import — fixed in code, not yet re-verified by a real import.** Cal statements hold a triple per purchase (immediate charge חיוב מיידי + reversal + regular billing). The old dedup collapsed the two positive legs inside one file, so a purchase netted to zero (₪21,189 → ₪14,549). Since 2026-09-18 (`25d5597`, `256b7ce`) dedup is a multiset against rows **already in the DB** only (`credit.service.ts` `remaining` map; `imports/importRows.service.ts` "one existing occurrence suggests one duplicate"), so repeated rows inside one file stay distinct. Verified read-only on 2026-09-26: `parseCreditFile` on the real `פירוט עסקאות וזיכויים.xlsx` → 442 rows, net ₪21,189.16, non-financing ₪20,683.00 (= the last correct import). Still to do: import it through the app into the DB and confirm the stored total matches.
 2. **Loan 108 conditional interest.** Loan 108 has two tracks: 432 (fixed interest) and 562 "הריבית עלינו" (interest waived while a ~₪7,000 salary lands). Never derive "condition met" from the presence of an interest credit — that hypothesis was disproven.
-3. P1/P2 from the audit, not yet done: server-side transaction pagination; lint-warning cleanup (frontend has ~22 warnings); dead code (`AttentionPanel`, `getAttention`/`buildAttention`/`mergeAttention`, `imports/smartImport.service.ts`); `metrics.service.ts` redefines the financing/confirmed filter instead of importing it from `dashboardRepository` (single-source-of-truth violation); multi-account funding-allocation model.
-4. Household assistant follow-ups: live AI provider not verified (no key); `Income` has no source/provenance column; duplicate matching is exact-only (no fuzzy matching without a labelled dataset).
+3. **Single-source-of-truth violation:** `backend/src/modules/journey/metrics.service.ts` (lines ~30 and ~52) re-declares the confirmed/non-financing credit filter instead of consuming it from `dashboard.repository.ts`.
+4. **Dead code (verified: no importer / no client):**
+   - `backend/src/modules/imports/smartImport.service.ts` — `smartImportService` is never imported; `/imports/smart` now goes through `legacyImportAdapter.stageLegacyImport`.
+   - `frontend/src/components/dashboard/AttentionPanel.tsx` and `getAttention` in `frontend/src/services/dashboard.service.ts` — unused, so `GET /api/dashboard/attention` and `buildAttention` have no client. **Keep** `collectAttentionCandidates`/`mergeAttention` — `journey/actions.service.ts` uses them.
+   - `frontend/src/components/dashboard/UpdatesTicker.tsx` and `frontend/src/services/updates.service.ts` — the ticker is not rendered anywhere, so `backend/src/modules/updates/` (`/api/updates/ticker`) has no client. The roadmap's "fifth unmerged attention source" is therefore moot — nothing to merge, only to delete.
+   - `smartImportFile`/`importExpensesFile` in `frontend/src/services/finance.service.ts` — compatibility exports with no caller.
+5. Other P1/P2 not yet done: server-side pagination for ordinary transaction tables; frontend lint warnings (~22); multi-account funding-allocation model.
+6. Roadmap (`docs/roadmap-next-phase.md`) items still open: 2.1 AI orchestrator (provider + bounded planning exist; no tool-calling / free-form Q&A), 2.4 command palette, 3.3 general goals, 4.2 audit/activity log, 4.3 mobile components (bottom sheet, context menu, FAB, nested breadcrumbs), 4.4 chat with a document. 4.1 health/status is mostly covered by the coverage panel. Deferred by explicit decision: `unused_subscription` alert, OCR.
+7. Household assistant follow-ups: live AI provider not verified (no key locally); `Income` has no source/provenance column; duplicate matching is exact-only; periodic-expense planning and variable-income scenarios not built.
+8. **No real data in the DB**, and the available bank files end 2026-08-01 — August/September statements are needed for a current picture.
 
 ## 7. Where to look
 
