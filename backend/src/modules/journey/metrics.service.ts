@@ -43,7 +43,7 @@ export async function financialMetric(userId: number, name: MetricName, month: s
   }
   if (monthly) {
     const totals = await monthTotals(userId,year,monthNumber);
-    metric.value = name === "income" ? totals.incomeTotal : name === "expense" ? totals.expenseTotal : round2(totals.incomeTotal-totals.expenseTotal);
+    metric.value = name === "income" ? totals.incomeTotal : name === "expense" ? totals.expenseTotal : totals.balance;
     metric.state = "recorded";
     metric.formula = name === "surplus" ? "הכנסות רשומות פחות הוצאות רשומות" : name === "expense" ? "הוצאות רשומות ועוד אשראי מאושר ללא עסקאות מימון; זיכויים מקטינים את הסכום" : "סכום ההכנסות לפי תאריך ההכנסה";
     metric.assumptions = ["אשראי משויך לפי חודש העסקה בדוח, לא לפי מועד הירידה בבנק", "העברות, קרן הלוואה וחיובי כרטיס שכבר פורטו אינם הוצאה נוספת", "עודף חודשי אינו יתרת בנק ואינו כסף פנוי"];

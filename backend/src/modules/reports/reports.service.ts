@@ -2,7 +2,7 @@ import { prisma } from "../../config/database";
 import { monthRange, toMonthKey } from "../../utils/date.utils";
 import { decimalToNumber, round2 } from "../../utils/money.utils";
 import { dashboardRepository, spendingCreditInMonth } from "../dashboard/dashboard.repository";
-import { spentByCategory } from "../dashboard/dashboard.service";
+import { monthTotals, spentByCategory } from "../dashboard/dashboard.service";
 
 const INCOME_TYPE_LABELS: Record<string, string> = {
   salary: "משכורת",
@@ -15,19 +15,6 @@ const INCOME_TYPE_LABELS: Record<string, string> = {
   recurring: "קבוע",
 };
 
-async function monthTotals(userId: number, year: number, month: number) {
-  const { start, end } = monthRange(year, month);
-  const [incomes, expenses, credit] = await Promise.all([
-    dashboardRepository.sumIncomes(userId, start, end),
-    dashboardRepository.sumExpenses(userId, start, end),
-    dashboardRepository.sumConfirmedCredit(userId, start, end),
-  ]);
-  const incomeTotal = round2(decimalToNumber(incomes._sum.amount));
-  const expenseTotal = round2(
-    decimalToNumber(expenses._sum.amount) + decimalToNumber(credit._sum.amount)
-  );
-  return { incomeTotal, expenseTotal, balance: round2(incomeTotal - expenseTotal) };
-}
 
 export const reportsService = {
   async monthly(userId: number, year: number, month: number) {

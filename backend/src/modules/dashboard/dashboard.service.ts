@@ -16,10 +16,14 @@ export async function monthTotals(userId: number, year: number, month: number) {
   const incomeTotal = decimalToNumber(incomes._sum.amount);
   const expenseManual = decimalToNumber(expenses._sum.amount);
   const creditTotal = decimalToNumber(credit._sum.amount);
+  const income = round2(incomeTotal);
+  const expense = round2(expenseManual + creditTotal);
   return {
-    incomeTotal: round2(incomeTotal),
-    expenseTotal: round2(expenseManual + creditTotal),
+    incomeTotal: income,
+    expenseTotal: expense,
     creditTotal: round2(creditTotal),
+    /** Recorded income minus recorded spending — not a bank balance and not free money. */
+    balance: round2(income - expense),
   };
 }
 
@@ -147,7 +151,7 @@ export const dashboardService = {
     return {
       incomeTotal: totals.incomeTotal,
       expenseTotal: totals.expenseTotal,
-      balance: round2(totals.incomeTotal - totals.expenseTotal),
+      balance: totals.balance,
       creditTotal: totals.creditTotal,
       bankReview: {
         pendingCount,

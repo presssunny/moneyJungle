@@ -1,10 +1,9 @@
 import { prisma } from "../../config/database";
 import { monthRange } from "../../utils/date.utils";
-import { decimalToNumber, round2 } from "../../utils/money.utils";
+import { decimalToNumber, formatILS, round2 } from "../../utils/money.utils";
 import { computeLoan } from "../loans/loanCalculator.service";
 import { loansRepository } from "../loans/loans.repository";
-import { dashboardRepository } from "./dashboard.repository";
-import { spentByCategory } from "./dashboard.service";
+import { monthTotals, spentByCategory } from "./dashboard.service";
 import { savingsService } from "../savings/savings.service";
 
 export interface Insight {
@@ -38,21 +37,7 @@ export interface InsightsResponse {
   insights: Insight[];
 }
 
-function formatILS(amount: number): string {
-  return `₪${amount.toLocaleString("he-IL", { maximumFractionDigits: 0 })}`;
-}
 
-async function totals(userId: number, year: number, month: number) {
-  const { start, end } = monthRange(year, month);
-  const [incomes, expenses, credit] = await Promise.all([
-    dashboardRepository.sumIncomes(userId, start, end),
-    dashboardRepository.sumExpenses(userId, start, end),
-    dashboardRepository.sumConfirmedCredit(userId, start, end),
-  ]);
-  const incomeTotal = round2(decimalToNumber(incomes._sum.amount));
-  const expenseTotal = round2(decimalToNumber(expenses._sum.amount) + decimalToNumber(credit._sum.amount));
-  return { incomeTotal, expenseTotal };
-}
 
 function scoreLabel(score: number): string {
   if (score >= 80) return "מצוין 🚀";
@@ -70,10 +55,10 @@ export async function buildInsights(userId: number, year: number, month: number)
 
   const prevDate = new Date(year, month - 2, 1);
   const [current, previous] = await Promise.all([
-    totals(userId, year, month),
-    totals(userId, prevDate.getFullYear(), prevDate.getMonth() + 1),
+    monthTotals(userId, year, month),
+    monthTotals(userId, prevDate.getFullYear(), prevDate.getMonth() + 1),
   ]);
-  const balance = round2(current.incomeTotal - current.expenseTotal);
+  const balance = current.balance;
 
   const insights: Insight[] = [];
 
