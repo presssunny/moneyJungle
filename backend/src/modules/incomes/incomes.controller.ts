@@ -2,12 +2,18 @@ import { Request, Response } from "express";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { IdParam, MonthQuery, resolveMonth, validatedBody, validatedParams } from "../../utils/validation.utils";
 import { incomesService } from "./incomes.service";
-import { CreateIncomeBody, UpdateIncomeBody } from "./incomes.validation";
+import { CreateIncomeBody, IncomeLedgerQuery, UpdateIncomeBody } from "./incomes.validation";
 
 export const incomesController = {
   list: asyncHandler(async (req: Request, res: Response) => {
     const { year, month } = resolveMonth((req.validated?.query ?? {}) as MonthQuery);
     res.json(await incomesService.list(req.userId!, year, month));
+  }),
+
+  ledger: asyncHandler(async (req: Request, res: Response) => {
+    const query = req.validated?.query as IncomeLedgerQuery;
+    const { year, month } = resolveMonth(query);
+    res.json(await incomesService.ledger(req.userId!, year, month, query));
   }),
 
   create: asyncHandler(async (req: Request, res: Response) => {

@@ -1,7 +1,7 @@
 import { TransactionFilters } from "../components/common/TransactionFilters";
-import { useTransactionFilters } from "../hooks/useTransactionFilters";
+import { useLedgerQuery } from "../hooks/useLedgerQuery";
 import { ExpenseEditor } from "../components/expenses/ExpenseEditor";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { AsyncSection } from "../components/common/AsyncSection";
 import { Button } from "../components/common/Button";
@@ -12,12 +12,13 @@ import { Modal } from "../components/common/Modal";
 import { PageShell } from "../components/common/PageShell";
 import { SkeletonRows } from "../components/common/Skeleton";
 import { Table, type Column } from "../components/common/Table";
+import { Pager } from "../components/common/Pager";
 import { useMonth } from "../context/MonthContext";
 import { useAsync } from "../hooks/useAsync";
 import { useLookups } from "../hooks/useLookups";
 import {
   deleteExpense,
-  listExpenses,
+  listExpenseLedger,
   type ExpenseInput,
 } from "../services/finance.service";
 import type { Expense } from "../types/models";
@@ -42,22 +43,16 @@ export default function ExpensesPage() {
   const { monthKey } = useMonth();
   const location = useLocation();
   const navigate = useNavigate();
-  const { params, clear: clearFilters } = useTransactionFilters();
+  const ledger = useLedgerQuery("expenses");
   const { expenseCategories } = useLookups();
-  const filterCategory = params.get("category") ? Number(params.get("category")) : undefined;
-  const search = params.get("q") ?? "";
-  const onlyUncategorized = params.get("uncat") === "1";
-  const onlyRecurring = params.get("recurring") === "1";
-  const from = params.get("from") ?? "";
-  const to = params.get("to") ?? "";
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Expense | null>(null);
   const [form, setForm] = useState<ExpenseInput>(emptyForm(monthKey));
   const [reloadKey, setReloadKey] = useState(0);
 
   const expensesRes = useAsync(
-    () => listExpenses(monthKey),
-    [monthKey, reloadKey],
+    () => listExpenseLedger(monthKey, ledger.filters, ledger.page),
+    [monthKey, reloadKey, ledger.filterKey, ledger.page],
     "לא הצלחנו לטעון את התנועות", ["expenses","imports","credit","bank","categories","payment-methods","settings","documents"]
   );
 
@@ -73,24 +68,7 @@ export default function ExpensesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const allRows = useMemo(() => expensesRes.data?.expenses ?? [], [expensesRes.data]);
-
-  const rows = useMemo(() => {
-    const needle = search.trim().toLowerCase();
-    return allRows.filter((row) => {
-      if (filterCategory !== undefined && row.categoryId !== filterCategory) return false;
-      if (from && row.expenseDate.slice(0,10) < from || to && row.expenseDate.slice(0,10) > to) return false;
-      if (onlyUncategorized && row.categoryId !== null) return false;
-      if (onlyRecurring && !row.isRecurring) return false;
-      if (needle) {
-        const haystack = `${row.businessName ?? ""} ${row.description ?? ""} ${row.category?.name ?? ""}`.toLowerCase();
-        if (!haystack.includes(needle)) return false;
-      }
-      return true;
-    });
-  }, [allRows, search, onlyUncategorized, onlyRecurring, filterCategory, from, to]);
-
-  const filtersActive = search.trim() !== "" || onlyUncategorized || onlyRecurring || filterCategory !== undefined || !!from || !!to;
+  const filtersActive = ledger.active;
 
   function openCreate() {
     setEditing(null);
@@ -212,23 +190,24 @@ export default function ExpensesPage() {
           skeleton={<SkeletonRows rows={6} />}
         >
           {data => (<>
-            <div className="ledger-summary"><div><span className="ledger-summary-label">הוצאות החודש</span><strong className="mono">{formatCurrency(data.total)}</strong></div><span className="text-muted">{allRows.length} תנועות רשומות</span></div>
+            <div className="ledger-summary"><div><span className="ledger-summary-label">הוצאות החודש</span><strong className="mono">{formatCurrency(data.monthTotal)}</strong></div><span className="text-muted">{data.monthCount} תנועות רשומות</span></div>
             <TransactionFilters kind="expenses" options={expenseCategories.map(c => ({ value: c.id, label: c.name }))}/>
-            <p className="ledger-count" role="status">{rows.length} תנועות בסינון{filtersActive && <> · <strong className="mono">{formatCurrency(rows.reduce((sum,row) => sum + Math.round(Number(row.amount)*100),0)/100)}</strong></>}</p>
+            <p className="ledger-count" role="status">{data.filteredCount} תנועות בסינון{filtersActive && <> · <strong className="mono">{formatCurrency(data.filteredTotal)}</strong></>}</p>
             <Table
               variant="ledger"
               columns={columns}
-              rows={rows}
+              rows={data.items}
+              pageSize={0}
               rowKey={(row) => `${row.source ?? "manual"}-${row.id}`}
               emptyState={
                 /* "אין נתונים" and "המסנן חתך הכול" need opposite actions, so they
                    must not share one message (§4.5). */
-                allRows.length > 0 || filtersActive ? (
+                data.monthCount > 0 || filtersActive ? (
                   <EmptyState
                     icon="🔍"
                     title="אין תוצאות למסננים הנוכחיים"
                     action={
-                      <Button size="sm" variant="outline" onClick={clearFilters}>
+                      <Button size="sm" variant="outline" onClick={ledger.clear}>
                         ניקוי מסננים
                       </Button>
                     }
@@ -247,6 +226,7 @@ export default function ExpensesPage() {
                 )
               }
             />
+            <Pager page={data.page} pageSize={data.pageSize} total={data.filteredCount} onChange={ledger.setPage} />
           </>)}
         </AsyncSection>
       </Card>

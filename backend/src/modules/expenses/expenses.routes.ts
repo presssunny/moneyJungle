@@ -7,13 +7,13 @@ import {
   createExpenseSchema,
   listExpensesQuerySchema,
   quickAddSchema,
-  updateExpenseSchema,
-} from "./expenses.validation";
+  updateExpenseSchema, expenseLedgerQuerySchema } from "./expenses.validation";
 
 export const expensesRoutes = Router();
 
 expensesRoutes.use(gateAuth);
 expensesRoutes.get("/", validate({ query: listExpensesQuerySchema }), expensesController.list);
+expensesRoutes.get("/ledger", validate({ query: expenseLedgerQuerySchema }), expensesController.ledger);
 expensesRoutes.post("/", validate({ body: createExpenseSchema }), expensesController.create);
 expensesRoutes.post("/quick-add", validate({ body: quickAddSchema }), expensesController.quickAdd);
 expensesRoutes.patch(

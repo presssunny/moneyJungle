@@ -649,3 +649,19 @@ export interface QuestionAnswer {
   limitations: string[];
   examples: string[];
 }
+
+/** One server page of a month's ledger. filtered* describe the filter; month* are the month's own figures. */
+export interface LedgerPage<T> {
+  items: T[];
+  page: number;
+  pageSize: number;
+  filteredCount: number;
+  filteredTotal: number;
+  monthTotal: number;
+  monthCount: number;
+}
+
+export interface IncomeLedgerPage extends LedgerPage<Income> {
+  byType: Array<{ type: string; label: string; amount: number }>;
+  recurringCount: number;
+}

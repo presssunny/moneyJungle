@@ -1,4 +1,5 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { Pager } from "./Pager";
 
 export interface Column<T> {
   key: string;
@@ -23,17 +24,11 @@ export function Table<T>({ columns, rows, rowKey, emptyState, pageSize = 15, var
   const totalPages = paginate ? Math.ceil(rows.length / pageSize) : 1;
   const [page, setPage] = useState(0);
 
-  // Keep the page in range when the row set changes (e.g. after filtering)
-  useEffect(() => {
-    if (page > totalPages - 1) setPage(Math.max(0, totalPages - 1));
-  }, [page, totalPages]);
-
   if (rows.length === 0 && emptyState) return <>{emptyState}</>;
 
+  // A shrunken row set (e.g. after filtering) clamps the page here, in render.
   const safePage = Math.min(page, totalPages - 1);
   const visibleRows = paginate ? rows.slice(safePage * pageSize, safePage * pageSize + pageSize) : rows;
-  const firstRow = safePage * pageSize + 1;
-  const lastRow = Math.min(rows.length, firstRow + pageSize - 1);
 
   return (
     <>
@@ -66,29 +61,7 @@ export function Table<T>({ columns, rows, rowKey, emptyState, pageSize = 15, var
         </table>
       </div>
 
-      {paginate && (
-        <div className="pagination">
-          <button
-            className="pagination-btn"
-            onClick={() => setPage((p) => Math.max(0, p - 1))}
-            disabled={safePage === 0}
-            aria-label="עמוד קודם"
-          >
-            › הקודם
-          </button>
-          <span className="pagination-info">
-            {firstRow}–{lastRow} מתוך {rows.length} · עמוד {safePage + 1} מתוך {totalPages}
-          </span>
-          <button
-            className="pagination-btn"
-            onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-            disabled={safePage >= totalPages - 1}
-            aria-label="עמוד הבא"
-          >
-            הבא ‹
-          </button>
-        </div>
-      )}
+      {paginate && <Pager page={safePage + 1} pageSize={pageSize} total={rows.length} onChange={(next) => setPage(next - 1)} />}
     </>
   );
 }

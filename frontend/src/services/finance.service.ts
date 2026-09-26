@@ -3,6 +3,8 @@ import { sharedGet } from "./queryCache";
 
 import type {
   BudgetsResponse,
+  IncomeLedgerPage,
+  LedgerPage,
   CreditImport,
   CreditImportDetail,
   Expense,
@@ -99,6 +101,14 @@ export interface IncomeInput {
   description?: string | null;
   incomeDate: string;
   isRecurring?: boolean;
+}
+
+export async function listExpenseLedger(monthKey: string, filters: Record<string, string>, page: number): Promise<LedgerPage<Expense>> {
+  return sharedGet("/expenses/ledger", { ...monthParams(monthKey), ...filters, page });
+}
+
+export async function listIncomeLedger(monthKey: string, filters: Record<string, string>, page: number): Promise<IncomeLedgerPage> {
+  return sharedGet("/incomes/ledger", { ...monthParams(monthKey), ...filters, page });
 }
 
 export async function listIncomes(monthKey: string): Promise<{ incomes: Income[]; total: number }> {

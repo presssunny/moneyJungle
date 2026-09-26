@@ -1,5 +1,5 @@
 import { TransactionFilters } from "../components/common/TransactionFilters";
-import { useTransactionFilters } from "../hooks/useTransactionFilters";
+import { useLedgerQuery } from "../hooks/useLedgerQuery";
 import { lazy, Suspense, useMemo, useState, type FormEvent } from "react";
 import { AsyncSection } from "../components/common/AsyncSection";
 import { Button } from "../components/common/Button";
@@ -13,12 +13,13 @@ import { PageShell } from "../components/common/PageShell";
 import { Select } from "../components/common/Select";
 import { SkeletonChart, SkeletonKpiRow, SkeletonRows } from "../components/common/Skeleton";
 import { Table, type Column } from "../components/common/Table";
+import { Pager } from "../components/common/Pager";
 const CategoryBarChart=lazy(()=>import("../components/dashboard/CategoryBarChart").then(module=>({default:module.CategoryBarChart})));
 import { SummaryCard } from "../components/dashboard/SummaryCard";
 import { useMonth } from "../context/MonthContext";
 import { useAsync } from "../hooks/useAsync";
 import { apiErrorMessage } from "../services/api";
-import { createIncome, deleteIncome, listIncomes, updateIncome, type IncomeInput } from "../services/finance.service";
+import { createIncome, deleteIncome, listIncomeLedger, updateIncome, type IncomeInput } from "../services/finance.service";
 import type { Income } from "../types/models";
 import { formatCurrency, formatDate } from "../utils/format";
 
@@ -53,46 +54,18 @@ export default function IncomesPage() {
   const [saving, setSaving] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
-  const incomesRes = useAsync(() => listIncomes(monthKey), [monthKey, reloadKey], "לא הצלחנו לטעון את ההכנסות", ["incomes","imports","bank","documents"]);
+  const ledger = useLedgerQuery("incomes");
+  const incomesRes = useAsync(() => listIncomeLedger(monthKey, ledger.filters, ledger.page), [monthKey, reloadKey, ledger.filterKey, ledger.page], "לא הצלחנו לטעון את ההכנסות", ["incomes","imports","bank","documents"]);
   const load = () => setReloadKey((k) => k + 1);
 
-  // Filters, matching the expenses screen. The two sides of the same month were
-  // asymmetric: expenses had search, filtering and a breakdown; incomes had a
-  // bare table (UX audit §4).
-  const {params,clear}=useTransactionFilters();
-  const search=params.get("q")??""; const filterType=params.get("type")??"";
-  const from=params.get("from")??""; const to=params.get("to")??"";
-
-  const allRows = useMemo(() => incomesRes.data?.incomes ?? [], [incomesRes.data]);
-  const rows = useMemo(() => {
-    const term = search.trim();
-    return allRows.filter((row) => {
-      if (from && row.incomeDate.slice(0,10) < from || to && row.incomeDate.slice(0,10) > to) return false;
-      if (filterType && row.type !== filterType) return false;
-      if (term && !(row.description ?? "").includes(term) && !typeLabel(row.type).includes(term)) return false;
-      return true;
-    });
-  }, [allRows, search, filterType, from, to]);
-
-  /**
-   * Income split by kind, for the visible rows. This groups rows the server
-   * already returned — the authoritative month total stays `data.total` from the
-   * API (CLAUDE.md §4), exactly as the expenses screen does it.
-   */
+  // Grouped on the server over the filtered rows; the month total stays monthTotals' figure (CLAUDE.md §4).
   const byType = useMemo(() => {
     const palette = ["#34d399", "#60a5fa", "#f472b6", "#fbbf24", "#a78bfa", "#22d3ee", "#fb7185", "#94a3b8"];
-    const sums = new Map<string, number>();
-    for (const row of rows) sums.set(row.type, (sums.get(row.type) ?? 0) + Number(row.amount));
-    return [...sums.entries()].map(([type, value], index) => ({
-      name: typeLabel(type),
-      color: palette[index % palette.length]!,
-      value,
-    }));
-  }, [rows]);
+    return (incomesRes.data?.byType ?? []).map((group, index) => ({ name: group.label, color: palette[index % palette.length]!, value: group.amount }));
+  }, [incomesRes.data]);
 
-  const filtered = !!search || !!filterType || !!from || !!to;
+  const filtered = ledger.active;
   const biggest = byType.length > 0 ? [...byType].sort((a, b) => b.value - a.value)[0] : null;
-  const recurringCount = allRows.filter((row) => row.isRecurring).length;
 
   function openCreate() {
     setEditing(null);
@@ -187,13 +160,14 @@ export default function IncomesPage() {
           skeleton={<SkeletonRows rows={5} />}
         >
           {data => (<>
-            <div className="ledger-summary"><div><span className="ledger-summary-label">הכנסות החודש</span><strong className="mono">{formatCurrency(data.total)}</strong></div><span className="text-muted">{allRows.length} תנועות רשומות</span></div>
+            <div className="ledger-summary"><div><span className="ledger-summary-label">הכנסות החודש</span><strong className="mono">{formatCurrency(data.monthTotal)}</strong></div><span className="text-muted">{data.monthCount} תנועות רשומות</span></div>
             <TransactionFilters kind="incomes" options={INCOME_TYPES}/>
-            <p className="ledger-count" role="status">{rows.length} תנועות בסינון{filtered && <> · <strong className="mono">{formatCurrency(rows.reduce((sum,row) => sum + Math.round(Number(row.amount)*100),0)/100)}</strong></>}</p>
+            <p className="ledger-count" role="status">{data.filteredCount} תנועות בסינון{filtered && <> · <strong className="mono">{formatCurrency(data.filteredTotal)}</strong></>}</p>
             <Table
               variant="ledger"
               columns={columns}
-              rows={rows}
+              rows={data.items}
+              pageSize={0}
               rowKey={(row) => row.id}
               emptyState={
                 filtered ? (
@@ -202,7 +176,7 @@ export default function IncomesPage() {
                     title="אין הכנסות שמתאימות לסינון"
                     hint="אפשר לנקות את הסינון ולראות את כל ההכנסות של החודש"
                     action={
-                      <Button size="sm" variant="outline" onClick={() => { clear();  }}>
+                      <Button size="sm" variant="outline" onClick={ledger.clear}>
                         ניקוי הסינון
                       </Button>
                     }
@@ -221,6 +195,7 @@ export default function IncomesPage() {
                 )
               }
             />
+            <Pager page={data.page} pageSize={data.pageSize} total={data.filteredCount} onChange={ledger.setPage} />
           </>)}
         </AsyncSection>
       </Card>
@@ -234,12 +209,12 @@ export default function IncomesPage() {
             <div className="kpi-row">
               <SummaryCard
                 label="סה״כ הכנסות"
-                value={formatCurrency(data.total)}
+                value={formatCurrency(data.monthTotal)}
                 icon="💰"
                 tone="success"
                 size="hero"
               />
-              <SummaryCard label="מספר הכנסות" value={String(data.incomes.length)} icon="🧾" />
+              <SummaryCard label="מספר הכנסות" value={String(data.monthCount)} icon="🧾" />
               <SummaryCard
                 label="המקור הגדול"
                 value={biggest ? biggest.name : "—"}
@@ -248,9 +223,9 @@ export default function IncomesPage() {
               />
               <SummaryCard
                 label="הכנסות קבועות"
-                value={String(recurringCount)}
+                value={String(data.recurringCount)}
                 icon="🔁"
-                sub={recurringCount > 0 ? "חוזרות כל חודש" : "אין הכנסה קבועה מוגדרת"}
+                sub={data.recurringCount > 0 ? "חוזרות כל חודש" : "אין הכנסה קבועה מוגדרת"}
               />
             </div>
           )}

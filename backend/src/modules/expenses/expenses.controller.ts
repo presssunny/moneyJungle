@@ -3,13 +3,19 @@ import { asyncHandler } from "../../utils/asyncHandler";
 import { IdParam, resolveMonth, validatedBody, validatedParams } from "../../utils/validation.utils";
 import { expensesService } from "./expenses.service";
 import { quickAddService } from "./quickAdd.service";
-import { CreateExpenseBody, ListExpensesQuery, QuickAddBody, UpdateExpenseBody } from "./expenses.validation";
+import { CreateExpenseBody, ExpenseLedgerQuery, ListExpensesQuery, QuickAddBody, UpdateExpenseBody } from "./expenses.validation";
 
 export const expensesController = {
   list: asyncHandler(async (req: Request, res: Response) => {
     const query = (req.validated?.query ?? {}) as ListExpensesQuery;
     const { year, month } = resolveMonth(query);
     res.json(await expensesService.list(req.userId!, year, month, query.categoryId));
+  }),
+
+  ledger: asyncHandler(async (req: Request, res: Response) => {
+    const query = req.validated?.query as ExpenseLedgerQuery;
+    const { year, month } = resolveMonth(query);
+    res.json(await expensesService.ledger(req.userId!, year, month, query));
   }),
 
   create: asyncHandler(async (req: Request, res: Response) => {

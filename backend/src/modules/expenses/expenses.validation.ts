@@ -26,3 +26,17 @@ export type CreateExpenseBody = z.infer<typeof createExpenseSchema>;
 export type UpdateExpenseBody = z.infer<typeof updateExpenseSchema>;
 export type ListExpensesQuery = z.infer<typeof listExpensesQuerySchema>;
 export type QuickAddBody = z.infer<typeof quickAddSchema>;
+
+export const expenseLedgerQuerySchema = z.object({
+  year: z.coerce.number().int().min(2000).max(2100).optional(),
+  month: z.coerce.number().int().min(1).max(12).optional(),
+  page: z.coerce.number().int().min(1).max(100000).default(1),
+  pageSize: z.coerce.number().int().min(10).max(100).default(50),
+  q: z.string().trim().max(100).optional(),
+  category: z.coerce.number().int().positive().optional(),
+  uncat: z.literal("1").optional(),
+  recurring: z.literal("1").optional(),
+  from: z.iso.date().optional(),
+  to: z.iso.date().optional(),
+}).strict();
+export type ExpenseLedgerQuery = z.infer<typeof expenseLedgerQuerySchema>;

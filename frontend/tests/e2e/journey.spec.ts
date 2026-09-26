@@ -22,6 +22,8 @@ async function mockApi(page:Page,{pending=false,coverageAcknowledged=true}={}){
   else if(path==='/api/expenses/7'&&method==='PATCH'){expense={...expense,...req.postDataJSON()};body=expense;}
   else if(path==='/api/expenses/7'&&method==='DELETE'){removed=true;body={ok:true};}
   else if(path==='/api/expenses')body={expenses:expense&&!removed?[expense]:[],total:expense&&!removed?expense.amount:0,progress:{spent:0,target:null}};
+  else if(path==='/api/expenses/ledger'){const items=expense&&!removed?[expense]:[];body={items,page:1,pageSize:50,filteredCount:items.length,filteredTotal:items.reduce((s:number,r:any)=>s+r.amount,0),monthTotal:items.reduce((s:number,r:any)=>s+r.amount,0),monthCount:items.length};}
+  else if(path==='/api/incomes/ledger')body={items:[],page:1,pageSize:50,filteredCount:0,filteredTotal:0,monthTotal:0,monthCount:0,byType:[],recurringCount:0};
   else if(path==='/api/incomes')body={incomes:[],total:0};
   else if(path==='/api/loans')body={loans:[],totals:{totalBalance:0}};
   else if(path==='/api/imports/sessions'&&method==='POST'){
@@ -108,12 +110,13 @@ test('Weekly check-in resumes its step and saves the suggested action',async({pa
 
 test('Transaction filters survive reload and back without fetching analysis',async({page})=>{
  await mockApi(page);let incomes=0;let expenses=0;
- await page.route('**/api/expenses?**',async route=>{expenses++;await route.fulfill({json:{expenses:[{id:1,amount:20,businessName:'קפה',expenseDate:'2026-09-16',categoryId:null,isRecurring:true,source:'manual'},{id:1,amount:-5,businessName:'זיכוי',expenseDate:'2026-09-17',categoryId:1,isRecurring:false,source:'credit'}],total:15,progress:{}}});});
- page.on('request',request=>{if(new URL(request.url()).pathname==='/api/incomes')incomes++;});
+ const rows=[{id:1,amount:20,businessName:'קפה',expenseDate:'2026-09-16',categoryId:null,isRecurring:true,source:'manual'},{id:1,amount:-5,businessName:'זיכוי',expenseDate:'2026-09-17',categoryId:1,isRecurring:false,source:'credit'}];const seen:string[]=[];
+ await page.route('**/api/expenses/ledger?**',async route=>{expenses++;const q=new URL(route.request().url()).searchParams;seen.push(q.toString());const items=q.get('q')?rows.slice(0,1):rows;await route.fulfill({json:{items,page:1,pageSize:50,filteredCount:items.length,filteredTotal:items.reduce((s,r)=>s+r.amount,0),monthTotal:15,monthCount:2}});});
+ page.on('request',request=>{if(new URL(request.url()).pathname.startsWith('/api/incomes'))incomes++;});
  await page.goto('/transactions?tab=expenses&month=2026-09&q=קפה&uncat=1&recurring=1&from=2026-09-01&to=2026-09-30');
  await expect(page.getByLabel('חיפוש חופשי')).toHaveValue('קפה');
  await expect(page.getByRole('status').filter({hasText:'תנועות בסינון'})).toContainText('1 תנועות');
- expect(incomes).toBe(0);expect(expenses).toBe(1);
+ expect(incomes).toBe(0);expect(expenses).toBe(1);expect(seen[0]).toMatch(/q=%D7%A7%D7%A4%D7%94/);for(const key of ['uncat=1','recurring=1','from=2026-09-01','to=2026-09-30','month=9'])expect(seen[0]).toContain(key);
  await page.reload();await expect(page.getByLabel('רק תשלומים קבועים')).toBeChecked();
  await page.getByRole('button',{name:'ניקוי מסננים ✕'}).click();await expect(page.getByRole('status').filter({hasText:'תנועות בסינון'})).toContainText('2 תנועות');
  await page.goBack();await expect(page.getByLabel('חיפוש חופשי')).toHaveValue('קפה');
@@ -331,4 +334,19 @@ test('Phones get sheets, a quick-add button and a way back; menus work from the 
  await menu.click();await page.getByRole('menuitem',{name:'עריכה'}).click();
  await expect(page.getByRole('dialog',{name:'עריכת יעד'})).toBeVisible();
  if(!mobile)await expect(page.locator('.modal-overlay')).toHaveCSS('align-items','center');
+});
+test('The expense table pages on the server and a new filter starts again at page 1',async({page})=>{
+ await mockApi(page);const pages:string[]=[];
+ await page.route('**/api/expenses/ledger?**',async route=>{const q=new URL(route.request().url()).searchParams;const p=Number(q.get('page'));pages.push(`${p}:${q.get('q')??''}`);
+  const items=Array.from({length:q.get('q')?3:50},(_,i)=>({id:(p-1)*50+i+1,amount:10,businessName:`שורה ${(p-1)*50+i+1}`,expenseDate:'2026-09-10',categoryId:null,isRecurring:false,source:'manual'}));
+  await route.fulfill({json:{items,page:p,pageSize:50,filteredCount:q.get('q')?3:120,filteredTotal:q.get('q')?30:1200,monthTotal:1200,monthCount:120}});});
+ await page.goto('/transactions?tab=expenses&month=2026-09');
+ await expect(page.getByText('1–50 מתוך 120 · עמוד 1 מתוך 3')).toBeVisible();
+ await page.getByRole('button',{name:'עמוד הבא'}).click();
+ await expect(page.getByText('51–100 מתוך 120 · עמוד 2 מתוך 3')).toBeVisible();
+ await expect(page.getByText('שורה 51',{exact:true}).first()).toBeVisible();
+ await page.getByLabel('חיפוש חופשי').fill('שורה');
+ await expect(page.getByRole('status').filter({hasText:'תנועות בסינון'})).toContainText('3 תנועות');
+ await expect(page.getByRole('button',{name:'עמוד הבא'})).toHaveCount(0);
+ expect(pages).toEqual(['1:','2:','1:שורה']);
 });

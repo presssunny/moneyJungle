@@ -3,17 +3,8 @@ import { monthRange, toMonthKey } from "../../utils/date.utils";
 import { decimalToNumber, round2 } from "../../utils/money.utils";
 import { dashboardRepository, spendingCreditInMonth } from "../dashboard/dashboard.repository";
 import { monthTotals, spentByCategory } from "../dashboard/dashboard.service";
+import { INCOME_TYPE_LABELS } from "../incomes/incomes.validation";
 
-const INCOME_TYPE_LABELS: Record<string, string> = {
-  salary: "משכורת",
-  extra: "תוספת",
-  business: "עסק",
-  allowance: "קצבה",
-  refund: "החזר",
-  gift: "מתנה",
-  one_time: "חד־פעמי",
-  recurring: "קבוע",
-};
 
 
 export const reportsService = {
