@@ -90,6 +90,7 @@ model User {
   commitmentDecisions CommitmentDecision[]
   checkIns           MoneyCheckIn[]
   duplicateReviews   DuplicateReview[]
+  activityEvents     ActivityEvent[]
   familyMembers      FamilyMember[]
   sessions           GateSession[]
   settings           Settings?
@@ -857,4 +858,21 @@ model DuplicateReview {
   @@index([userId, candidateId, undoneAt])
   @@index([userId, createdAt, id])
   @@map("duplicate_reviews")
+}
+
+/// What the signed-in account changed and when — written after a successful
+/// mutation, never read back into any financial figure.
+model ActivityEvent {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  domain    String   @db.VarChar(40)
+  action    String   @db.VarChar(40)
+  entityId  String?  @map("entity_id") @db.VarChar(64)
+  summary   String   @db.VarChar(300)
+  route     String   @db.VarChar(160)
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt, id])
+  @@map("activity_events")
 }

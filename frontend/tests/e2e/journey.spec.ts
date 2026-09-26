@@ -33,6 +33,7 @@ async function mockApi(page:Page,{pending=false,coverageAcknowledged=true}={}){
   else if(path.endsWith('/rows'))body={items:[{id:1,rowNumber:1,original:{name:'קפה',amount:18,date:null},normalized:editedRow??{name:'קפה',amount:18,date:session.answers.month?session.answers.month+'-01':null},resolution:'include',candidates:[],outputRef:null}],total:1,pageSize:50,pendingCount:0};
   else if(path.includes('/imports/sessions/'))body=session;
   else if(path==='/api/imports/sessions')body=session?[session]:[];
+  else if(path==='/api/activity')body=new URL(req.url()).searchParams.get('before')==='2'?{items:[{id:1,domain:'loans',action:'delete',entityId:'4',summary:'הלוואה — נמחק (#4)',createdAt:'2026-09-15T08:00:00Z'}],nextCursor:null}:{items:[{id:3,domain:'expenses',action:'create',entityId:'7',summary:'הוצאה — נוסף: קפה · ₪18',createdAt:'2026-09-17T08:00:00Z'},{id:2,domain:'imports',action:'commit',entityId:null,summary:'ייבוא — נקלט: report.xlsx',createdAt:'2026-09-16T08:00:00Z'}],nextCursor:2};
   else if(path==='/api/reminders'&&method==='POST'){const input=req.postDataJSON();reminders.push({id:reminders.length+1,isActive:true,icon:null,description:null,...input});body=reminders.at(-1);}
   else if(path==='/api/reminders')body=reminders;
   else if(path==='/api/recurring')body={items:[],monthlyTotal:0};
@@ -80,7 +81,7 @@ test('Onboarding directs users to coverage review before offering completion',as
 test('Legacy import and management links reach canonical destinations',async({page})=>{
  await mockApi(page);await page.goto('/transactions?tab=import');await expect(page).toHaveURL(/\/imports$/);
  await page.goto('/manage?tab=documents');await expect(page).toHaveURL(/\/data$/);
- await page.goto('/manage');await expect(page.getByRole('link',{name:'פתיחה ←'})).toHaveCount(5);
+ await page.goto('/manage');await expect(page.getByRole('link',{name:'פתיחה ←'})).toHaveCount(6);
  await expect(page.locator('a[href="/assistant"]')).toBeVisible();
 });
 
@@ -253,6 +254,14 @@ test('Onboarding keeps unknown answers distinct from zero and recovers from save
  await expect(page.getByRole('navigation',{name:'שלבי ההיכרות'}).locator('[aria-current=step]')).toContainText('רואים את התמונה');
  expect(payloads[1]).toEqual({bankAccounts:0,creditCards:0,loans:0,cashActivity:false});
  await expect(page.getByRole('button',{name:'סיום ההיכרות'})).toHaveCount(0);
+});
+test('The activity log lists recorded changes and pages back',async({page})=>{
+ await mockApi(page);
+ await page.goto('/manage');await page.getByRole('link',{name:'פתיחה ←'}).nth(4).click();await expect(page).toHaveURL(/\/activity$/);
+ await expect(page.getByRole('list',{name:'יומן פעילות'}).getByRole('listitem')).toHaveCount(2);
+ await page.getByRole('button',{name:'פעילות קודמת'}).click();
+ await expect(page.getByRole('list',{name:'יומן פעילות'}).getByRole('listitem')).toHaveCount(3);
+ await expect(page.getByRole('button',{name:'פעילות קודמת'})).toHaveCount(0);
 });
 test('A reminder can be created from the calendar and appears on its day',async({page})=>{
  const mocked=await mockApi(page);const now=new Date();const date=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-15`;

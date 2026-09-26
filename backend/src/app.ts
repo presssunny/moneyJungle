@@ -8,6 +8,8 @@ import { allowedOrigin, checkOrigin } from "./middlewares/origin.middleware";
 import { errorMiddleware, notFoundMiddleware } from "./middlewares/error.middleware";
 import { rateLimit } from "./middlewares/rateLimit.middleware";
 import { securityHeaders } from "./middlewares/securityHeaders.middleware";
+import { activityRecorder } from "./modules/activity/activity.middleware";
+import { activityRoutes } from "./modules/activity/activity.routes";
 import { alertsRoutes } from "./modules/alerts/alerts.routes";
 import { bankRoutes } from "./modules/bank/bank.routes";
 import { budgetsRoutes } from "./modules/budgets/budgets.routes";
@@ -50,7 +52,9 @@ app.get("/api/health", (_req, res) => {
 // Throttle gate login to slow brute-force against the shared password.
 app.use("/api/gate/login", rateLimit({ windowMs: 15 * 60 * 1000, max: 10 }));
 
+app.use("/api", activityRecorder);
 app.use("/api/gate", gateRoutes);
+app.use("/api/activity", activityRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/reminders", remindersRoutes);
 app.use("/api/alerts", alertsRoutes);

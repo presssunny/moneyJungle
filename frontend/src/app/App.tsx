@@ -13,6 +13,7 @@ import { RequireOnboarding } from "./RequireOnboarding";
 // visit instead of bundled into the initial load. LoginPage stays eager —
 // it's the one page every visitor loads before there is anything to split.
 const AccountsPage = lazy(() => import("../pages/AccountsPage"));
+const ActivityPage = lazy(() => import("../pages/ActivityPage"));
 const AlertsPage = lazy(() => import("../pages/AlertsPage"));
 const BudgetsPage = lazy(() => import("../pages/BudgetsPage"));
 const CrmCustomersPage = lazy(() => import("../crm/pages/CrmCustomersPage"));
@@ -106,6 +107,7 @@ export default function App() {
             <Route path="/data" element={<FinancialDataPage />} />
             <Route path="/review" element={<ReviewPage />} />
             <Route path="/assistant" element={<HouseholdAssistantPage />} />
+            <Route path="/activity" element={<ActivityPage />} />
             <Route path="/check-in" element={<CheckInPage />} />
             <Route path="/commitments" element={<CommitmentsPage />} />
             <Route path="/settings" element={<SettingsHubPage />} />

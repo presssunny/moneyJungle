@@ -595,3 +595,17 @@ export interface AssistantPlan {
   mode: "ai" | "rules" | "stale";
   actionIds: string[];
 }
+
+export interface ActivityEvent {
+  id: number;
+  domain: string;
+  action: string;
+  entityId: string | null;
+  summary: string;
+  createdAt: string;
+}
+
+export interface ActivityPage {
+  items: ActivityEvent[];
+  nextCursor: number | null;
+}
