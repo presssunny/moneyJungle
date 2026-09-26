@@ -34,7 +34,7 @@ export default function ActivityPage() {
   return (
     <PageShell>
       <Card title="מה השתנה ומתי">
-        <p className="text-muted">כל שינוי שנשמר בחשבון — הוספה, עריכה, מחיקה, קליטת קובץ או החלטה. היומן מתעד בלבד ואינו משפיע על אף סכום.</p>
+        <p className="text-muted">כל שינוי שנשמר בחשבון — הוספה, עריכה, מחיקה, העלאת דוח או החלטה. היומן מתעד בלבד ואינו משפיע על אף סכום.</p>
         <AsyncSection
           resource={first}
           errorTitle="לא הצלחנו לטעון את יומן הפעילות"

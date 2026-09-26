@@ -57,7 +57,7 @@ async function prepare(userId: number, buffer: Buffer, fileName: string, answers
     if (rows.some(r=>!r.chargeDate)) preview.warnings.push("חלק מהעסקאות עדיין בקליטה אצל חברת הכרטיס ואין להן מועד חיוב. הן ייספרו בחודש הקנייה, אבל עוד לא בחיוב הבא.");
     const previous = await prisma.creditImport.findFirst({where:{userId,fileHash:hashFile(buffer)}});
     if (previous) { preview.previousImportId=previous.id; preview.warnings.push("הפירוט הזה כבר הועלה. לא יתווספו עסקאות כפולות; נפתח את הפירוט הקיים לבדיקה."); }
-    preview.warnings.push("העסקאות בכרטיס ייכנסו להוצאות החודש רק אחרי שתאשרי את הפירוט. החיוב המרוכז בדף הבנק לא ייספר פעמיים.");
+    preview.warnings.push("העסקאות בכרטיס ייכנסו להוצאות החודש רק אחרי שתאשרי את הפירוט. מאותו רגע, החיוב המרוכז של הכרטיס בדף הבנק לא נספר שוב כהוצאה.");
   } else if (kind === "loan_schedule") {
     const parsed = parseLoanSchedule(buffer);
     preview.rows = parsed.rows.map(r=>({date:r.paymentDate,name:`תשלום ${r.paymentNumber}`,amount:r.total}));
@@ -193,7 +193,7 @@ export const importSessions = {
   async finish(userId:number,id:string) {
     return withFinancialTransaction(userId,async()=>{
       const session=await owned(userId,id);
-      if(!["completed","review"].includes(session.status)) throw ApiError.conflict("יש להוסיף ולבדוק את התנועות לפני הסיוםך");
+      if(!["completed","review"].includes(session.status)) throw ApiError.conflict("יש להוסיף ולבדוק את התנועות לפני הסיום");
       const result=session.result as {creditImportId?:number;statementImportId?:number;loanId?:number;documentId?:number};
       if(result.documentId&&!await prisma.document.findFirst({where:{id:result.documentId,userId,status:"imported"}})) throw ApiError.conflict("מסמך המקור בוטל או נמחק");
       if(result.statementImportId&&!await prisma.bankStatementImport.findFirst({where:{id:result.statementImportId,userId}})) throw ApiError.conflict("דוח הבנק בוטל או נמחק");

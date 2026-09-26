@@ -22,7 +22,7 @@ export async function householdSnapshot(userId: number): Promise<HouseholdSnapsh
     }));
     if (state.blockers.length && !actions.some(a => a.priority < 15)) actions.unshift({ id: "assistant:coverage", kind: "review", title: "השלמת תמונת הכסף", reason: "חסר מידע לפני שאפשר להעריך כמה כסף פנוי להמשך החודש.", to: "/data", priority: -1 });
     if (duplicates.followUpCount) actions.push({ id: "assistant:duplicate-followup", kind: "duplicate", title: "מעקב אחרי חיובים שסומנו לבירור", reason: "החיובים נשארו בסכומים עד לבירור מול המנפיק. אפשר לפתוח מחדש את ההחלטה לאחר הבירור.", to: "/assistant#duplicate-history", priority: 31 });
-    if (duplicates.candidateCount) actions.push({ id: "assistant:duplicates", kind: "duplicate", title: "בדיקת רישומים דומים", reason: "יש רשומות עם אותו שם, יום וסכום. ייתכן שאלו עסקאות שונות — נבדוק מול המקור.", to: "/assistant#duplicates", priority: 30 });
+    if (duplicates.candidateCount) actions.push({ id: "assistant:duplicates", kind: "duplicate", title: "בדיקת רישומים דומים", reason: "יש רישומים עם אותו שם, יום וסכום. ייתכן שאלו עסקאות שונות — נבדוק מול המקור.", to: "/assistant#duplicates", priority: 30 });
     const ordered = actions.sort((a, b) => a.priority - b.priority || a.id.localeCompare(b.id));
     const upcoming = upcomingCommitments(state).map(({ key, name, date, amount, to }) => ({ key, name, date, amount, to }));
     const snapshot = {

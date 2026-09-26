@@ -10,7 +10,7 @@ import { documentStorage } from "./documentStorage.service";
 const DOCUMENT_ROWS_PAGE_SIZE = 50;
 /** Hebrew label for what became of a recognized row, mirroring the in-session review screen. */
 const RESOLUTION_LABELS: Record<string, string> = {
-  include: "נקלט",
+  include: "נוסף",
   duplicate: "כפילות — דולגה, כבר קיימת",
   review: "ממתין לבדיקה",
 };
@@ -402,7 +402,7 @@ export const documentsService = {
     if (!existing) throw ApiError.notFound("המסמך לא נמצא");
     // Keep bytes referenced by durable sessions; metadata deletion must not break resume.
     const references=await prisma.importSession.count({where:{userId,fileHash:existing.fileHash}});
-    if(references) throw ApiError.conflict("מסמך זה משמש תהליך קליטה שמור. ניתן לבטל את הייבוא דרך פעולת הביטול");
+    if(references) throw ApiError.conflict("הדוח הזה עדיין בתהליך העלאה. אפשר לבטל את הייבוא במסך ההעלאה");
     await prisma.document.delete({ where: { id } });
     if(existing.storagePath) await afterFinancialCommit(()=>withFinancialTransaction(userId,async()=>{
       const [documents,sessions]=await Promise.all([prisma.document.count({where:{storagePath:existing.storagePath}}),prisma.importSession.count({where:{storagePath:existing.storagePath!}})]);

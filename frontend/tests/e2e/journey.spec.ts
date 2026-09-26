@@ -72,10 +72,10 @@ test('Upload questions survive reload, and completion follows review',async({pag
  await page.getByRole('navigation',{name:'שלבי ההיכרות'}).getByRole('link',{name:/מוסיפים ובודקים/}).click();
  await page.locator('input[type=file]').setInputFiles({name:'expenses.csv',mimeType:'text/csv',buffer:Buffer.from('שם,סכום\nקפה,18')});
  await expect(page).toHaveURL(/session=/);await page.reload();await expect(page.getByText('נדרש חודש',{exact:true})).toBeVisible();
- await page.getByLabel('חודש לשורות ללא תאריך').fill('2026-09');await page.getByRole('button',{name:'בדיקת הפרטים'}).click();
- await page.getByRole('checkbox',{name:/בדקתי את השורות/}).check();await page.getByRole('button',{name:'קליטת הנתונים',exact:true}).click();
- await page.getByRole('button',{name:'בדקתי — סיום הקליטה'}).click();await expect(page.getByText('הקליטה והבדיקה הושלמו')).toBeVisible();
- await page.getByRole('link',{name:'השלמת ההיכרות'}).click();await page.getByRole('checkbox',{name:/בדקתי את הנתונים/}).check();await page.getByRole('button',{name:'סיום ההיכרות'}).click();await expect(page).toHaveURL(/\/$/);
+ await page.getByLabel('לאיזה חודש לשייך שורות בלי תאריך?').fill('2026-09');await page.getByRole('button',{name:'המשך לבדיקת התנועות'}).click();
+ await page.getByRole('checkbox',{name:/בדקתי את התנועות/}).check();await page.getByRole('button',{name:'הוספת התנועות',exact:true}).click();
+ await page.getByRole('button',{name:'בדקתי — סיום'}).click();await expect(page.getByText('הייבוא הושלם.')).toBeVisible();
+ await page.getByRole('link',{name:'להמשך ההיכרות'}).click();await page.getByRole('checkbox',{name:/בדקתי את הנתונים/}).check();await page.getByRole('button',{name:'סיום ההיכרות'}).click();await expect(page).toHaveURL(/\/$/);
 });
 test('Onboarding directs users to coverage review before offering completion',async({page})=>{
  await mockApi(page,{pending:true,coverageAcknowledged:false});await page.goto('/onboarding');
@@ -92,10 +92,10 @@ test('Legacy import and management links reach canonical destinations',async({pa
 test('A staged row can be corrected before commit and survives reload',async({page})=>{
  await mockApi(page);await page.goto('/imports');
  await page.locator('input[type=file]').setInputFiles({name:'expenses.csv',mimeType:'text/csv',buffer:Buffer.from('שם,סכום\nקפה,18')});
- await page.getByLabel('חודש לשורות ללא תאריך').fill('2026-09');await page.getByRole('button',{name:'בדיקת הפרטים',exact:true}).click();
+ await page.getByLabel('לאיזה חודש לשייך שורות בלי תאריך?').fill('2026-09');await page.getByRole('button',{name:'המשך לבדיקת התנועות',exact:true}).click();
  await page.getByRole('button',{name:'בדיקת שורה 1'}).click();
  const dialog=page.getByRole('dialog');await dialog.getByLabel('תיאור',{exact:true}).fill('קפה מתוקן');await dialog.getByLabel('סכום (₪)',{exact:true}).fill('20');
- await dialog.getByRole('button',{name:'זו תנועה נפרדת — שמירת השורה לקליטה'}).click();
+ await dialog.getByRole('button',{name:'זו תנועה נפרדת — להוסיף אותה'}).click();
  await expect(page.getByRole('dialog')).toHaveCount(0);await page.reload();
  await expect(page.getByText('קפה מתוקן',{exact:true})).toBeVisible();
 });
@@ -132,7 +132,7 @@ test('Metric details load on demand and reject mixed-version pages',async({page}
   await route.fulfill({json:{name:'cash',value:100,asOf:'2026-09-17',period:{from:'2026-09-17',to:'2026-09-30'},formula:'עוגן ועוד תנועות',coverage:'לפי המקורות הרשומים',assumptions:[],missingData:[],components:[{key:'bank:1',label:'יתרת מקור',value:100,to:'/accounts?tab=bank'}],sources:[],total:51,page:1,pageSize:50,dataVersion:'a'.repeat(64)}});
  });
  await page.goto('/');await expect(page.getByText('התמונה עדיין חלקית')).toBeVisible();expect(reads).toBe(0);
- await page.getByText('מקורות יתרות הבנק',{exact:true}).click();await expect(page.getByRole('link',{name:'יתרת מקור'})).toBeVisible();expect(reads).toBe(1);
+ await page.getByText('מאיפה מגיעות יתרות הבנק',{exact:true}).click();await expect(page.getByRole('link',{name:'יתרת מקור'})).toBeVisible();expect(reads).toBe(1);
  await page.getByRole('button',{name:'הבא',exact:true}).click();await expect(page.getByRole('alert').filter({hasText:'המקורות השתנו'})).toBeVisible();
  await expect(page.getByRole('link',{name:'יתרת מקור'})).toHaveCount(0);
 });
@@ -381,4 +381,24 @@ test('With several accounts the household picks the spending account and confirm
  await expect(page.getByRole('status').filter({hasText:'נשמר'})).toBeVisible();
  expect(saved).toEqual({spendingAccountId:1,savedReserveLocation:'elsewhere',assignments:[{sourceKey:'credit:7',bankAccountId:2}]});
  await expect(page.getByText('הצעה: משני',{exact:false})).toHaveCount(0);
+});
+test('Login guides the way in: disabled until filled, busy while checking, a clear error after',async({page},info)=>{
+ await mockApi(page);
+ await page.route('**/api/gate/session',route=>route.fulfill({status:401,json:{error:{message:'נדרש חיבור'}}}));
+ let release:()=>void=()=>{};const held=new Promise<void>(r=>{release=r;});
+ await page.route('**/api/gate/login',async route=>{await held;await route.fulfill({status:401,json:{error:{message:'האימייל או הסיסמה שגויים'}}});});
+ await page.goto('/login');
+ await expect(page.getByRole('heading',{name:'כניסה לחשבון'})).toBeVisible();
+ const submit=page.getByRole('button',{name:'כניסה',exact:true});
+ await expect(submit).toBeDisabled();
+ await page.getByLabel('אימייל').fill('family@example.com');await page.getByLabel('סיסמה',{exact:true}).fill('wrong');
+ await page.getByRole('button',{name:'הצגת הסיסמה'}).click();await expect(page.getByLabel('סיסמה',{exact:true})).toHaveAttribute('type','text');
+ await submit.click();
+ await expect(page.getByRole('button',{name:'נכנסים…'})).toHaveAttribute('aria-busy','true');
+ release();
+ await expect(page.getByRole('alert')).toContainText('האימייל או הסיסמה שגויים');
+ await expect(page.getByLabel('אימייל')).toHaveAttribute('aria-invalid','true');
+ if(info.project.name==='mobile')await expect(page.locator('.gate-points')).toBeHidden();
+ else await expect(page.getByText('בלי חיבור לחשבון הבנק')).toBeVisible();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });

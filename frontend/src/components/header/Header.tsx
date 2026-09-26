@@ -34,7 +34,7 @@ export function Header() {
       </div>
       <div className="header-actions">
         <CommandPalette />
-        <NavLink to="/imports" className="btn btn-ghost btn-sm"><Icon name="upload"/>העלאת מידע</NavLink>
+        <NavLink to="/imports" className="btn btn-ghost btn-sm"><Icon name="upload"/>העלאת דוחות</NavLink>
         <NavLink to={MANAGE_NAV.path} className="header-icon-btn" title={MANAGE_NAV.label} aria-label={MANAGE_NAV.label}>
           <Icon name="settings"/>
         </NavLink>

@@ -44,7 +44,7 @@ export default function HouseholdAssistantPage() {
               <div><dt>פנוי להמשך החודש · לפי המידע הקיים</dt><dd>{data.allowance.amount === null ? "עדיין לא ידוע" : <bdi>{formatCurrency(data.allowance.amount)}</bdi>}</dd></div>
             </dl>
             {data.blockers.length > 0 && <p className="text-muted">התמונה חלקית. הסכומים הרשומים אינם מאשרים שכל הפעילות נכללה.</p>}
-            <details><summary>מה נכלל בבדיקה?</summary><p>ההוצאות כוללות פירוט אשראי מאושר לפי חודש השיוך שלו. חיובים קרובים מוצגים בנפרד; אין לחבר אותם שוב לסכום ההוצאות.</p>{data.blockers.length > 0 && <><h3>מידע להשלמה</h3><ul>{data.blockers.map((b, i) => <li key={i}>{b}</li>)}</ul></>}<Link to="/data">בדיקת המקורות והעדכניות</Link></details>
+            <details><summary>מה נכלל בבדיקה?</summary><p>ההוצאות כוללות עסקאות בכרטיסי אשראי מפירוטים שאושרו, לפי חודש הקנייה. חיובים קרובים מוצגים בנפרד; אין לחבר אותם שוב לסכום ההוצאות.</p>{data.blockers.length > 0 && <><h3>מידע להשלמה</h3><ul>{data.blockers.map((b, i) => <li key={i}>{b}</li>)}</ul></>}<Link to="/data">בדיקה שהמידע עדכני</Link></details>
           </Card>
           <Card title="הצעדים הבאים">
             {actions.length ? <ol className="household-actions">{actions.map((action, index) => <li key={action.id}><div><h3>{action.title}</h3><p className="text-muted">{action.reason}</p></div><Link className={`btn ${index === 0 ? "btn-primary" : "btn-outline"}`} to={action.to}>לבדיקה</Link></li>)}</ol> : <p>לא נמצאה פעולה דחופה במידע הרשום. אפשר לעבור על המטרות והתקציב בבדיקה השבועית.</p>}

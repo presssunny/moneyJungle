@@ -35,10 +35,10 @@ export function errorMiddleware(
 
   if (err instanceof Prisma.PrismaClientKnownRequestError) {
     if (err.code === "P2002") {
-      return res.status(409).json({ error: { message: "רשומה כזו כבר קיימת" } });
+      return res.status(409).json({ error: { message: "פריט כזה כבר קיים" } });
     }
     if (err.code === "P2025") {
-      return res.status(404).json({ error: { message: "הרשומה לא נמצאה" } });
+      return res.status(404).json({ error: { message: "הפריט לא נמצא" } });
     }
   }
 

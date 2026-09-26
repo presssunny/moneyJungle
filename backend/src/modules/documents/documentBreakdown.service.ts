@@ -49,12 +49,12 @@ export async function documentBreakdown(userId: number, id: number): Promise<Doc
   const unavailable = (note: string): DocumentBreakdown => ({ ...base, available: false, lines: [], interest: null, note });
 
   if (doc.kind === "bank_statement") {
-    if (!doc.linkedStatementImportId) return unavailable("הדף הזה לא מקושר לתנועות שנקלטו ממנו");
+    if (!doc.linkedStatementImportId) return unavailable("הדף הזה לא מקושר לתנועות שנוספו ממנו");
     const groups = await prisma.bankTransaction.groupBy({
       by: ["resolution"], where: { userId, statementImportId: doc.linkedStatementImportId },
       _sum: { amount: true }, _count: { _all: true },
     });
-    if (!groups.length) return unavailable("התנועות שנקלטו מהדף הזה כבר אינן קיימות");
+    if (!groups.length) return unavailable("התנועות שנוספו מהדף הזה כבר לא קיימות");
     // Bank amounts are stored unsigned; the resolution carries the direction.
     const totalOf = (resolution: BankResolution) => decimalToNumber(groups.find((g) => g.resolution === resolution)?._sum.amount);
     const hasInterest = groups.some((g) => g.resolution === "financing_charge" || g.resolution === "financing_credit");
@@ -71,9 +71,9 @@ export async function documentBreakdown(userId: number, id: number): Promise<Doc
   }
 
   if (doc.kind === "credit_report") {
-    if (!doc.linkedCreditImportId) return unavailable("הדוח הזה לא מקושר לעסקאות שנקלטו ממנו");
+    if (!doc.linkedCreditImportId) return unavailable("הפירוט הזה לא מקושר לעסקאות שנוספו ממנו");
     const batch = await prisma.creditImport.findFirst({ where: { id: doc.linkedCreditImportId, userId }, select: { status: true } });
-    if (!batch) return unavailable("העסקאות שנקלטו מהדוח הזה כבר אינן קיימות");
+    if (!batch) return unavailable("העסקאות שנוספו מהפירוט הזה כבר לא קיימות");
     const groups = await prisma.creditTransaction.groupBy({
       by: ["transactionType"], where: { userId, creditImportId: doc.linkedCreditImportId },
       _sum: { amount: true }, _count: { _all: true },

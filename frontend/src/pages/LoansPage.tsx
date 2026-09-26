@@ -32,15 +32,8 @@ import {
 import type { StatementLoanGroup } from "../services/planning.service";
 import type { Loan, LoanEvent } from "../types/models";
 import { formatCurrency } from "../utils/format";
+import { LOAN_TYPE_OPTIONS } from "../app/loanTypes";
 
-const LOAN_TYPES = [
-  { value: "bank", label: "בנק" },
-  { value: "credit", label: "אשראי" },
-  { value: "car", label: "רכב" },
-  { value: "mortgage", label: "משכנתא" },
-  { value: "private", label: "פרטית" },
-  { value: "other", label: "אחר" },
-];
 
 const STATUS_LABELS: Record<string, string> = {
   active: "פעילה",
@@ -455,7 +448,7 @@ export default function LoansPage() {
             />
             <Select
               label="סוג"
-              options={LOAN_TYPES}
+              options={LOAN_TYPE_OPTIONS}
               value={form.loanType}
               onChange={(e) => setForm({ ...form, loanType: e.target.value })}
             />

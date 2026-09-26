@@ -46,19 +46,19 @@ for (const mode of ['upload','manual','inactive-card'] as const) {
     XLSX.utils.book_append_sheet(workbook,XLSX.utils.aoa_to_sheet([['שם','סכום'],['קפה',18]]),'Data');
     await page.locator('input[type=file]').setInputFiles({name:'onboarding-demo.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:XLSX.write(workbook,{type:'buffer',bookType:'xlsx'})});
     await expect(page).toHaveURL(/session=/);await page.reload();
-    await page.getByRole('combobox',{name:'סוג המידע'}).selectOption('expense_sheet');
-    await page.getByLabel('חודש לשורות ללא תאריך').fill('2026-09');
-    await page.getByRole('button',{name:'בדיקת הפרטים',exact:true}).click();
-    await page.getByRole('checkbox',{name:/בדקתי את השורות/}).check();
-    await page.getByRole('button',{name:'קליטת הנתונים',exact:true}).click();
-    await expect(page.getByRole('button',{name:'בדקתי — סיום הקליטה'})).toBeVisible();
+    await page.getByRole('combobox',{name:'סוג הדוח'}).selectOption('expense_sheet');
+    await page.getByLabel('לאיזה חודש לשייך שורות בלי תאריך?').fill('2026-09');
+    await page.getByRole('button',{name:'המשך לבדיקת התנועות',exact:true}).click();
+    await page.getByRole('checkbox',{name:/בדקתי את התנועות/}).check();
+    await page.getByRole('button',{name:'הוספת התנועות',exact:true}).click();
+    await expect(page.getByRole('button',{name:'בדקתי — סיום'})).toBeVisible();
     const importUrl=page.url();
     await page.goto('/onboarding');await expect(nav.locator('[aria-current=step]')).toContainText('מוסיפים ובודקים');
     await page.screenshot({path:testInfo.outputPath('real-review.png'),fullPage:true});
     await page.getByRole('link',{name:'להמשך הדוח'}).click();
     await expect(page).toHaveURL(new RegExp(new URL(importUrl).searchParams.get('session')!));
-    await page.getByRole('button',{name:'בדקתי — סיום הקליטה'}).click();
-    await page.getByRole('link',{name:'השלמת ההיכרות'}).click();
+    await page.getByRole('button',{name:'בדקתי — סיום'}).click();
+    await page.getByRole('link',{name:'להמשך ההיכרות'}).click();
     await expect(nav.locator('[aria-current=step]')).toContainText('רואים את התמונה');
     await page.getByRole('link',{name:'לבדיקת המידע שלי',exact:true}).click();
    } else {

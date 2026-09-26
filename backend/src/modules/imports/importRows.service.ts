@@ -49,14 +49,14 @@ export const importRows = {
     return fingerprint(candidates);
   },
   async list(userId:number,sessionId:string,page=1) {
-    if(!await prisma.importSession.findFirst({where:{id:sessionId,userId}})) throw ApiError.notFound("הקליטה לא נמצאה");
+    if(!await prisma.importSession.findFirst({where:{id:sessionId,userId}})) throw ApiError.notFound("הייבוא לא נמצא");
     const [items,total]=await Promise.all([prisma.importRow.findMany({where:{sessionId},orderBy:{rowNumber:"asc"},skip:(page-1)*50,take:50}),prisma.importRow.count({where:{sessionId}})]);
     return {items,total,page,pageSize:50,pendingCount:await prisma.importRow.count({where:{sessionId,resolution:"review"}})};
   },
   async edit(userId:number,sessionId:string,rowNumber:number,input:unknown) {
     const body=rowEditSchema.parse(input);
     const session=await prisma.importSession.findFirst({where:{id:sessionId,userId}});
-    if(!session||session.version!==body.version||!["ready_for_review","needs_input"].includes(session.status)) throw ApiError.conflict("הקליטה השתנתה או כבר הוחלה. יש לרענן");
+    if(!session||session.version!==body.version||!["ready_for_review","needs_input"].includes(session.status)) throw ApiError.conflict("הייבוא השתנה או כבר הוסיף תנועות — יש לרענן");
     const row=await prisma.importRow.findUnique({where:{sessionId_rowNumber:{sessionId,rowNumber}}});
     if(!row) throw ApiError.notFound("השורה לא נמצאה");
     const current=row.normalized as unknown as PreviewRow;
@@ -79,7 +79,7 @@ export const importRows = {
   },
   async validate(userId:number,sessionId:string,kind:string,answers:{accountId?:number;cardId?:number}) {
     const rows=await prisma.importRow.findMany({where:{sessionId},orderBy:{rowNumber:"asc"}});
-    if(rows.some(r=>r.resolution==="review")) throw ApiError.conflict("יש לבדוק את הכפילויות החשודות לפני קליטה");
+    if(rows.some(r=>r.resolution==="review")) throw ApiError.conflict("יש להחליט על התנועות שנראות כפולות לפני ההוספה");
     const candidates=await candidatesFor(userId,kind,answers);
     const session=await prisma.importSession.findUniqueOrThrow({where:{id:sessionId}});
     if((session.preview as {sourceVersion?:string}|null)?.sourceVersion!==fingerprint(candidates)) throw ApiError.conflict("התנועות הקיימות השתנו מאז התצוגה המקדימה. יש להפעיל בדיקת פרטים מחדש");

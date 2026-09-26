@@ -59,7 +59,7 @@ export function CommandPalette() {
     const timer = setTimeout(() => {
       setStatus("מחפש…");
       searchRecords(q, controller.signal)
-        .then((found) => { setGroups(found); setStatus(found.length ? "" : "לא נמצאו רשומות בשם הזה"); })
+        .then((found) => { setGroups(found); setStatus(found.length ? "" : "לא נמצאו תנועות, מסמכים או הלוואות בשם הזה"); })
         .catch((e: unknown) => { if (!controller.signal.aborted) setStatus(apiErrorMessage(e)); });
     }, 250);
     return () => { clearTimeout(timer); controller.abort(); };

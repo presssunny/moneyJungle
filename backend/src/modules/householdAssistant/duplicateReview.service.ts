@@ -62,7 +62,7 @@ export async function scanDuplicates(userId: number, today = businessDate()) {
 export async function duplicateDetail(userId: number, candidateId: string) {
   return withFinancialTransaction(userId, async () => {
     const candidate = (await scanDuplicateEvidence(userId)).candidates.find(c => c.id === candidateId);
-    if (!candidate) throw ApiError.conflict("הרשומות השתנו או שהבדיקה כבר אינה זמינה. יש לרענן את הרשימה.");
+    if (!candidate) throw ApiError.conflict("הרישומים השתנו או שהבדיקה כבר לא זמינה. יש לרענן את הרשימה.");
     return candidate;
   });
 }
@@ -77,18 +77,18 @@ const incomeArchive = z.object({ ...snapshotFields, incomeDate: z.string(), type
 async function restoreBlocker(userId: number, review: DuplicateReview, current: CurrentEvidence): Promise<string | null> {
   if (review.decision !== "remove_manual") return null;
   const records = evidenceSchema.parse(review.evidence).records;
-  if (!review.removedKey || current.has(review.removedKey)) return "הרשומה שהוסרה כבר קיימת. לא ניתן להוסיף אותה שוב.";
-  if (records.some(r => r.key !== review.removedKey && current.get(r.key)?.version !== r.version)) return "רשומות המקור השתנו מאז התיקון. יש לבדוק אותן לפני שחזור.";
+  if (!review.removedKey || current.has(review.removedKey)) return "הרישום שהוסר כבר קיים. אי אפשר להוסיף אותו שוב.";
+  if (records.some(r => r.key !== review.removedKey && current.get(r.key)?.version !== r.version)) return "הרישומים השתנו מאז התיקון. יש לבדוק אותם לפני שחזור.";
   const parsed = review.removedKey.startsWith("expense:") ? expenseArchive.safeParse(review.removedRecord) : incomeArchive.safeParse(review.removedRecord);
   if (!parsed.success || parsed.data.userId !== userId || review.removedKey !== `${review.removedKey.split(":")[0]}:${parsed.data.id}`) return "נתוני השחזור אינם זמינים.";
   const occupied = review.removedKey.startsWith("expense:")
     ? await prisma.expense.findUnique({ where: { id: parsed.data.id }, select: { id: true } })
     : await prisma.income.findUnique({ where: { id: parsed.data.id }, select: { id: true } });
-  if (occupied) return "מזהה הרשומה אינו פנוי לשחזור. לא בוצע שינוי.";
+  if (occupied) return "אי אפשר לשחזר את הרישום במקומו המקורי. לא בוצע שינוי.";
   if ("categoryId" in parsed.data) {
     const { categoryId, paymentMethodId } = parsed.data;
-    if (categoryId && !await prisma.category.findFirst({ where: { id: categoryId, OR: [{ userId }, { userId: null }] } })) return "הקטגוריה המקורית הוסרה. לא ניתן לשחזר את הרשומה בשלמותה.";
-    if (paymentMethodId && !await prisma.paymentMethod.findFirst({ where: { id: paymentMethodId, OR: [{ userId }, { userId: null }] } })) return "אמצעי התשלום המקורי הוסר. לא ניתן לשחזר את הרשומה בשלמותה.";
+    if (categoryId && !await prisma.category.findFirst({ where: { id: categoryId, OR: [{ userId }, { userId: null }] } })) return "הקטגוריה המקורית נמחקה, ולכן אי אפשר לשחזר את הרישום כפי שהיה.";
+    if (paymentMethodId && !await prisma.paymentMethod.findFirst({ where: { id: paymentMethodId, OR: [{ userId }, { userId: null }] } })) return "אמצעי התשלום המקורי נמחק, ולכן אי אפשר לשחזר את הרישום כפי שהיה.";
   }
   return null;
 }
@@ -120,7 +120,7 @@ async function changedMoney(userId: number) {
 // was lost, so an unlinked bank income at the same amount and date still blocks removal.
 async function requireUnbankedIncome(userId: number, income: unknown) {
   const row = z.object({ amount: z.unknown(), incomeDate: z.date(), source: z.string() }).parse(income);
-  if (row.source === "bank_import") throw ApiError.conflict("ההכנסה הזאת נקלטה מדף הבנק ואינה רישום כפול. תיקון נעשה במסך הבנק.");
+  if (row.source === "bank_import") throw ApiError.conflict("ההכנסה הזאת הגיעה מדף הבנק ואינה רישום כפול. אפשר לתקן אותה במסך הבנק.");
   const orphan = await prisma.bankTransaction.findFirst({
     where: { userId, resolution: "income", linkedIncomeId: null, amount: row.amount as never, transactionDate: row.incomeDate },
     select: { id: true },
@@ -138,10 +138,10 @@ export async function decideDuplicate(userId: number, input: DuplicateReviewInpu
       return { review: await reviewView(userId, previous, current), financialDomain: previous.removedKey?.startsWith("expense:") ? "expenses" : previous.removedKey ? "incomes" : null };
     }
     const candidate = (await scanDuplicateEvidence(userId)).candidates.find(c => c.id === input.candidateId);
-    if (!candidate || candidate.version !== input.version) throw ApiError.conflict("הרשומות השתנו. יש לרענן ולבדוק אותן מחדש לפני אישור.");
-    if (await prisma.duplicateReview.findFirst({ where: { userId, candidateId: candidate.id, evidenceVersion: candidate.version, undoneAt: null } })) throw ApiError.conflict("כבר נשמרה החלטה לרשומות האלה. אפשר לבטל אותה בהיסטוריה.");
-    if (input.decision !== "remove_manual" && (input.removedKey || input.keptKey)) throw ApiError.badRequest("בחירת רשומה להסרה מותרת רק בתיקון רישום ידני.");
-    if (input.decision === "source_charge" && candidate.records.some(r => r.kind !== "credit")) throw ApiError.badRequest("בירור חיוב במקור זמין לרשומות מדוח האשראי.");
+    if (!candidate || candidate.version !== input.version) throw ApiError.conflict("הרישומים השתנו. יש לרענן ולבדוק אותם שוב לפני אישור.");
+    if (await prisma.duplicateReview.findFirst({ where: { userId, candidateId: candidate.id, evidenceVersion: candidate.version, undoneAt: null } })) throw ApiError.conflict("כבר נשמרה החלטה לרישומים האלה. אפשר לבטל אותה בהיסטוריה.");
+    if (input.decision !== "remove_manual" && (input.removedKey || input.keptKey)) throw ApiError.badRequest("אפשר להסיר רק רישום שהוזן ידנית.");
+    if (input.decision === "source_charge" && candidate.records.some(r => r.kind !== "credit")) throw ApiError.badRequest("בירור מול חברת הכרטיס זמין רק לעסקאות מפירוט כרטיס האשראי.");
     const current = await currentEvidence(userId, candidate.records.map(r => r.key));
     if (candidate.records.some(r => current.get(r.key)?.version !== r.version)) throw ApiError.conflict("המקורות השתנו. יש לרענן את הבדיקה.");
     let removedRecord: unknown;

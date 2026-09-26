@@ -112,7 +112,7 @@ export async function financialStatus(userId: number) {
   if (!accounts.length) blockers.push("אין יתרת בנק מאומתת לתכנון מזומן");
   const multiAccount = accounts.length > 1;
   if (!multiAccount && balances.some(b => b.anchor?.coverageTo !== today)) blockers.push("נדרשת יתרה מאומתת להיום בכל חשבון בנק");
-  if (issues.some(i => i.blocking)) blockers.push("נותרו קליטות או תנועות המחייבות בדיקה");
+  if (issues.some(i => i.blocking)) blockers.push("נשארו דוחות או תנועות שצריך לבדוק");
   if (pendingDates) blockers.push("יש עסקאות אשראי ללא מועד חיוב או כרטיס — לא ניתן לקבוע התחייבות מלאה");
   if (financing) blockers.push("יש עסקאות מימון שטרם הותאמו להתחייבות ההחזר — לא ניתן לקבוע את סכום התשלום המלא");
   if (events.some(e => !e.decision || (e.amount === null && e.decision === "unpaid"))) blockers.push("יש להשלים סכומים ולבדוק אילו התחייבויות כבר שולמו או חופפות");

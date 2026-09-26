@@ -26,7 +26,7 @@ import { toast } from "../services/toast";
 import { formatDate } from "../utils/format";
 
 const STATUS: Record<DocumentRecord["status"], { icon: string; label: string; tone: string }> = {
-  imported: { icon: "✅", label: "נקלט", tone: "success" },
+  imported: { icon: "✅", label: "נוסף", tone: "success" },
   superseded: { icon: "⏭️", label: "כבר היה קיים", tone: "muted" },
   rejected: { icon: "↩️", label: "הופנה למקום אחר", tone: "warning" },
   rolled_back: { icon: "🚫", label: "הייבוא בוטל", tone: "muted" },
@@ -257,7 +257,7 @@ export default function DocumentsPage() {
             </Button>
           )}
           {row.linkedCreditImportId && (
-            <Button size="sm" variant="ghost" onClick={() => navigate("/accounts?tab=credit")} title="לאשראי">
+            <Button size="sm" variant="ghost" onClick={() => navigate("/accounts?tab=credit")} title="לכרטיסי האשראי">
               💳
             </Button>
           )}
@@ -303,7 +303,7 @@ export default function DocumentsPage() {
             <div className="kpi-row">
               <SummaryCard label="מסמכים שהועלו" value={String(summary.total)} icon="📁" />
               <SummaryCard
-                label="שורות שנקלטו"
+                label="תנועות שנוספו"
                 value={String(summary.rowsImported)}
                 icon="📥"
                 tone="success"
@@ -390,7 +390,7 @@ export default function DocumentsPage() {
             <EmptyState
               icon="📁"
               title="עוד לא הועלו מסמכים"
-              hint="כל קובץ שתעלי כאן יירשם — כך תמיד אפשר לדעת מה כבר נקלט ומאיזו תקופה"
+              hint="כל קובץ שתעלי כאן יירשם — כך תמיד אפשר לדעת מה כבר הועלה ולאיזו תקופה"
             />
           }
         >

@@ -5,15 +5,8 @@ import { LoanProgressBar } from "./LoanProgressBar";
 import { LoanStatusBadge } from "./LoanStatusBadge";
 import type { Loan } from "../../types/models";
 import { formatCurrency } from "../../utils/format";
+import { loanTypeLabel } from "../../app/loanTypes";
 
-const LOAN_TYPE_LABELS: Record<string, string> = {
-  bank: "בנק",
-  credit: "אשראי",
-  car: "רכב",
-  mortgage: "משכנתא",
-  private: "פרטית",
-  other: "אחר",
-};
 
 export interface LoanActions {
   onSchedule: (loan: Loan) => void;
@@ -120,7 +113,7 @@ export function LoanCard({ loan, actions }: { loan: Loan; actions: LoanActions }
           <p className="loan-card-meta">
             {loan.loanNumber && <span>הלוואה {loan.loanNumber}</span>}
             {loan.trackNumber && <span>מסלול {loan.trackNumber}</span>}
-            <span>{LOAN_TYPE_LABELS[loan.loanType] ?? loan.loanType}</span>
+            <span>{loanTypeLabel(loan.loanType)}</span>
             {loan.lenderName && <span>{loan.lenderName}</span>}
             {loan.scheduleSource === "bank_file" && (
               <span className="loan-card-source" title="הנתונים נקראו מלוח הסילוקין של הבנק">

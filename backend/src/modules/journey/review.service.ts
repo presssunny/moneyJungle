@@ -11,7 +11,7 @@ export async function review(userId: number): Promise<ReviewItem[]> {
     prisma.expense.count({ where: { userId, categoryId: null } }),
   ]);
   const items: Omit<ReviewItem,"fingerprint">[] = [
-    ...sessions.map(s => ({ key: `session:${s.id}`, topic: (s.result as {creditImportId?:number}|null)?.creditImportId ? `credit:${(s.result as {creditImportId:number}).creditImportId}` : `session:${s.id}`, title: `${s.fileName} — ${s.status === "recovery" ? "הקליטה נעצרה ויש לבדוק את תוצאותיה" : "המשך קליטה ובדיקה"}`, to: `/imports?session=${s.id}`, blocking: true })),
+    ...sessions.map(s => ({ key: `session:${s.id}`, topic: (s.result as {creditImportId?:number}|null)?.creditImportId ? `credit:${(s.result as {creditImportId:number}).creditImportId}` : `session:${s.id}`, title: `${s.fileName} — ${s.status === "recovery" ? "הייבוא נעצר — כדאי לבדוק מה נוסף" : "המשך העלאה ובדיקה"}`, to: `/imports?session=${s.id}`, blocking: true })),
     ...credit.map(c => ({ key: `credit:${c.id}`, title: `${c.totalTransactions} עסקאות בדוח ${c.fileName} ממתינות לאישור`, to: `/accounts?tab=credit&importId=${c.id}`, blocking: true })),
     ...bank.needsReview.map(r => ({ key: `bank:${r.id}`, title: `${r.description || "תנועת בנק"} — ${r.resolutionLabel ?? "ללא סיווג"}`, to: `/accounts?tab=reconcile&row=${r.id}`, blocking: r.resolution === null })),
   ];

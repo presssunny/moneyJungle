@@ -45,7 +45,7 @@ export async function financialMetric(userId: number, name: MetricName, month: s
     const totals = await monthTotals(userId,year,monthNumber);
     metric.value = name === "income" ? totals.incomeTotal : name === "expense" ? totals.expenseTotal : totals.balance;
     metric.state = "recorded";
-    metric.formula = name === "surplus" ? "הכנסות רשומות פחות הוצאות רשומות" : name === "expense" ? "הוצאות רשומות ועוד אשראי מאושר ללא עסקאות מימון; זיכויים מקטינים את הסכום" : "סכום ההכנסות לפי תאריך ההכנסה";
+    metric.formula = name === "surplus" ? "הכנסות רשומות פחות הוצאות רשומות" : name === "expense" ? "הוצאות שנרשמו ועסקאות בכרטיסי אשראי מפירוטים שאושרו, בלי אשראי מתגלגל; זיכויים מקטינים את הסכום" : "סכום ההכנסות לפי תאריך ההכנסה";
     metric.assumptions = ["אשראי משויך לפי חודש העסקה בדוח, לא לפי מועד הירידה בבנק", "העברות, קרן הלוואה וחיובי כרטיס שכבר פורטו אינם הוצאה נוספת", "עודף חודשי אינו יתרת בנק ואינו כסף פנוי"];
     // Concatenate source streams in stable source/id order. Only the requested
     // 50 records are fetched, without loading the full monthly ledger.

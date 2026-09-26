@@ -11,8 +11,8 @@ export interface ActivityDescription {
 }
 
 const DOMAIN_LABELS: Record<string, string> = {
-  expenses: "הוצאה", incomes: "הכנסה", loans: "הלוואה", bank: "בנק", credit: "אשראי",
-  imports: "ייבוא", documents: "מסמך", reminders: "תזכורת", recurring: "תשלום קבוע",
+  expenses: "הוצאה", incomes: "הכנסה", loans: "הלוואה", bank: "חשבון בנק", credit: "כרטיס אשראי",
+  imports: "דוח", documents: "מסמך", reminders: "תזכורת", recurring: "תשלום קבוע",
   subscriptions: "מנוי", savings: "יעד", assets: "נכס", budgets: "תקציב", categories: "קטגוריה",
   "payment-methods": "אמצעי תשלום", family: "בן משפחה", settings: "הגדרות", alerts: "התראה",
   journey: "תמונה פיננסית", "household-assistant": "העוזר המשפחתי", crm: "ניהול משתמשים",
@@ -20,7 +20,7 @@ const DOMAIN_LABELS: Record<string, string> = {
 
 // Suffix verbs override the HTTP verb: POST /imports/sessions/:id/commit is a commit, not a create.
 const SUFFIX_ACTIONS: Record<string, [string, string]> = {
-  commit: ["commit", "נקלט"], complete: ["complete", "הושלם"], cancel: ["cancel", "בוטל"],
+  commit: ["commit", "נוסף"], complete: ["complete", "הושלם"], cancel: ["cancel", "בוטל"],
   rollback: ["rollback", "בוטל ייבוא"], undo: ["undo", "בוטלה החלטה"], confirm: ["confirm", "אושר"],
   "quick-add": ["create", "נוספה בהקלדה"], decision: ["decide", "הוחלט"], coverage: ["acknowledge", "אושר כיסוי"],
   "duplicate-reviews": ["decide", "הוחלט על כפילות"], recompute: ["recompute", "חושבה מחדש יתרה"],
@@ -83,7 +83,7 @@ export function recordActivity(userId: number, description: ActivityDescription)
 const PAGE_SIZE = 50;
 export async function listActivity(userId: number, before?: number) {
   if (before !== undefined && !(await prisma.activityEvent.findFirst({ where: { id: before, userId }, select: { id: true } }))) {
-    throw ApiError.notFound("הרשומה לא נמצאה ביומן");
+    throw ApiError.notFound("הפעולה לא נמצאה ביומן");
   }
   const rows = await prisma.activityEvent.findMany({
     where: { userId, ...(before !== undefined ? { id: { lt: before } } : {}) },

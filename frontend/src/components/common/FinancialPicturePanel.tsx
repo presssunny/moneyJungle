@@ -59,7 +59,7 @@ export function FinancialPicturePanel({picture,compact=false,onSaved}:{picture:F
     <Link to={source.to}>{source.kind==='manual'||source.kind==='income'?'לפעילות הרשומה':'הוספה או עדכון'} ←</Link>
    </Card>)}</section>}
    <Card className="picture-capabilities"><h2>מה אפשר לדעת כבר עכשיו?</h2><ul>{picture.capabilities.map(cap=><li key={cap.key}><span aria-hidden="true">{cap.available?'✓':'○'}</span><div><strong>{cap.title} · {cap.available?'אפשר להתחיל':'עדיין חסר מידע'}</strong><p>{cap.reason}</p></div></li>)}</ul></Card>
-   <details className="picture-explainer"><summary>למה צריך גם בנק וגם אשראי?</summary><p>הבנק מראה את הירידה מהחשבון, והכרטיס מפרט את הרכישות. כשיש התאמה, החיוב בבנק אינו נספר שוב כהוצאה. אם אין התאמה ברורה, נבקש לבדוק.</p><p>דוחות חופפים נבדקים מול התנועות הקיימות. מידע חסר אינו נחשב לאפס, ותאריך שעבר אינו אומר שחוב שולם.</p></details>
+   <details className="picture-explainer"><summary>למה צריך גם דף עו״ש וגם פירוט כרטיס?</summary><p>הבנק מראה את הירידה מהחשבון, והכרטיס מפרט את הרכישות. כשיש התאמה, החיוב בבנק אינו נספר שוב כהוצאה. אם אין התאמה ברורה, נבקש לבדוק.</p><p>דוחות חופפים נבדקים מול התנועות הקיימות. מידע חסר אינו נחשב לאפס, ותאריך שעבר אינו אומר שחוב שולם.</p></details>
   </>}
  </div>;
 }

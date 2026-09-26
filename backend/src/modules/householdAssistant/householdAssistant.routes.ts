@@ -26,7 +26,7 @@ householdAssistantRoutes.get("/duplicate-reviews", asyncHandler(async (req, res)
 }));
 householdAssistantRoutes.post("/duplicate-reviews", asyncHandler(async (req, res) => {
   const input = duplicateReviewInput.safeParse(req.body);
-  if (!input.success) throw ApiError.badRequest("יש לבחור החלטה ולאשר את השפעתה על הרשומות.");
+  if (!input.success) throw ApiError.badRequest("יש לבחור החלטה ולאשר את השפעתה על הרישומים.");
   res.json(await decideDuplicate(req.userId!, input.data));
 }));
 householdAssistantRoutes.post("/duplicate-reviews/:id/undo", asyncHandler(async (req, res) => {

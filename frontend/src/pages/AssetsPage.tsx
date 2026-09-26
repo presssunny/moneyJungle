@@ -107,7 +107,7 @@ export default function AssetsPage() {
                 value={formatCurrency(netWorth.value!)}
                 tone={netWorth.value! >= 0 ? "success" : "danger"}
                 certainty="scenario"
-                sub="נכסים בניכוי הלוואות פעילות וחוב אשראי שטרם שולם — ערך מוצהר, לא מאומת"
+                sub="נכסים בניכוי הלוואות פעילות וחיובי כרטיס שטרם שולמו — ערך מוצהר, לא מאומת"
               />
             )
           }

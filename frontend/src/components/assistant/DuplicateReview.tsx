@@ -10,7 +10,7 @@ import { getDuplicate, getDuplicateHistory, reviewDuplicate, undoDuplicate } fro
 import type { DuplicateDecision, DuplicateRecord, DuplicateReviewInput, DuplicateReviewView, HouseholdSnapshot } from "../../types/models";
 import { formatCurrency, formatDate, formatMonthKey } from "../../utils/format";
 
-const sourceNames = { expense: "הוצאה ידנית", credit: "פירוט אשראי", income: "הכנסה" };
+const sourceNames = { expense: "הוצאה ידנית", credit: "עסקה בכרטיס אשראי", income: "הכנסה" };
 const decisions = { separate: "עסקאות נפרדות", remove_manual: "רישום ידני הוסר", source_charge: "דורש בירור מול המנפיק" };
 const statuses = { active: "החלטה שמורה", stale: "המקור השתנה — יש לבדוק מחדש", undone: "ההחלטה בוטלה" };
 const label = (r: DuplicateRecord) => `${sourceNames[r.kind]} ${r.key.split(":")[1]} · ${r.name} · ${formatCurrency(r.amount)}`;
@@ -48,13 +48,13 @@ function ReviewDialog({ id, onClose, onSaved }: { id: string; onClose: () => voi
   }
   return <Modal open title="בדיקת רישומים דומים" size="wide" onClose={() => { if (!busy) onClose(); }} footer={<><Button variant="outline" disabled={busy} onClick={onClose}>חזרה</Button><Button variant={decision === "remove_manual" ? "danger" : "primary"} disabled={!ready} onClick={() => void save()}>{busy ? "שומר החלטה…" : decision === "remove_manual" ? "אישור והסרת הרישום שנבחר" : "שמירת ההחלטה"}</Button></>}>
     <div className="duplicate-review" aria-busy={busy || evidence.loading}>
-      {evidence.loading && <p role="status">בודקים את הרשומות העדכניות…</p>}
-      {(evidence.error || error) && <div role="alert"><p>{evidence.error || error}</p><Button variant="outline" disabled={busy || evidence.loading} onClick={() => { setConfirmed(false); setError(""); void evidence.reload(); }}>רענון הרשומות</Button></div>}
+      {evidence.loading && <p role="status">בודקים שוב…</p>}
+      {(evidence.error || error) && <div role="alert"><p>{evidence.error || error}</p><Button variant="outline" disabled={busy || evidence.loading} onClick={() => { setConfirmed(false); setError(""); void evidence.reload(); }}>בדיקה מחדש</Button></div>}
       {candidate && <><p>השוו את כל {candidate.recordCount} הרשומות למקור. שם וסכום זהים אינם הוכחה לכפילות.</p><Records records={candidate.records} />
         <fieldset disabled={busy || evidence.loading || Boolean(evidence.error)} className="duplicate-options"><legend>מה מצאתם?</legend>
           {(["separate", ...(candidate.records.some(r => r.kind !== "credit") ? ["remove_manual"] : ["source_charge"])] as DuplicateDecision[]).map(value => <label key={value}><input type="radio" name="duplicate-decision" value={value} checked={decision === value} onChange={() => { setDecision(value); setConfirmed(false); setError(""); }} /><span>{value === "separate" ? "אלה עסקאות נפרדות" : value === "remove_manual" ? "רישום ידני נוסף בטעות" : "החיובים מופיעים בדוח ודורשים בירור"}</span></label>)}
-          {decision === "remove_manual" && <div className="duplicate-selection"><Select label="איזה רישום להסיר?" placeholder="בחירת רישום ידני" value={removedKey} options={candidate.records.filter(r => r.kind !== "credit").map(r => ({ value: r.key, label: label(r) }))} onChange={e => { setRemovedKey(e.target.value); setKeptKey(""); setConfirmed(false); }} /><Select label="איזו רשומה נשארת?" placeholder="בחירת הרשומה הנכונה" value={keptKey} options={candidate.records.filter(r => r.key !== removedKey).map(r => ({ value: r.key, label: label(r) }))} onChange={e => { setKeptKey(e.target.value); setConfirmed(false); }} /></div>}
-          {decision && <div className="duplicate-impact" role="status">{decision === "remove_manual" ? removed ? <><strong>יוסר רישום אחד של {formatCurrency(removed.amount)}.</strong><p>{removed.kind === "income" ? "ההכנסות" : "ההוצאות"} לחודש {formatMonthKey(removed.date.slice(0, 7))} יקטנו בסכום הזה. שאר הרשומות נשארות. אפשר לשחזר מההיסטוריה כל עוד המקורות לא השתנו.</p></> : "בחרו את הרישום להסרה ואת הרשומה שנשארת." : decision === "source_charge" ? "כל החיובים נשארים בסכומים. ההחלטה תופיע במעקב לבירור מול המנפיק; לא נשלחת אליו פנייה אוטומטית." : "כל הרשומות והסכומים נשארים. הקבוצה לא תופיע לבדיקה חוזרת כל עוד המקורות לא השתנו."}</div>}
+          {decision === "remove_manual" && <div className="duplicate-selection"><Select label="איזה רישום להסיר?" placeholder="בחירת רישום ידני" value={removedKey} options={candidate.records.filter(r => r.kind !== "credit").map(r => ({ value: r.key, label: label(r) }))} onChange={e => { setRemovedKey(e.target.value); setKeptKey(""); setConfirmed(false); }} /><Select label="איזה רישום נשאר?" placeholder="בחירת הרישום הנכון" value={keptKey} options={candidate.records.filter(r => r.key !== removedKey).map(r => ({ value: r.key, label: label(r) }))} onChange={e => { setKeptKey(e.target.value); setConfirmed(false); }} /></div>}
+          {decision && <div className="duplicate-impact" role="status">{decision === "remove_manual" ? removed ? <><strong>יוסר רישום אחד של {formatCurrency(removed.amount)}.</strong><p>{removed.kind === "income" ? "ההכנסות" : "ההוצאות"} לחודש {formatMonthKey(removed.date.slice(0, 7))} יקטנו בסכום הזה. שאר הרשומות נשארות. אפשר לשחזר מההיסטוריה כל עוד המקורות לא השתנו.</p></> : "בחרו איזה רישום להסיר ואיזה להשאיר." : decision === "source_charge" ? "כל החיובים נשארים בסכומים. ההחלטה תופיע במעקב לבירור מול המנפיק; לא נשלחת אליו פנייה אוטומטית." : "כל הרישומים והסכומים נשארים. הקבוצה לא תופיע לבדיקה חוזרת כל עוד המקורות לא השתנו."}</div>}
           {decision && <label className="household-consent"><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} />בדקתי את המקור ואני מאשר/ת את השינוי המתואר</label>}
         </fieldset>
       </>}
@@ -87,12 +87,12 @@ function ReviewHistory({ followUpCount }: { followUpCount: number }) {
     {history.error && <div role="alert"><p>{history.error}</p><Button variant="outline" onClick={() => void history.reload()}>ניסיון נוסף</Button></div>}
     {history.data && <><ul className="duplicate-history">{history.data.items.map(review => <li key={review.id}>
       <div><h3>{decisions[review.decision]}</h3><p>{review.records[0]?.name} · {formatDate(review.createdAt)}</p><span className={`duplicate-status duplicate-status-${review.status}`}>{statuses[review.status]}</span></div>
-      <details><summary>הרשומות וההחלטה</summary><Records records={review.records} removedKey={review.removedKey} />{review.recordCount > review.records.length && <p>מוצגות {review.records.length} מתוך {review.recordCount} רשומות. הרשומות שנבחרו לתיקון מוצגות בראש הרשימה.</p>}{review.keptKey && <p>הרשומה שנשארה: {review.keptKey}</p>}{review.undoneAt && <p>בוטלה בתאריך {formatDate(review.undoneAt)}</p>}{review.undoBlockedReason && <p>{review.undoBlockedReason}</p>}</details>
+      <details><summary>הרישומים וההחלטה</summary><Records records={review.records} removedKey={review.removedKey} />{review.recordCount > review.records.length && <p>מוצגות {review.records.length} מתוך {review.recordCount} רשומות. הרשומות שנבחרו לתיקון מוצגות בראש הרשימה.</p>}{review.keptKey && <p>הרישום שנשאר: {review.keptKey}</p>}{review.undoneAt && <p>בוטלה בתאריך {formatDate(review.undoneAt)}</p>}{review.undoBlockedReason && <p>{review.undoBlockedReason}</p>}</details>
       {review.canUndo && <Button variant="outline" disabled={history.loading || Boolean(history.error)} onClick={() => { setSelected(review); setError(""); }}>{review.removedKey ? "ביטול התיקון ושחזור" : "פתיחה מחדש לבדיקה"}</Button>}
     </li>)}</ul>{!history.loading && !history.data.items.length && <p>{followUp ? "אין חיובים שסומנו לבירור." : "כאן יישמרו ההחלטות שלכם, עם אפשרות לפתוח מחדש או לשחזר תיקון."}</p>}
       <div className="row-actions">{cursors.length > 1 && <Button variant="outline" disabled={history.loading} onClick={() => setCursors(cursors.slice(0, -1))}>החלטות קודמות</Button>}{history.data.nextCursor && <Button variant="outline" disabled={history.loading} onClick={() => setCursors([...cursors, history.data!.nextCursor!])}>עוד החלטות</Button>}</div></>}
     {selected && <Modal open title={removed ? "שחזור הרישום שהוסר" : "פתיחת ההחלטה מחדש"} onClose={() => { if (!busy) setSelected(null); }} footer={<><Button variant="outline" disabled={busy} onClick={() => setSelected(null)}>חזרה</Button><Button disabled={busy || Boolean(error)} onClick={() => void undo()}>{busy ? "מבטל החלטה…" : removed ? "אישור ושחזור הרישום" : "אישור ופתיחה מחדש"}</Button></>}>
-      {removed ? <><Records records={[removed]} removedKey={removed.key} /><p>הרישום יוחזר עם פרטיו המקוריים. {removed.kind === "income" ? "ההכנסות" : "ההוצאות"} לחודש {formatMonthKey(removed.date.slice(0, 7))} יגדלו ב־{formatCurrency(removed.amount)}.</p></> : <p>הסכומים לא ישתנו. אם הרשומות עדיין מתאימות לבדיקה, הן יופיעו שוב ברשימת הרישומים הדומים.</p>}
+      {removed ? <><Records records={[removed]} removedKey={removed.key} /><p>הרישום יוחזר עם פרטיו המקוריים. {removed.kind === "income" ? "ההכנסות" : "ההוצאות"} לחודש {formatMonthKey(removed.date.slice(0, 7))} יגדלו ב־{formatCurrency(removed.amount)}.</p></> : <p>הסכומים לא ישתנו. אם הרישומים עדיין מתאימות לבדיקה, הן יופיעו שוב ברשימת הרישומים הדומים.</p>}
       {error && <p role="alert">{error} סגרו את החלון כדי לבדוק את ההיסטוריה המעודכנת.</p>}
     </Modal>}
   </Card></section>;
@@ -109,16 +109,16 @@ export function DuplicateReview({ scan, disabled }: { scan: HouseholdSnapshot["d
     <section id="duplicates" tabIndex={-1}><Card title={`רישומים דומים לבדיקה · ${scan.candidateCount}`}>
       <p className="text-muted">השוו למקור, ואז בחרו אם לשמור את שתי העסקאות או לתקן רישום ידני.</p>
       {notice && <p role="status">{notice}</p>}
-      {scan.limited && <p role="status">הבדיקה חלקית גם בתוך התקופה: נבדקו עד 2,000 רשומות מכל סוג.</p>}
+      {scan.limited && <p role="status">הבדיקה חלקית גם בתוך התקופה: נבדקו עד 2,000 תנועות מכל סוג.</p>}
       {scan.candidates.length ? <ul className="household-duplicates">{scan.candidates.map(candidate => <li key={candidate.id}>
-        <h3>{candidate.records[0].name}</h3><p>{candidate.reason === "manual_and_card" ? "רישום ידני ופירוט כרטיס דומים" : "כמה רשומות דומות מאותו סוג"} · {candidate.recordCount} רשומות</p>
+        <h3>{candidate.records[0].name}</h3><p>{candidate.reason === "manual_and_card" ? "רישום ידני ופירוט כרטיס דומים" : "כמה רישומים דומים מאותו סוג"} · {candidate.recordCount} רשומות</p>
         {candidate.reopened && <p className="duplicate-status duplicate-status-stale">המקור השתנה מאז הבדיקה הקודמת</p>}
         <Records records={candidate.records.slice(0, 3)} />
         {candidate.recordCount > 3 && <p>ועוד {candidate.recordCount - 3} רשומות. כל הרשומות יוצגו לפני האישור.</p>}
         <Button disabled={disabled} onClick={() => setSelected(candidate.id)}>בדיקת הרישומים</Button>
       </li>)}</ul> : <p>אין רישומים שממתינים לבדיקה הזאת. ההחלטות שכבר נשמרו מופיעות בהמשך.</p>}
       {scan.candidateCount > scan.candidates.length && <p>מוצגות 50 הקבוצות הראשונות. קבוצות נוספות יוצגו לאחר השלמת הבדיקה שלהן.</p>}
-      <details><summary>היקף הבדיקה</summary><p>{formatDate(scan.from)}–{formatDate(scan.to)} · {scan.scanned} רשומות נסרקו.</p><p>נבדקות הוצאות ידניות, הכנסות לא מקושרות ורכישות אשראי מאושרות עם כרטיס. לא נכללים תשלומים, מימון, זיכויים, רשומות מקושרות לבנק או התאמות לפי שמות דומים בלבד. זו אינה בדיקה מלאה של כל הכפילויות האפשריות. בדיקת דוחות חופפים והתאמת חיובי בנק נשארות במסכי הייבוא והחשבונות.</p></details>
+      <details><summary>היקף הבדיקה</summary><p>{formatDate(scan.from)}–{formatDate(scan.to)} · {scan.scanned} רשומות נסרקו.</p><p>נבדקות הוצאות ידניות, הכנסות לא מקושרות ורכישות בכרטיס אשראי מפירוטים שאושרו. לא נכללים תשלומים, מימון, זיכויים, רשומות מקושרות לבנק או התאמות לפי שמות דומים בלבד. זו אינה בדיקה מלאה של כל הכפילויות האפשריות. בדיקת דוחות חופפים והתאמת חיובי בנק נשארות במסכי הייבוא והחשבונות.</p></details>
     </Card></section>
     <ReviewHistory followUpCount={scan.followUpCount ?? 0} />
     {selected && <ReviewDialog key={selected} id={selected} onClose={() => setSelected(null)} onSaved={() => { setSelected(null); setNotice("ההחלטה נשמרה בהיסטוריה. הרשימה והסכומים מתעדכנים."); }} />}

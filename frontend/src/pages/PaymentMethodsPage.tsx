@@ -25,7 +25,7 @@ import type { PaymentMethod } from "../types/models";
 const METHOD_TYPES = [
   { value: "cash", label: "מזומן" },
   { value: "credit_card", label: "כרטיס אשראי" },
-  { value: "credit_installments", label: "אשראי בתשלומים" },
+  { value: "credit_installments", label: "כרטיס אשראי בתשלומים" },
   { value: "bank_transfer", label: "העברה בנקאית" },
   { value: "bit", label: "ביט" },
   { value: "paybox", label: "פייבוקס" },

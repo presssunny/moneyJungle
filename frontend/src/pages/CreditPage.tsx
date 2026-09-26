@@ -61,9 +61,9 @@ export default function CreditPage() {
   const fileRef = useRef<HTMLInputElement>(null);
   const importPanelRef = useRef<HTMLDetailsElement>(null);
 
-  const importsRes = useAsync(() => listCreditImports(), [reloadKey], "לא הצלחנו לטעון את ייבואי האשראי");
+  const importsRes = useAsync(() => listCreditImports(), [reloadKey], "לא הצלחנו לטעון את פירוטי הכרטיסים שהועלו");
   const cardsRes = useAsync(() => listCreditCards(), [reloadKey], "לא הצלחנו לטעון את הכרטיסים לייבוא");
-  const chartsRes = useAsync(() => getCharts(monthKey), [monthKey, reloadKey], "לא הצלחנו לטעון את פילוח האשראי");
+  const chartsRes = useAsync(() => getCharts(monthKey), [monthKey, reloadKey], "לא הצלחנו לטעון את הפילוח לפי קטגוריה");
   const imports = importsRes.data;
 
   const load = () => setReloadKey((k) => k + 1);
@@ -117,7 +117,7 @@ export default function CreditPage() {
   function removeImport(imp: CreditImport) {
     confirmDialog.ask(
       {
-        title: "מחיקת ייבוא אשראי",
+        title: "מחיקת פירוט כרטיס שהועלה",
         message: (
           <>
             הייבוא <strong>{imp.fileName}</strong> יימחק על כל {imp.totalTransactions} העסקאות שבו.
@@ -288,7 +288,7 @@ export default function CreditPage() {
         <>
           <Select label="כרטיס בדוח שמעלים" value={uploadCardId} disabled={uploading || cardsRes.loading} onChange={(e) => setUploadCardId(e.target.value)} options={[{ value: "", label: "ללא שיוך / דוח עם כמה כרטיסים" }, ...(cardsRes.data ?? []).map((card) => ({ value: String(card.id), label: `${card.name} · ${card.lastFour}` }))]} />
           <Button onClick={() => fileRef.current?.click()} disabled={uploading}>
-            {uploading ? "מעלה..." : "ייבוא דוח אשראי 📂"}
+            {uploading ? "מעלה..." : "העלאת פירוט כרטיס 📂"}
           </Button>
           <Button variant="outline" onClick={reapplyRules}>סיווג אוטומטי מחדש 🏷️</Button>
           <input
@@ -331,7 +331,7 @@ export default function CreditPage() {
       <div className="kpi-row">
         <AsyncSection
           resource={importsRes}
-          errorTitle="לא הצלחנו לטעון את נתוני האשראי"
+          errorTitle="לא הצלחנו לטעון את נתוני הכרטיסים"
           skeleton={<SkeletonCard />}
         >
           {() => (
@@ -355,7 +355,7 @@ export default function CreditPage() {
                 sub="מימון פנימי — לא נספר בהוצאות"
               />
               <SummaryCard
-                label="לא מסווגות באשראי"
+                label="עסקאות בכרטיס ללא קטגוריה"
                 value={String(uncategorizedCount)}
                 tone={uncategorizedCount > 0 ? "warning" : "success"}
                 sub={uncategorizedCount > 0 ? "בייבוא הנבחר · לחיצה מסננת" : "בייבוא הנבחר"}
@@ -366,7 +366,7 @@ export default function CreditPage() {
         </AsyncSection>
       </div>
 
-      <Card title={`אשראי לפי קטגוריה — ${formatMonthKey(monthKey)}`}>
+      <Card title={`עסקאות בכרטיס לפי קטגוריה — ${formatMonthKey(monthKey)}`}>
         <AsyncSection
           resource={chartsRes}
           errorTitle="לא הצלחנו לטעון את פילוח האשראי"
@@ -375,7 +375,7 @@ export default function CreditPage() {
           emptyState={
             <EmptyState
               icon="💳"
-              title="אין עסקאות אשראי בחודש הזה"
+              title="אין עסקאות בכרטיסי אשראי בחודש הזה"
               hint="גררי לכאן קובץ אקסל מאתר חברת האשראי"
             />
           }
@@ -398,7 +398,7 @@ export default function CreditPage() {
               emptyState={
                 <EmptyState
                   icon="💳"
-                  title="אין עדיין ייבוא אשראי"
+                  title="עוד לא הועלה פירוט כרטיס אשראי"
                   hint="גררי לכאן קובץ אקסל מאתר חברת האשראי"
                 />
               }

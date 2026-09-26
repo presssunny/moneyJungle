@@ -25,20 +25,20 @@ export function ImportRowsReview({session,onSaved}:{session:ImportSession;onSave
  return <><AsyncSection resource={resource} errorTitle="לא ניתן לטעון את שורות המקור" skeleton={<Loading/>}>{data=><>
   <p>{data.total} שורות מקור · {data.pendingCount} כפילויות חשודות לבדיקה</p>
   <Table pageSize={0} rows={data.items} rowKey={r=>r.id} columns={[
-   {key:'row',header:'שורת מקור',render:r=>r.rowNumber},
+   {key:'row',header:'שורה בקובץ',render:r=>r.rowNumber},
    {key:'date',header:'תאריך',render:r=>r.normalized.date?formatDate(r.normalized.date):'חסר תאריך'},
    {key:'name',header:'תיאור',render:r=>r.normalized.name},
    {key:'amount',header:'סכום',render:r=>formatCurrency(r.normalized.amount)},
-   {key:'state',header:'החלטה',render:r=>r.resolution==='duplicate'?'כבר נרשמה':r.resolution==='review'?'כפילות חשודה':'לקליטה'},
-   {key:'review',header:'בדיקה',render:r=>editable?<Button variant="outline" onClick={()=>{setEditing(r);setValue(r.normalized);setError('');}}>בדיקת שורה {r.rowNumber}</Button>:r.outputRef?`מקור: ${r.outputRef.kind} #${r.outputRef.id}`:'לא נקלטה'},
+   {key:'state',header:'החלטה',render:r=>r.resolution==='duplicate'?'כבר נרשמה':r.resolution==='review'?'כפילות חשודה':'תתווסף'},
+   {key:'review',header:'בדיקה',render:r=>editable?<Button variant="outline" onClick={()=>{setEditing(r);setValue(r.normalized);setError('');}}>בדיקת שורה {r.rowNumber}</Button>:r.outputRef?`מקור: ${r.outputRef.kind} #${r.outputRef.id}`:'לא תתווסף'},
   ]}/>
   <div className="row-actions"><Button disabled={page===1} onClick={()=>setPage(p=>p-1)}>הקודם</Button><span>עמוד {page}</span><Button disabled={page*data.pageSize>=data.total} onClick={()=>setPage(p=>p+1)}>הבא</Button></div>
  </>}</AsyncSection>
  {editing&&value&&<Modal open title={`בדיקת שורת מקור ${editing.rowNumber}`} onClose={()=>{if(!busy)setEditing(null);}}>
   <p>במקור: {editing.original.name} · {formatCurrency(editing.original.amount)} · {formatDate(editing.original.date)}</p>
-  {moneyEditable?<><Input label="תיאור" value={value.name} onChange={e=>setValue({...value,name:e.target.value})}/><Input label="תאריך" type="date" value={value.date??''} onChange={e=>setValue({...value,date:e.target.value})}/><Input label="סכום (₪)" type="number" step="0.01" value={value.amount} onChange={e=>setValue({...value,amount:Number(e.target.value)})}/>{session.kind==='credit'&&<Input label="מועד ירידה בבנק" type="date" value={value.chargeDate??''} onChange={e=>setValue({...value,chargeDate:e.target.value||null})}/>}</>:<p>המספרים מאומתים מול דוח המקור. לתיקון סכומים או תאריכים יש להעלות קובץ מתוקן.</p>}
-  {editing.candidates.map(c=><div key={`${c.kind}:${c.id}`}><p>תנועה קיימת: {c.name} · {formatCurrency(c.amount)} · {formatDate(c.date)} · #{c.id}</p><Button disabled={busy} variant="outline" onClick={()=>save('duplicate',c)}>זו אותה תנועה — לא לקלוט שוב</Button></div>)}
-  {error&&<p role="alert">{error}</p>}<Button disabled={busy||!value.name||!value.date} onClick={()=>save('include')}>זו תנועה נפרדת — שמירת השורה לקליטה</Button>
+  {moneyEditable?<><Input label="תיאור" value={value.name} onChange={e=>setValue({...value,name:e.target.value})}/><Input label="תאריך" type="date" value={value.date??''} onChange={e=>setValue({...value,date:e.target.value})}/><Input label="סכום (₪)" type="number" step="0.01" value={value.amount} onChange={e=>setValue({...value,amount:Number(e.target.value)})}/>{session.kind==='credit'&&<Input label="מועד חיוב" type="date" value={value.chargeDate??''} onChange={e=>setValue({...value,chargeDate:e.target.value||null})}/>}</>:<p>הסכומים והתאריכים נלקחים מהקובץ. כדי לתקן אותם, מעלים קובץ מתוקן.</p>}
+  {editing.candidates.map(c=><div key={`${c.kind}:${c.id}`}><p>תנועה קיימת: {c.name} · {formatCurrency(c.amount)} · {formatDate(c.date)} · #{c.id}</p><Button disabled={busy} variant="outline" onClick={()=>save('duplicate',c)}>זו אותה תנועה — לא להוסיף שוב</Button></div>)}
+  {error&&<p role="alert">{error}</p>}<Button disabled={busy||!value.name||!value.date} onClick={()=>save('include')}>זו תנועה נפרדת — להוסיף אותה</Button>
  </Modal>}
  </>;
 }

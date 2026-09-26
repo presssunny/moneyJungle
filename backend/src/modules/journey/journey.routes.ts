@@ -52,7 +52,7 @@ journeyRoutes.post("/onboarding/complete",asyncHandler(async(req,res)=>{
   const body=z.object({reviewed:z.literal(true),noActivity:z.boolean().default(false)}).parse(req.body);
   res.json(await withFinancialTransaction(req.userId!,async()=>{
     const state=await financialStatus(req.userId!);
-    if(!state.profile.scope || state.issues.some(i=>i.blocking)) throw ApiError.conflict("יש להגדיר את המקורות ולהשלים את הקליטה והבדיקה לפני סיום ההיכרות");
+    if(!state.profile.scope || state.issues.some(i=>i.blocking)) throw ApiError.conflict("יש לציין אילו חשבונות וכרטיסים יש, ולסיים את העלאת הדוחות והבדיקה לפני סיום ההיכרות");
     // `reviewed:true` alone is a client claim, not proof; the server requires a
     // real coverage acknowledgement recorded via POST /journey/coverage that
     // still matches the current data — stale or missing coverage blocks completion.
@@ -62,7 +62,7 @@ journeyRoutes.post("/onboarding/complete",asyncHandler(async(req,res)=>{
     const completed=(await Promise.all(sessions.map(s=>sessionSourceExists(req.userId!,s.result)))).filter(Boolean).length;
     const manual=await prisma.expense.count({where:{userId:req.userId!}})+await prisma.income.count({where:{userId:req.userId!}});
     const scope=state.profile.scope as {manualOnly?:boolean};
-    if(!state.picture.hasUsefulData && !completed && (!scope.manualOnly || (!manual && !body.noActivity))) throw ApiError.conflict("יש להשלים קליטה ראשונה או לבחור בהזנה ידנית ולבדוק את המידע שנרשם");
+    if(!state.picture.hasUsefulData && !completed && (!scope.manualOnly || (!manual && !body.noActivity))) throw ApiError.conflict("יש להעלות דוח ראשון או לבחור בהזנה ידנית, ולבדוק את מה שנרשם");
     return prisma.financialProfile.update({where:{userId:req.userId!},data:{onboarding:"completed",completedAt:new Date(),reviewedAt:new Date()}});
   }));
 }));

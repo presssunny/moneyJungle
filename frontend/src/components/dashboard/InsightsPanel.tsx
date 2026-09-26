@@ -44,7 +44,7 @@ export function InsightsPanel({ data }: { data: DashboardInsights }) {
         )}
         <div className="gauge-label">בריאות פיננסית</div>
         <div className="gauge-sublabel">{data.scoreLabel}</div>
-        <MetricExplanation title="מרכיבי הציון ומגבלותיו"><p>מדד פנימי לפי הרשומות בלבד; מידע חסר עלול לשנות את הציון. אינו דירוג אשראי או אישור לכיסוי ההתחייבויות.</p><ul>{data.scoreComponents?.map(c=><li key={c.label}>{c.label}: {c.points}/{c.maximum} · {c.detail}</li>)}</ul></MetricExplanation>
+        <MetricExplanation title="מרכיבי הציון ומגבלותיו"><p>מדד שמחושב רק ממה שנרשם; מידע חסר עלול לשנות את הציון. אינו דירוג אשראי או אישור לכיסוי ההתחייבויות.</p><ul>{data.scoreComponents?.map(c=><li key={c.label}>{c.label}: {c.points}/{c.maximum} · {c.detail}</li>)}</ul></MetricExplanation>
       </div>
 
       <div className="insights-content">

@@ -66,7 +66,7 @@ describe.skipIf(!hasFixture("creditStatement"))("מה זוהה מהקובץ, ל�
     const transactions = await prisma.creditTransaction.findMany({ where: { userId: user.id, creditImportId } });
     for (const row of rows.rows) {
       expect(row.resolution).toBe("include");
-      expect(row.resolutionLabel).toBe("נקלט");
+      expect(row.resolutionLabel).toBe("נוסף");
       const match = transactions.find(
         (t) => t.businessName === row.name && Math.round(Number(t.amount) * 100) === Math.round(row.amount * 100)
       );

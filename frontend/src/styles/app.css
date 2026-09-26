@@ -649,35 +649,9 @@
 
 /* ---------- Upload type showcase ---------- */
 
-.upload-types {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 12px 0;
-}
 
-.upload-type-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--bg-card);
-  font-size: 12.5px;
-  color: var(--text-muted);
-  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
-}
 
-.upload-type-chip:hover {
-  border-color: color-mix(in srgb, var(--primary) 55%, var(--border));
-  color: var(--text);
-  background: color-mix(in srgb, var(--primary) 6%, var(--bg-card));
-}
 
-.upload-type-chip-icon {
-  font-size: 15px;
-}
 
 /* ---------- Cards ---------- */
 

@@ -13,7 +13,7 @@ const id=(value:unknown)=>z.string().uuid().parse(value);
 importSessionRoutes.get("/",asyncHandler(async(req,res)=>{res.json(await importSessions.list(req.userId!));}));
 importSessionRoutes.post("/",upload.single("file"),asyncHandler(async(req,res)=>{
   if(!req.file) throw ApiError.badRequest("יש לצרף קובץ");
-  let answers:unknown={}; try { answers=JSON.parse(req.body.answers??"{}"); } catch { throw ApiError.badRequest("פרטי הקליטה אינם תקינים"); }
+  let answers:unknown={}; try { answers=JSON.parse(req.body.answers??"{}"); } catch { throw ApiError.badRequest("פרטי הייבוא אינם תקינים"); }
   res.status(201).json(await importSessions.create(req.userId!,Buffer.from(req.file.originalname,"latin1").toString("utf8"),req.file.buffer,answers));
 }));
 importSessionRoutes.get("/:id",asyncHandler(async(req,res)=>{res.json(await importSessions.get(req.userId!,id(req.params.id)));}));

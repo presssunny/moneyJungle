@@ -27,6 +27,7 @@ import {
 } from "../services/planning.service";
 import { toast } from "../services/toast";
 import { formatCurrency, formatDate } from "../utils/format";
+import { LOAN_TYPE_OPTIONS } from "../app/loanTypes";
 
 const INCOME_TYPE_OPTIONS = [
   { value: "salary", label: "משכורת" },
@@ -38,14 +39,6 @@ const INCOME_TYPE_OPTIONS = [
   { value: "one_time", label: "חד־פעמי" },
 ];
 
-const LOAN_TYPE_OPTIONS = [
-  { value: "bank", label: "בנקאית" },
-  { value: "car", label: "רכב" },
-  { value: "mortgage", label: "משכנתא" },
-  { value: "private", label: "פרטית" },
-  { value: "credit", label: "אשראי" },
-  { value: "other", label: "אחר" },
-];
 
 /**
  * The audit trail behind the figures: where each imported row went and why,
@@ -324,11 +317,11 @@ function ResolveReport({ result }: { result: ResolveResult }) {
     ["הוצאות שוטפות", result.spend],
     ["ריבית — הוצאה מימונית", result.financingCharged],
     ["זיכויי ריבית — מימון שלילי", result.financingCredited],
-    ["חיובי אשראי ללא פירוט — נספרו כהוצאה", result.cardUnitemized],
+    ["חיובי כרטיס ללא פירוט — נספרו כהוצאה", result.cardUnitemized],
     ["קרן הלוואה — הקטנת חוב", result.debtReduction],
     ["תשלומי הלוואה ללא פירוט", result.loanUnsplit],
     ["קבלת הלוואה — התחייבות", result.loanDrawdown],
-    ["חיובי אשראי מפורטים — מוחרגים", result.cardSettled],
+    ["חיובי כרטיס שיש להם פירוט — לא נספרים פעמיים", result.cardSettled],
     ["העברות פנימיות — מוחרגות", result.internalTransfer],
     ["הוחרג ידנית", result.manualExcluded],
   ];

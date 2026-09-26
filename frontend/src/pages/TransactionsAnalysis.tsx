@@ -40,7 +40,7 @@ function categorySlices(rows: Expense[]): CategorySlice[] {
 function sourceSlices(rows: Expense[]): CategorySlice[] {
   const chrome = chartChrome();
   const buckets = [
-    { key: "credit", name: "💳 אשראי", color: chrome.primary, value: 0 },
+    { key: "credit", name: "💳 כרטיסי אשראי", color: chrome.primary, value: 0 },
     { key: "bank", name: "🏦 בנק", color: chrome.secondary, value: 0 },
     { key: "manual", name: "🧾 ידני / מזומן", color: chrome.success, value: 0 },
   ];

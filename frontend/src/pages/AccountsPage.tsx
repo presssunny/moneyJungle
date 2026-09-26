@@ -78,11 +78,11 @@ export default function AccountsPage() {
         />
       </div>
 
-      <MetricExplanation title="מקורות יתרות הבנק" metric="cash"/>
+      <MetricExplanation title="מאיפה מגיעות יתרות הבנק" metric="cash"/>
       <MetricExplanation title="חובות וחיסכון רשום"><p>החובות הם יתרת הקרן לפי לוחות ההלוואות, ולא סכום ההחזרים הכולל ריבית. בכל הלוואה אפשר לפתוח את לוח הסילוקין ואת מסמך המקור.</p><p>התקדמות ביעדי חיסכון היא סכום הסכומים שנרשמו ביעדים. היא אינה נכס נוסף: אותו כסף עשוי כבר להיכלל בחשבון הבנק.</p></MetricExplanation>
         </div>}
         tabs={[
-          { key: "credit", label: "אשראי", icon: "💳", element: <CreditPage /> },
+          { key: "credit", label: "כרטיסי אשראי", icon: "💳", element: <CreditPage /> },
           { key: "bank", label: "בנק", icon: "🏦", element: <BankPage /> },
           { key: "reconcile", label: "התאמת בנק", icon: "🔗", element: <BankReconcilePage /> },
           { key: "loans", label: "הלוואות וחובות", icon: "📉", element: <LoansPage /> },

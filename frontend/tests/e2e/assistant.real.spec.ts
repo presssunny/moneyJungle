@@ -111,7 +111,7 @@ test('Duplicate review persists, corrects totals exactly once and restores the o
     await expect(dialog.getByRole('radio', { name: 'רישום ידני נוסף בטעות' })).toBeEnabled();
     await dialog.getByRole('radio', { name: 'רישום ידני נוסף בטעות' }).check();
     await dialog.getByLabel('איזה רישום להסיר?').selectOption(candidate.records[0].key);
-    await dialog.getByLabel('איזו רשומה נשארת?').selectOption(candidate.records[1].key);
+    await dialog.getByLabel('איזה רישום נשאר?').selectOption(candidate.records[1].key);
     await expect(dialog).toContainText('יקטנו בסכום הזה');
     const confirm = dialog.getByRole('button', { name: 'אישור והסרת הרישום שנבחר' });
     await expect(confirm).toBeDisabled();
@@ -153,8 +153,8 @@ test('Duplicate review rejects changed evidence in an open dialog and supports a
     const response = await page.request.patch(`/api/expenses/${record.key.split(':')[1]}`, { headers: auth, data: { description: 'מקור מעודכן' } });
     expect(response.ok()).toBe(true);
     await dialog.getByRole('button', { name: 'שמירת ההחלטה' }).click();
-    await expect(dialog.getByRole('alert')).toContainText('הרשומות השתנו');
-    await dialog.getByRole('button', { name: 'רענון הרשומות' }).click();
+    await expect(dialog.getByRole('alert')).toContainText('הרישומים השתנו');
+    await dialog.getByRole('button', { name: 'בדיקה מחדש' }).click();
     await expect(dialog.getByRole('checkbox')).not.toBeChecked();
     await expect(dialog.getByRole('button', { name: 'שמירת ההחלטה' })).toBeDisabled();
     await dialog.getByRole('checkbox').check();

@@ -44,7 +44,7 @@ export function CreditWallet({ monthKey, revision, imports, onChanged, onImport 
   }
 
   return <div className="future-page">
-    <div className="future-heading"><div><span className="text-muted">האשראי שלך, במקום אחד</span><h2>הארנק שלי</h2><p>בחירת כרטיס מציגה את ההוצאות שלו ב־{formatMonthKey(monthKey)}.</p></div><div className="row-actions"><Button onClick={onImport}>ייבוא דוח</Button><Button variant="outline" onClick={() => { setEditingId(null); setDraft(blank); setFormOpen(!formOpen); }} aria-expanded={formOpen}>+ הוספת כרטיס</Button></div></div>
+    <div className="future-heading"><div><span className="text-muted">כרטיסי האשראי שלך, במקום אחד</span><h2>הארנק שלי</h2><p>בחירת כרטיס מציגה את ההוצאות שלו ב־{formatMonthKey(monthKey)}.</p></div><div className="row-actions"><Button onClick={onImport}>ייבוא דוח</Button><Button variant="outline" onClick={() => { setEditingId(null); setDraft(blank); setFormOpen(!formOpen); }} aria-expanded={formOpen}>+ הוספת כרטיס</Button></div></div>
     {message && <p className="info-banner" role="status">{message}</p>}
     {formOpen && <Card title={editingId === null ? "כרטיס חדש" : "עריכת כרטיס"}><form onSubmit={(e) => { e.preventDefault(); void mutate(async () => { const card = editingId === null ? await createCreditCard(draft) : await updateCreditCard(editingId, draft); setDraft(blank); setFormOpen(false); selectCard(String(card.id)); }, "פרטי הכרטיס נשמרו. אפשר לשייך אליו דוח או עסקאות."); }}>
       <div className="future-form">

@@ -161,7 +161,7 @@ export default function ExpensesPage() {
       align: "left",
       render: (row) =>
         row.source === "credit" ? (
-          <Link className="ledger-source-link" to="/accounts?tab=credit" aria-label="פתיחת עסקאות האשראי">לכרטיס ←</Link>
+          <Link className="ledger-source-link" to="/accounts?tab=credit" aria-label="פתיחת עסקאות הכרטיס">לכרטיס ←</Link>
         ) : (
           <span className="row-actions">
             <Button size="sm" variant="ghost" onClick={() => openEdit(row)} aria-label="עריכה">✏️</Button>

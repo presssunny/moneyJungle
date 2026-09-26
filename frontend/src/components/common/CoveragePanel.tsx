@@ -15,7 +15,7 @@ export function CoveragePanel({data,onSaved,refreshing=false}:{data:FinancialSta
  const syncing=busy||refreshing;
  async function run(action:()=>Promise<unknown>){setBusy(true);setError('');setSaved('');try{await action();await onSaved();setSaved('נשמר');}catch(e){setError(apiErrorMessage(e));}finally{setBusy(false);}}
  return <>
-  <Card title="המקורות שבתמונה"><p>יש לרשום את כל חשבונות הבנק, הכרטיסים וההתחייבויות הרלוונטיים לפני אישור העדכניות. אפשר להמשיך עם תמונה חלקית; היא תסומן בהתאם.</p>
+  <Card title="החשבונות והכרטיסים בתמונה"><p>יש לרשום את כל חשבונות הבנק, הכרטיסים וההתחייבויות הרלוונטיים לפני אישור העדכניות. אפשר להמשיך עם תמונה חלקית; היא תסומן בהתאם.</p>
    <div className="row-actions"><Link to="/imports">העלאת מידע</Link><Link to="/accounts?tab=bank">ניהול חשבונות</Link><Link to="/accounts?tab=credit">ניהול כרטיסים</Link><Link to="/commitments">בדיקת התחייבויות</Link></div>
    {data.balances.map(b=><form id={`balance-${b.id}`} key={b.id} onSubmit={e=>{e.preventDefault();const form=new FormData(e.currentTarget);void run(()=>api.post(`/bank/accounts/${b.id}/anchor`,{balance:Number(form.get('balance')),asOf:data.today}));}} className="coverage-account"><strong>{b.name}: {formatCurrency(b.balance)}</strong><p className="text-muted">{b.explanation}</p><Input name="balance" label={`יתרה לפי הבנק היום — ${b.name}`} type="number" step="0.01" required/><Button disabled={busy} type="submit" variant="outline">עדכון יתרה להיום</Button></form>)}
    <form id="picture-scope" onSubmit={e=>{e.preventDefault();const form=new FormData(e.currentTarget);void run(()=>saveProfile({scope:{accountsListed:true,cardsListed:true,commitmentsListed:true,manualOnly:form.get('manual')==='on'},cashBuffer:Number(form.get('buffer')),essentialReserve:Number(form.get('essential')),savedReserve:Number(form.get('saved'))}));}}>
@@ -38,7 +38,7 @@ export function CoveragePanel({data,onSaved,refreshing=false}:{data:FinancialSta
      </div>}
     </div>)}
     <ul>{data.blockers.map(b=><li key={b}>{b}</li>)}</ul>
-    <p>אישור זה מתייחס למקורות שהזנת נכון ל־{data.today}. לאחר שינוי בנתונים או ביום חדש נבקש לבדוק שוב.</p>
+    <p>האישור מתייחס למידע שהזנת נכון ל־{data.today}. לאחר שינוי בנתונים או ביום חדש נבקש לבדוק שוב.</p>
     <Button disabled={syncing||!data.profile.scope||data.sources.some(s=>!checked[`${data.dataVersion}:${s.key}`])} onClick={()=>run(()=>confirmCoverage(data.dataVersion,data.sources.map(s=>s.key),emptyCards.filter(s=>isQuiet(s.key)).map(s=>s.key)))}>בדקתי — המידע מעודכן להיום</Button>
    </Card>
   </section>

@@ -450,7 +450,7 @@ export default function CrmCustomerDetailPage() {
           columns={creditColumns}
           rows={data.credit.imports}
           rowKey={(r) => r.id}
-          emptyState={<EmptyState icon="💳" title="לא יובאו דוחות אשראי" />}
+          emptyState={<EmptyState icon="💳" title="לא הועלו פירוטי כרטיסי אשראי" />}
         />
       </Section>
 

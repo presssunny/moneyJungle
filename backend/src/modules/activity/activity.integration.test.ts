@@ -59,7 +59,7 @@ describe("activity log", () => {
 describe("describeMutation", () => {
   it("names suffix actions and hides ids of the route template", () => {
     expect(describeMutation("POST", "/imports/sessions/0b0c9f5e-8d0a-4a8e-9a55-0d9b8f1f0a11/commit", {}, { fileName: "report.xlsx" }))
-      .toMatchObject({ domain: "imports", action: "commit", route: "POST /imports/sessions/:id/commit", summary: "ייבוא — נקלט: report.xlsx" });
+      .toMatchObject({ domain: "imports", action: "commit", route: "POST /imports/sessions/:id/commit", summary: "דוח — נוסף: report.xlsx" });
     expect(describeMutation("DELETE", "/loans/12", undefined, { ok: true })).toMatchObject({ action: "delete", entityId: "12", summary: "הלוואה — נמחק (#12)" });
   });
 

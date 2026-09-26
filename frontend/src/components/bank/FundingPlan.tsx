@@ -28,7 +28,7 @@ export function FundingPlan() {
     try {
       resource.setData(await saveFunding(input));
       setDraft({});
-      setMessage("נשמר. יש לאשר מחדש את עדכניות המקורות כדי לחשב את האומדן היומי.");
+      setMessage("נשמר. יש לאשר מחדש שהמידע עדכני כדי לחשב את האומדן היומי.");
     } catch (e) { setMessage(apiErrorMessage(e)); }
     finally { setBusy(false); }
   }
