@@ -1,10 +1,12 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { AsyncSection } from "../components/common/AsyncSection";
+import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
 import { EmptyState } from "../components/common/EmptyState";
 import { PageShell } from "../components/common/PageShell";
 import { SkeletonChart, SkeletonKpiRow } from "../components/common/Skeleton";
 import { SummaryCard } from "../components/dashboard/SummaryCard";
+import { ReminderForm } from "../components/reminders/ReminderForm";
 import { useMonth } from "../context/MonthContext";
 import { useAsync } from "../hooks/useAsync";
 import { listReminders } from "../services/reminders.service";
@@ -24,6 +26,7 @@ const WEEKDAYS = ["א", "ב", "ג", "ד", "ה", "ו", "ש"];
 
 export default function CalendarPage() {
   const { year, month } = useMonth();
+  const [reminderOpen, setReminderOpen] = useState(false);
 
   // One resource for the whole calendar: a month drawn from two of the three
   // sources would be silently wrong ("nothing scheduled" when in fact a request
@@ -123,6 +126,7 @@ export default function CalendarPage() {
 
   return (
     <PageShell
+      toolbar={<Button onClick={() => setReminderOpen(true)}>+ תזכורת</Button>}
       summary={
         <AsyncSection
           resource={schedule}
@@ -206,6 +210,8 @@ export default function CalendarPage() {
         <span><span className="calendar-dot calendar-event-recurring" /> תשלומים קבועים</span>
         <span><span className="calendar-dot calendar-event-subscription" /> מנויים</span>
       </div>
+
+      <ReminderForm open={reminderOpen} onClose={() => setReminderOpen(false)} onSaved={() => void schedule.reload()} />
     </PageShell>
   );
 }

@@ -6,7 +6,7 @@ function picture(phase=3) {
 async function mockApi(page:Page,{pending=false,coverageAcknowledged=true}={}){
  let draft:{id:string;step:number}|null=null;let completedAt:string|null=null;
  let profile={onboarding:pending?'pending':'completed',scope:{accountsListed:true,cardsListed:true,commitmentsListed:true,manualOnly:false},cashBuffer:'0',essentialReserve:'0',savedReserve:'0'};
- let session:any=null;let expense:any=null;let removed=false;let editedRow:{name:string;amount:number;date:string}|null=null;
+ let session:any=null;let expense:any=null;const reminders:any[]=[];let removed=false;let editedRow:{name:string;amount:number;date:string}|null=null;
  const state=()=>({picture:picture(coverageAcknowledged?3:2),today:'2026-09-17',end:'2026-09-30',dataVersion:'a'.repeat(64),profile,sources:[],balances:[],cards:[],events:[],issues:[],blockers:['אין יתרה מאומתת'],coverageAcknowledged,allowance:{amount:null,shortfall:null,state:'unavailable',cash:0,reserves:0,essentialReserve:0,formula:'יתרה פחות התחייבויות',assumptions:['הכנסה שטרם התקבלה אינה נכללת']}});
  await page.route('**/api/**',async route=>{
   const req=route.request(),path=new URL(req.url()).pathname,method=req.method();let body:any=[];
@@ -33,13 +33,17 @@ async function mockApi(page:Page,{pending=false,coverageAcknowledged=true}={}){
   else if(path.endsWith('/rows'))body={items:[{id:1,rowNumber:1,original:{name:'קפה',amount:18,date:null},normalized:editedRow??{name:'קפה',amount:18,date:session.answers.month?session.answers.month+'-01':null},resolution:'include',candidates:[],outputRef:null}],total:1,pageSize:50,pendingCount:0};
   else if(path.includes('/imports/sessions/'))body=session;
   else if(path==='/api/imports/sessions')body=session?[session]:[];
+  else if(path==='/api/reminders'&&method==='POST'){const input=req.postDataJSON();reminders.push({id:reminders.length+1,isActive:true,icon:null,description:null,...input});body=reminders.at(-1);}
+  else if(path==='/api/reminders')body=reminders;
+  else if(path==='/api/recurring')body={items:[],monthlyTotal:0};
+  else if(path==='/api/subscriptions')body={items:[],monthlyTotal:0,annualTotal:0};
   else if(path==='/api/journey/check-in'&&method==='POST'){draft={id:'checkin-test',step:0};body=draft;}
   else if(path==='/api/journey/check-in/checkin-test'&&method==='PATCH'){draft={id:'checkin-test',step:req.postDataJSON().step};body={ok:true};}
   else if(path==='/api/journey/check-in/checkin-test/complete'){draft=null;completedAt='2026-09-18';body={status:'completed'};}
   else if(path==='/api/journey/check-in')body={draft,previousCompletedAt:completedAt,due:!completedAt,token:'b'.repeat(64),action:{title:'בדיקת המקורות',to:'/data',reason:'אין יתרה מאומתת'},status:{...state(),upcoming:[]},comparison:{baseline:true,added:0,late:0,changed:0,removed:0,cashChange:null,limited:false,historyChanged:null}};
   await route.fulfill({json:body});
  });
- return {isRemoved:()=>removed};
+ return {isRemoved:()=>removed,reminders};
 }
 
 test('Home leads with a partial picture and three actions; charts load only when expanded',async({page})=>{
@@ -249,4 +253,13 @@ test('Onboarding keeps unknown answers distinct from zero and recovers from save
  await expect(page.getByRole('navigation',{name:'שלבי ההיכרות'}).locator('[aria-current=step]')).toContainText('רואים את התמונה');
  expect(payloads[1]).toEqual({bankAccounts:0,creditCards:0,loans:0,cashActivity:false});
  await expect(page.getByRole('button',{name:'סיום ההיכרות'})).toHaveCount(0);
+});
+test('A reminder can be created from the calendar and appears on its day',async({page})=>{
+ const mocked=await mockApi(page);const now=new Date();const date=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-15`;
+ await page.goto('/commitments?tab=calendar');
+ await page.getByRole('button',{name:'+ תזכורת'}).click();
+ await page.getByLabel('כותרת').fill('מתנה לסבתא');await page.getByLabel('תאריך').fill(date);await page.getByLabel('סכום משוער (אופציונלי)').fill('150');
+ await page.getByRole('button',{name:'שמירה',exact:true}).click();
+ await expect(page.locator('.calendar-event').filter({hasText:'מתנה לסבתא'})).toBeVisible();
+ expect(mocked.reminders).toMatchObject([{title:'מתנה לסבתא',eventDate:date,estimatedAmount:150}]);
 });
