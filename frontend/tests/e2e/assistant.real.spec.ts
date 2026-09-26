@@ -186,6 +186,12 @@ test('A question is answered from recorded money, and an unknown one offers exam
     await answer.getByRole('button', { name: 'כמה מותר להוציא היום?' }).click();
     await expect(answer).toContainText('מותר להוציא היום');
     expect((await new AxeBuilder({ page }).include('.ask-box').withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze()).violations).toEqual([]);
+    await page.keyboard.press('Control+k');
+    await page.getByRole('combobox', { name: 'מה לחפש' }).fill('רישום כפול');
+    await expect(page.getByRole('option', { name: /רישום כפול לבדיקה/ }).first()).toBeVisible();
+    expect((await new AxeBuilder({ page }).include('[role=dialog]').withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze()).violations).toEqual([]);
+    await page.getByRole('option', { name: /רישום כפול לבדיקה/ }).first().click();
+    await expect(page).toHaveURL(/transactions\?tab=expenses/);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   } finally { fixture('remove', String(identity.userId)); }
 });

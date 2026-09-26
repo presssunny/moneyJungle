@@ -33,6 +33,7 @@ async function mockApi(page:Page,{pending=false,coverageAcknowledged=true}={}){
   else if(path.endsWith('/rows'))body={items:[{id:1,rowNumber:1,original:{name:'קפה',amount:18,date:null},normalized:editedRow??{name:'קפה',amount:18,date:session.answers.month?session.answers.month+'-01':null},resolution:'include',candidates:[],outputRef:null}],total:1,pageSize:50,pendingCount:0};
   else if(path.includes('/imports/sessions/'))body=session;
   else if(path==='/api/imports/sessions')body=session?[session]:[];
+  else if(path==='/api/search')body={query:'x',groups:[{kind:'expenses',label:'הוצאות',items:[{key:'expense:7',label:'מאפיית השכונה',detail:null,amount:42.5,date:'2026-09-10',to:'/transactions?tab=expenses&month=2026-09&q=%D7%9E%D7%90%D7%A4%D7%99%D7%99%D7%AA'}]}]};
   else if(path==='/api/activity')body=new URL(req.url()).searchParams.get('before')==='2'?{items:[{id:1,domain:'loans',action:'delete',entityId:'4',summary:'הלוואה — נמחק (#4)',createdAt:'2026-09-15T08:00:00Z'}],nextCursor:null}:{items:[{id:3,domain:'expenses',action:'create',entityId:'7',summary:'הוצאה — נוסף: קפה · ₪18',createdAt:'2026-09-17T08:00:00Z'},{id:2,domain:'imports',action:'commit',entityId:null,summary:'ייבוא — נקלט: report.xlsx',createdAt:'2026-09-16T08:00:00Z'}],nextCursor:2};
   else if(path==='/api/reminders'&&method==='POST'){const input=req.postDataJSON();reminders.push({id:reminders.length+1,isActive:true,icon:null,description:null,...input});body=reminders.at(-1);}
   else if(path==='/api/reminders')body=reminders;
@@ -288,4 +289,20 @@ test('A loan payoff goal takes its target from the loan and offers no deposit',a
  expect(posted).toMatchObject({goalName:'לסגור את הרכב',goalType:'debt_payoff',loanId:9});expect(posted.targetAmount).toBeUndefined();
  await expect(page.getByText(/נותרו\s\S*15,000\s\S*₪ לפי יתרת הלוואת רכב, נכון ל־20.09.2026/)).toBeVisible();
  await expect(page.getByRole('button',{name:'+ הפקדה'})).toHaveCount(0);
+});
+test('The command palette opens from the keyboard, finds screens and records, and routes a question',async({page})=>{
+ await mockApi(page);let searched=0;page.on('request',r=>{if(r.url().includes('/api/search'))searched++;});
+ await page.goto('/');await expect(page.getByText('התמונה עדיין חלקית')).toBeVisible();
+ await page.keyboard.press('Control+k');
+ const input=page.getByRole('combobox',{name:'מה לחפש'});await expect(input).toBeFocused();
+ await input.fill('יומן');await expect(page.getByRole('option',{name:/יומן פעילות/})).toBeVisible();expect(searched).toBe(0);
+ await input.press('Enter');await expect(page).toHaveURL(/\/activity$/);
+ await page.getByRole('button',{name:'חיפוש'}).click();
+ await input.fill('מאפיית');await expect(page.getByRole('option',{name:/מאפיית השכונה/})).toBeVisible();
+ await expect(page.getByRole('option',{name:/מאפיית השכונה/})).toContainText('42.5');
+ await input.press('ArrowDown');await input.press('Enter');
+ await expect(page).toHaveURL(/\/transactions\?tab=expenses&month=2026-09/);
+ await page.keyboard.press('Control+k');await input.fill('כמה הוצאתי החודש?');
+ await page.getByRole('option',{name:/לשאול את העוזר/}).click();
+ await expect(page).toHaveURL(/\/assistant\?ask=/);
 });

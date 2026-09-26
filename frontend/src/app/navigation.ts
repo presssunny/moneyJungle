@@ -23,6 +23,26 @@ export const PRIMARY_NAV: NavItem[] = [
 /** Setup / occasional screens — deliberately kept out of the primary rail. */
 export const MANAGE_NAV: NavItem = { path: "/manage", label: "הגדרות וניהול", icon: "⚙️" };
 
+/** Where the command palette can jump to: canonical screens only, never a legacy redirect. */
+export const PALETTE_DESTINATIONS: NavItem[] = [
+  ...PRIMARY_NAV,
+  { path: "/accounts?tab=bank", label: "בנק ויתרות", icon: "🏦" },
+  { path: "/accounts?tab=credit", label: "כרטיסי אשראי", icon: "💳" },
+  { path: "/accounts?tab=loans", label: "הלוואות וחובות", icon: "📉" },
+  { path: "/accounts?tab=savings", label: "חיסכון ויעדים", icon: "🐷" },
+  { path: "/commitments", label: "התחייבויות קרובות", icon: "📅" },
+  { path: "/commitments?tab=calendar", label: "לוח שנה פיננסי", icon: "🗓️" },
+  { path: "/imports", label: "העלאת מידע", icon: "📂" },
+  { path: "/data", label: "מידע ומסמכים", icon: "📁" },
+  { path: "/review", label: "פריטים לבדיקה", icon: "🔎" },
+  { path: "/check-in", label: "בדיקת הכסף השבועית", icon: "🌿" },
+  { path: "/assistant", label: "העוזר המשפחתי", icon: "🌿" },
+  { path: "/alerts", label: "התראות", icon: "🚨" },
+  { path: "/activity", label: "יומן פעילות", icon: "🕘" },
+  { path: "/settings", label: "הגדרות", icon: "⚙️" },
+  MANAGE_NAV,
+];
+
 /** Titles for the header, covering hubs, primary routes AND legacy standalone routes. */
 const ROUTE_TITLES: Record<string, NavItem> = {
   "/": PRIMARY_NAV[0],

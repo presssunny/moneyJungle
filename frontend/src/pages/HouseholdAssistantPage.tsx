@@ -1,7 +1,7 @@
 import { AskBox } from "../components/assistant/AskBox";
 import { DuplicateReview } from "../components/assistant/DuplicateReview";
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { AsyncSection } from "../components/common/AsyncSection";
 import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
@@ -15,6 +15,8 @@ import "../styles/household-assistant.css";
 
 export default function HouseholdAssistantPage() {
   const resource = useAsync(getHouseholdSnapshot, []);
+  const [params] = useSearchParams();
+  const asked = params.get("ask") ?? "";
   const [plan, setPlan] = useState<AssistantPlan | null>(null);
   const [busy, setBusy] = useState(false);
   const [consent, setConsent] = useState(false);
@@ -54,7 +56,7 @@ export default function HouseholdAssistantPage() {
             </details>
           </Card>
           <Card title="לשאול על הכסף">
-            <AskBox aiAvailable={data.aiAvailable} />
+            <AskBox aiAvailable={data.aiAvailable} initialQuestion={asked} autoAsk={Boolean(asked)} />
           </Card>
           <DuplicateReview scan={data.duplicates} disabled={resource.loading || Boolean(resource.error)} />
           <Card title="חיובים קרובים וחובות פתוחים">

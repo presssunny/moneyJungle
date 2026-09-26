@@ -25,8 +25,9 @@ export function Modal({ title, open, onClose, children, footer, size = "default"
     previouslyFocused.current = document.activeElement as HTMLElement;
     document.body.classList.add("modal-open");
 
-    // Move focus into the dialog (first field, else the dialog itself)
+    // Move focus into the dialog: a field marked data-autofocus, else the first control, else the dialog itself
     const focusTarget =
+      dialogRef.current?.querySelector<HTMLElement>("[data-autofocus]") ??
       dialogRef.current?.querySelector<HTMLElement>(
         "input, select, textarea, button, [tabindex]:not([tabindex='-1'])"
       ) ?? dialogRef.current;

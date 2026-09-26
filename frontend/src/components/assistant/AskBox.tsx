@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { apiErrorMessage } from "../../services/api";
 import { askHouseholdQuestion } from "../../services/householdAssistant.service";
@@ -10,6 +10,8 @@ interface AskBoxProps {
   documentId?: number;
   aiAvailable?: boolean;
   initialQuestion?: string;
+  /** Ask `initialQuestion` on arrival, e.g. when sent here from the command palette. */
+  autoAsk?: boolean;
 }
 
 const MODE_NOTE: Record<QuestionAnswer["mode"], string> = {
@@ -18,7 +20,7 @@ const MODE_NOTE: Record<QuestionAnswer["mode"], string> = {
   unanswered: "",
 };
 
-export function AskBox({ documentId, aiAvailable = false, initialQuestion = "" }: AskBoxProps) {
+export function AskBox({ documentId, aiAvailable = false, initialQuestion = "", autoAsk = false }: AskBoxProps) {
   const [question, setQuestion] = useState(initialQuestion);
   const [consent, setConsent] = useState(false);
   const [answer, setAnswer] = useState<QuestionAnswer | null>(null);
@@ -32,6 +34,14 @@ export function AskBox({ documentId, aiAvailable = false, initialQuestion = "" }
     catch (e) { setError(apiErrorMessage(e)); }
     finally { setBusy(false); }
   }
+
+  useEffect(() => {
+    if (!autoAsk || initialQuestion.trim().length < 2) return;
+    const timer = setTimeout(() => void ask(initialQuestion), 0);
+    return () => clearTimeout(timer);
+    // Only on arrival: later edits are the household's own to submit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function submit(e: FormEvent) {
     e.preventDefault();

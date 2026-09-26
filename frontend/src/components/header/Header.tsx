@@ -1,4 +1,5 @@
 import { Icon } from "../common/Icon";
+import { CommandPalette } from "../search/CommandPalette";
 import { NavLink, useLocation } from "react-router-dom";
 import { MANAGE_NAV, routeTitle } from "../../app/navigation";
 import { useGateAuth } from "../../hooks/useGateAuth";
@@ -18,6 +19,7 @@ export function Header() {
         {current?.label ?? ""}
       </h1>
       <div className="header-actions">
+        <CommandPalette />
         <NavLink to="/imports" className="btn btn-ghost btn-sm"><Icon name="upload"/>העלאת מידע</NavLink>
         <NavLink to={MANAGE_NAV.path} className="header-icon-btn" title={MANAGE_NAV.label} aria-label={MANAGE_NAV.label}>
           <Icon name="settings"/>

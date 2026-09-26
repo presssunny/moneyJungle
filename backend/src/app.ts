@@ -30,6 +30,7 @@ import { recurringRoutes } from "./modules/recurring/recurring.routes";
 import { remindersRoutes } from "./modules/reminders/reminders.routes";
 import { reportsRoutes } from "./modules/reports/reports.routes";
 import { savingsRoutes } from "./modules/savings/savings.routes";
+import { searchRoutes } from "./modules/search/search.routes";
 import { settingsRoutes } from "./modules/settings/settings.routes";
 import { subscriptionsRoutes } from "./modules/subscriptions/subscriptions.routes";
 
@@ -55,6 +56,7 @@ app.use("/api/gate/login", rateLimit({ windowMs: 15 * 60 * 1000, max: 10 }));
 app.use("/api", activityRecorder);
 app.use("/api/gate", gateRoutes);
 app.use("/api/activity", activityRoutes);
+app.use("/api/search", searchRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/reminders", remindersRoutes);
 app.use("/api/alerts", alertsRoutes);
