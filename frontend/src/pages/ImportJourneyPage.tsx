@@ -20,12 +20,18 @@ const UPLOAD_TYPES = [
   { icon: "📉", label: "הלוואה", hint: "לוח סילוקין" },
 ];
 
+// Each session gets a fresh screen, so nothing from the previous one has to be reset.
 export default function ImportJourneyPage(){
+ const [params]=useSearchParams();const id=params.get('session');
+ return <ImportJourney key={id??'new'}/>;
+}
+
+function ImportJourney(){
  const [params,setParams]=useSearchParams();const id=params.get('session');
- const [session,setSession]=useState<ImportSession|null>(null);const [busy,setBusy]=useState(false);const [error,setError]=useState('');const [accepted,setAccepted]=useState(false);
+ const [session,setSession]=useState<ImportSession|null>(null);const [busy,setBusy]=useState(Boolean(id));const [error,setError]=useState('');const [accepted,setAccepted]=useState(false);
  const [answers,setAnswers]=useState<Record<string,string|number>>({});const [newName,setNewName]=useState('');const [lastFour,setLastFour]=useState('');
  const sources=useAsync(getFinancialStatus,[]);const loans=useAsync(async()=> (await api.get('/loans')).data.loans as Array<{id:number;loanName:string}>,[]);
- useEffect(()=>{let alive=true;setSession(null);setAccepted(false);setError('');if(id){setBusy(true);getImportSession(id).then(s=>{if(alive){setSession(s);setAnswers(s.answers??{});}}).catch(e=>{if(alive)setError(apiErrorMessage(e));}).finally(()=>{if(alive)setBusy(false);});}return()=>{alive=false;};},[id]);
+ useEffect(()=>{let alive=true;if(id){getImportSession(id).then(s=>{if(alive){setSession(s);setAnswers(s.answers??{});}}).catch(e=>{if(alive)setError(apiErrorMessage(e));}).finally(()=>{if(alive)setBusy(false);});}return()=>{alive=false;};},[id]);
  async function run(action:()=>Promise<ImportSession>){setBusy(true);setError('');try{const next=await action();setSession(next);setAnswers(next.answers??{});setAccepted(false);if(id!==next.id)setParams({session:next.id});}catch(e){setError(apiErrorMessage(e));}finally{setBusy(false);}}
  function inputNumber(key:string,value:string){setAnswers(old=>({...old,[key]:value?Number(value):''}));}
  const cleanAnswers=()=>Object.fromEntries(Object.entries(answers).filter(([,v])=>v!==''));

@@ -15,7 +15,6 @@ export function useLookups() {
 
   useEffect(() => {
     let alive = true;
-    setFailed(false);
     Promise.all([listCategories(), listPaymentMethods()])
       .then(([cats, methods]) => {
         if (!alive) return;
@@ -30,7 +29,7 @@ export function useLookups() {
     };
   }, [attempt]);
 
-  const reload = useCallback(() => setAttempt((n) => n + 1), []);
+  const reload = useCallback(() => { setFailed(false); setAttempt((n) => n + 1); }, []);
 
   useEffect(()=>{
     const changed=(event:Event)=>{if(["categories","payment-methods","rules"].includes((event as CustomEvent<{domain:string}>).detail?.domain))reload();};

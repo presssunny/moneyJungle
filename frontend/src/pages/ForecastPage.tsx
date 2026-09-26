@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { AsyncSection } from "../components/common/AsyncSection";
@@ -23,8 +23,10 @@ export default function ForecastPage() {
   const [draft, setDraft] = useState(preferences.scenario);
   const [scenario, setScenario] = useState(preferences.scenario);
   const [excluded, setExcluded] = useState(preferences.excluded);
-  const [saved, setSaved] = useState(false);
-  useEffect(() => { setSaved(saveForecastPreferences(scenario, excluded, preferenceMonth)); }, [scenario, excluded, preferenceMonth]);
+  // Re-writing what was just read tells whether this browser can keep the scenario at all.
+  const [saved, setSaved] = useState(() => saveForecastPreferences(preferences.scenario, preferences.excluded, preferenceMonth));
+  function applyScenario(next: typeof scenario) { setScenario(next); setSaved(saveForecastPreferences(next, excluded, preferenceMonth)); }
+  function applyExcluded(next: string[]) { setExcluded(next); setSaved(saveForecastPreferences(scenario, next, preferenceMonth)); }
   const [selected, setSelected] = useState(0);
   const [metric, setMetric] = useState("balance");
   const [tipHidden, setTipHidden] = useState(false);
@@ -68,14 +70,14 @@ export default function ForecastPage() {
           <Card title="מה יקרה אם…">
             <details className="metric-explanation"><summary>שמירת התרחיש</summary><p className="text-muted">{saved ? "התרחיש שחושב ובחירת חודשי ההשוואה נשמרים בדפדפן הזה, בחשבון שלך, עד סוף החודש הנוכחי." : "השמירה בדפדפן אינה זמינה; התרחיש נשמר רק כל עוד המסך פתוח."}</p></details>
             <p className="text-muted">שינוי חודשי חל בכל 12 חודשי התחזית. מספר שלילי מציין הפחתה. ההדמיה אינה משנה עסקאות או תקציב.</p>
-            <form onSubmit={(e) => { e.preventDefault(); setScenario({ ...draft }); }}>
+            <form onSubmit={(e) => { e.preventDefault(); applyScenario({ ...draft }); }}>
               <div className="future-form">
                 <Input label="שינוי בהכנסה החודשית (₪)" type="number" step="0.01" min={-1000000} max={1000000} required value={draft.monthlyIncomeChange} onChange={(e) => setDraft({ ...draft, monthlyIncomeChange: Number(e.target.value) })} />
                 <Input label="שינוי בהוצאה החודשית (₪)" type="number" step="0.01" min={-1000000} max={1000000} required value={draft.monthlyExpenseChange} onChange={(e) => setDraft({ ...draft, monthlyExpenseChange: Number(e.target.value) })} />
                 <Input label="הוצאה חד־פעמית נוספת (₪)" type="number" step="0.01" min={0} max={10000000} required value={draft.oneTimeExpense} onChange={(e) => setDraft({ ...draft, oneTimeExpense: Number(e.target.value) })} />
                 <Select label="חודש ההוצאה הנוספת" value={draft.oneTimeMonth} onChange={(e) => setDraft({ ...draft, oneTimeMonth: Number(e.target.value) })} options={data.months.map((row, i) => ({ value: i + 1, label: formatMonthKey(row.monthKey) }))} />
               </div>
-              <div className="row-actions"><Button type="submit" disabled={!data.sufficient}>בדיקת ההשפעה</Button><Button type="button" variant="ghost" onClick={() => { setDraft(initial); setScenario(initial); }}>איפוס</Button></div>
+              <div className="row-actions"><Button type="submit" disabled={!data.sufficient}>בדיקת ההשפעה</Button><Button type="button" variant="ghost" onClick={() => { setDraft(initial); applyScenario(initial); }}>איפוס</Button></div>
             </form>
             {scenarioActive && <p role="status">העודף השנתי בתרחיש: <strong>{money(data.scenarioAnnualBalance)}</strong> לעומת {money(data.annualBalance)} בתחזית הבסיס.</p>}
           </Card>
@@ -98,7 +100,7 @@ export default function ForecastPage() {
               <p>ממוצע של עד שישה חודשים קודמים שבהם רשומות גם הכנסות וגם הוצאות. חודש ללא רשומות אינו נחשב לאפס. הנתונים עשויים להיות חלקיים; התחזית אינה מניחה עונתיות או צמיחה ואינה מבטיחה תוצאה.</p>
               <p>אפשר להוציא מהממוצע חודש חריג או חודש שהדוחות בו חלקיים. התחייבויות עתידיות מוצגות בנפרד; סיום הלוואה אינו מפחית אוטומטית את הממוצע. ניתן לבדוק שינוי באמצעות התרחיש.</p>
               <p>{data.backtest.monthsTested > 0 ? `בבדיקה על ${data.backtest.monthsTested} חודשים קודמים, הסטייה הממוצעת בהוצאות הייתה ${money(data.backtest.meanAbsoluteExpenseError)}. בכל חודש השתמשנו רק בחודשים שקדמו לו. זו בדיקה על הרשומות הקיימות, לא הבטחת דיוק לעתיד.` : "אין עדיין מספיק חודשים לבדיקת דיוק מול העבר."}</p>
-              <div className="future-months">{data.history.map((row) => <label key={row.monthKey} className="future-month"><input type="checkbox" checked={!excluded.includes(row.monthKey)} onChange={(e) => setExcluded((old) => e.target.checked ? old.filter((key) => key !== row.monthKey) : [...old, row.monthKey])} />{formatMonthKey(row.monthKey)}<small>הכנסות {money(row.incomeTotal)} · הוצאות {money(row.expenseTotal)}</small></label>)}</div>
+              <div className="future-months">{data.history.map((row) => <label key={row.monthKey} className="future-month"><input type="checkbox" checked={!excluded.includes(row.monthKey)} onChange={(e) => applyExcluded(e.target.checked ? excluded.filter((key) => key !== row.monthKey) : [...excluded, row.monthKey])} />{formatMonthKey(row.monthKey)}<small>הכנסות {money(row.incomeTotal)} · הוצאות {money(row.expenseTotal)}</small></label>)}</div>
             </details>
           </Card>
         </>;

@@ -1,6 +1,6 @@
 import { Icon } from "../common/Icon";
 import { Modal } from "../common/Modal";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { MANAGE_NAV, PRIMARY_NAV } from "../../app/navigation";
 
@@ -13,11 +13,11 @@ const PRIMARY_ITEMS = [PRIMARY_NAV[0], PRIMARY_NAV[1], PRIMARY_NAV[2], PRIMARY_N
 const MORE_ITEMS = [PRIMARY_NAV[4], MANAGE_NAV];
 
 export function BottomNav() {
-  const [moreOpen, setMoreOpen] = useState(false);
   const location = useLocation();
-
-  // A navigation always dismisses the sheet.
-  useEffect(() => setMoreOpen(false), [location.pathname]);
+  // The sheet belongs to the screen it was opened on, so any navigation dismisses it.
+  const [openedOn, setOpenedOn] = useState<string | null>(null);
+  const moreOpen = openedOn === location.pathname;
+  const setMoreOpen = (open: boolean) => setOpenedOn(open ? location.pathname : null);
 
   const moreActive = MORE_ITEMS.some((item) => location.pathname.startsWith(item.path));
 
@@ -44,7 +44,7 @@ export function BottomNav() {
         <button
           type="button"
           className={`bottom-nav-item ${moreActive ? "bottom-nav-item-active" : ""}`}
-          onClick={() => setMoreOpen((open) => !open)}
+          onClick={() => setMoreOpen(!moreOpen)}
           aria-expanded={moreOpen}
           aria-haspopup="dialog"
         >

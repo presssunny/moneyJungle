@@ -4,7 +4,9 @@
  * colour, and always marked in text rather than by colour alone.
  */
 
-export type Certainty = "measured" | "scenario" | "unknown";
+import { certaintyAriaLabel, certaintyValue, type Certainty } from "../../utils/certainty";
+
+export type { Certainty };
 
 const LABEL: Record<Exclude<Certainty, "measured">, { icon: string; text: string; hint: string }> = {
   scenario: {
@@ -19,9 +21,6 @@ const LABEL: Record<Exclude<Certainty, "measured">, { icon: string; text: string
   },
 };
 
-/** The em dash shown instead of a number that we do not actually know. */
-export const UNKNOWN_PLACEHOLDER = "—";
-
 export function UncertaintyBadge({ level }: { level: Exclude<Certainty, "measured"> }) {
   const { icon, text, hint } = LABEL[level];
   return (
@@ -29,28 +28,6 @@ export function UncertaintyBadge({ level }: { level: Exclude<Certainty, "measure
       <span aria-hidden>{icon}</span> {text}
     </span>
   );
-}
-
-/** Value text for a given certainty: brackets for a scenario, an em dash for unknown. */
-export function certaintyValue(level: Certainty, formatted: string): string {
-  if (level === "unknown") return UNKNOWN_PLACEHOLDER;
-  if (level === "scenario") return `(${formatted})`;
-  return formatted;
-}
-
-/** Spoken label for a value at a given certainty (IA §1.2 accessibility column). */
-export function certaintyAriaLabel(level: Certainty, label: string, formatted: string): string {
-  if (level === "unknown") return `${label}: לא ידוע, דורש בדיקה`;
-  if (level === "scenario") return `${label}: ${formatted}, תרחיש — לא מדוח הבנק`;
-  return `${label}: ${formatted}`;
-}
-
-/**
- * An amount that mixes measured months with unknown ones is never shown as a
- * single confident number (IA §1.2): "₪1,240 ועוד לא ידוע".
- */
-export function partialTotal(formatted: string): string {
-  return `${formatted} ועוד לא ידוע`;
 }
 
 /** Inline value + badge, for table cells and free text. */

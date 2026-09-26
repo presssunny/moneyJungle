@@ -6,7 +6,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { AsyncSection } from "../components/common/AsyncSection";
 import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
-import { useConfirm } from "../components/common/ConfirmDialog";
+import { useConfirm } from "../hooks/useConfirm";
 import { EmptyState } from "../components/common/EmptyState";
 import { Modal } from "../components/common/Modal";
 import { PageShell } from "../components/common/PageShell";

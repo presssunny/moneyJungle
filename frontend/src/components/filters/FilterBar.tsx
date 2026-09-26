@@ -1,5 +1,5 @@
 import { useLocation, useSearchParams } from "react-router-dom";
-import { useFilters } from "../../context/FiltersContext";
+import { useFilters } from "../../context/filtersState";
 import { currentMonthKey, formatMonthKey } from "../../utils/format";
 import { MonthSelector } from "../header/MonthSelector";
 import { filterScope } from "./filterScope";

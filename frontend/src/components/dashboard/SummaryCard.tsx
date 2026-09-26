@@ -1,10 +1,6 @@
 import { Icon } from "../common/Icon";
-import {
-  certaintyAriaLabel,
-  certaintyValue,
-  UncertaintyBadge,
-  type Certainty,
-} from "../common/UncertaintyBadge";
+import { UncertaintyBadge } from "../common/UncertaintyBadge";
+import { certaintyAriaLabel, certaintyValue, type Certainty } from "../../utils/certainty";
 
 interface SummaryCardProps {
   label: string;

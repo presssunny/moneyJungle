@@ -1,5 +1,4 @@
-import type { ReactNode } from "react";
-import { FiltersProvider, useFilters } from "./FiltersContext";
+import { useFilters } from "./filtersState";
 
 /**
  * Compatibility shim: the month is now the `range` slice of the global filters
@@ -13,11 +12,6 @@ interface MonthContextValue {
   month: number;
   setMonthKey: (key: string) => void;
   goToday: () => void;
-}
-
-/** @deprecated Use `FiltersProvider`. Kept so older imports do not break. */
-export function MonthProvider({ children }: { children: ReactNode }) {
-  return <FiltersProvider>{children}</FiltersProvider>;
 }
 
 export function useMonth(): MonthContextValue {

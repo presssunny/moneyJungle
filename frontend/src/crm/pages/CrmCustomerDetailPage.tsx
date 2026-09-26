@@ -2,7 +2,7 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Button } from "../../components/common/Button";
 import { Card } from "../../components/common/Card";
-import { useConfirm } from "../../components/common/ConfirmDialog";
+import { useConfirm } from "../../hooks/useConfirm";
 import { EmptyState } from "../../components/common/EmptyState";
 import { ErrorMessage } from "../../components/common/ErrorMessage";
 import { Input } from "../../components/common/Input";

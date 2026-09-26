@@ -1,4 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { FiltersContext, type FiltersContextValue } from "./filtersState";
 import { useSearchParams } from "react-router-dom";
 import { currentMonthKey } from "../utils/format";
 
@@ -7,29 +8,6 @@ import { currentMonthKey } from "../utils/format";
  * `custom`, account and category need API support that does not exist yet (§9.2).
  * They are declared anyway to keep the storage/URL contract stable.
  */
-export type RangeMode = "month" | "custom";
-
-export interface GlobalFilters {
-  range: { mode: RangeMode; monthKey: string; from: string; to: string };
-  accountId: number | null;
-  categoryId: number | null;
-}
-
-interface FiltersContextValue extends GlobalFilters {
-  /** Selected month as "YYYY-MM" (kept for the legacy useMonth() API). */
-  monthKey: string;
-  year: number;
-  month: number;
-  setMonthKey: (key: string) => void;
-  goToday: () => void;
-  setAccountId: (id: number | null) => void;
-  setCategoryId: (id: number | null) => void;
-  clearAll: () => void;
-  /** How many filters differ from the default — drives the mobile "מסננים (2)" badge. */
-  activeCount: number;
-}
-
-const FiltersContext = createContext<FiltersContextValue | null>(null);
 
 const STORAGE_KEY = "mj_filters";
 
@@ -120,10 +98,4 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
   }, [monthKey, accountId, categoryId, setMonthKey, goToday, setAccountId, setCategoryId, clearAll]);
 
   return <FiltersContext.Provider value={value}>{children}</FiltersContext.Provider>;
-}
-
-export function useFilters(): FiltersContextValue {
-  const ctx = useContext(FiltersContext);
-  if (!ctx) throw new Error("useFilters must be used inside FiltersProvider");
-  return ctx;
 }

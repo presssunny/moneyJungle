@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "../common/Button";
 import type { LoanEvent } from "../../types/models";
 import { formatCurrency } from "../../utils/format";
@@ -12,20 +12,23 @@ import { formatCurrency } from "../../utils/format";
 const COLOURS = ["var(--primary)", "var(--success)", "var(--secondary)", "var(--warning)"];
 const PIECES = 34;
 
+// Scattered but deterministic, so rendering stays pure and every celebration looks the same.
+const scatter = (i: number, salt: number) => {
+  const x = Math.sin(i * 12.9898 + salt * 78.233) * 43758.5453;
+  return x - Math.floor(x);
+};
+const CONFETTI = Array.from({ length: PIECES }, (_, i) => ({
+  id: i,
+  left: scatter(i, 1) * 100,
+  delay: scatter(i, 2) * 0.6,
+  duration: 2.2 + scatter(i, 3) * 1.4,
+  rotate: scatter(i, 4) * 360,
+  colour: COLOURS[i % COLOURS.length],
+  wide: scatter(i, 5) > 0.5,
+}));
+
 function Confetti() {
-  const pieces = useMemo(
-    () =>
-      Array.from({ length: PIECES }, (_, i) => ({
-        id: i,
-        left: Math.random() * 100,
-        delay: Math.random() * 0.6,
-        duration: 2.2 + Math.random() * 1.4,
-        rotate: Math.random() * 360,
-        colour: COLOURS[i % COLOURS.length],
-        wide: Math.random() > 0.5,
-      })),
-    []
-  );
+  const pieces = CONFETTI;
 
   return (
     <div className="confetti" aria-hidden>
@@ -56,10 +59,9 @@ interface Props {
 }
 
 export function LoanCelebration({ event, remainingActive, onClose }: Props) {
-  const [motionOk, setMotionOk] = useState(false);
+  const [motionOk] = useState(() => !window.matchMedia("(prefers-reduced-motion: reduce)").matches);
 
   useEffect(() => {
-    setMotionOk(!window.matchMedia("(prefers-reduced-motion: reduce)").matches);
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();
     }

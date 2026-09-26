@@ -1,6 +1,7 @@
 import { MetricExplanation } from "../components/common/MetricExplanation";
 import { TabbedHub } from "../components/common/TabbedHub";
-import { UNKNOWN_PLACEHOLDER, UncertaintyBadge } from "../components/common/UncertaintyBadge";
+import { UncertaintyBadge } from "../components/common/UncertaintyBadge";
+import { UNKNOWN_PLACEHOLDER } from "../utils/certainty";
 import { useAsync } from "../hooks/useAsync";
 import { listLoans } from "../services/finance.service";
 import { listBankAccounts, listSavingsGoals } from "../services/planning.service";

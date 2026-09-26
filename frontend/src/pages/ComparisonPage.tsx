@@ -6,7 +6,7 @@ import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
 import { EmptyState } from "../components/common/EmptyState";
 import { SkeletonChart, SkeletonRows } from "../components/common/Skeleton";
-import { UNKNOWN_PLACEHOLDER } from "../components/common/UncertaintyBadge";
+import { UNKNOWN_PLACEHOLDER } from "../utils/certainty";
 import { chartChrome, tooltipStyle } from "../components/dashboard/chartTheme";
 import { useMonth } from "../context/MonthContext";
 import { useAsync } from "../hooks/useAsync";

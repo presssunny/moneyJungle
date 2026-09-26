@@ -46,8 +46,6 @@ function FileFrame({ doc }: { doc: DocumentRecord }) {
   useEffect(() => {
     let alive = true;
     let objectUrl: string | null = null;
-    setUrl(null);
-    setError("");
     fetchDocumentFile(doc.id)
       .then((blob) => {
         if (!alive) return;
