@@ -3,7 +3,7 @@ import { businessDate } from "../../utils/date.utils";
 import { formatILS } from "../../utils/money.utils";
 import { dashboardRepository } from "../dashboard/dashboard.repository";
 import { monthTotals, spentByCategory } from "../dashboard/dashboard.service";
-import { documentBreakdown } from "../documents/documentBreakdown.service";
+import { documentBreakdown, type DocumentBreakdown } from "../documents/documentBreakdown.service";
 import { upcomingCommitments } from "../journey/actions.service";
 import { financialStatus } from "../journey/coverage.service";
 import { financialMetric } from "../journey/metrics.service";
@@ -28,6 +28,16 @@ function resolveMonth(param: MonthParam, today = businessDate()) {
 const monthName = ({ year, month }: { year: number; month: number }) => `${HEBREW_MONTHS[month - 1]} ${year}`;
 const monthKey = ({ year, month }: { year: number; month: number }) => `${year}-${String(month).padStart(2, "0")}`;
 
+// A net figure hides an unusual charge offset by a credit, so the gross amounts lead.
+function interestSentence(breakdown: DocumentBreakdown, coverage: string) {
+  const interest = breakdown.interest;
+  if (!interest) return `לא נמצאה ריבית בקובץ ${breakdown.fileName}.`;
+  if (interest.kind === "planned") {
+    return `לפי הלוח מתוכננת ריבית של ${money(interest.amount)} לאורך ${interest.payments} תשלומים. זה תכנון, לא ריבית שנגבתה; בהלוואה בריבית מותנית ייתכן שלא תיגבה. הריבית בפועל — רק מדף הבנק.`;
+  }
+  return `בקובץ ${breakdown.fileName}${coverage} נגבתה ריבית של ${money(interest.charged)}, זוכו ${money(interest.credited)}, ובנטו ${money(interest.net)}.`;
+}
+
 /** Every figure comes from the service that already owns it; this only words the result. */
 export async function answerQuestion(userId: number, routed: RoutedQuestion, documentId?: number): Promise<Answer> {
   switch (routed.intent) {
@@ -40,7 +50,7 @@ export async function answerQuestion(userId: number, routed: RoutedQuestion, doc
         answer: `ב${monthName(period)} נכנסו ${money(totals.incomeTotal)} ויצאו ${money(totals.expenseTotal)}, כלומר ${left >= 0 ? "נשארו" : "חסרו"} ${money(Math.abs(left))}.`,
         facts: [fact("נכנס", totals.incomeTotal), fact("יצא", totals.expenseTotal), fact("מתוכם באשראי", totals.creditTotal), fact("נשאר", left)],
         links: [{ label: "התנועות של החודש", to: `/transactions?month=${monthKey(period)}` }],
-        limitations: ["לפי מה שנרשם ונקלט. קרן הלוואה, העברות בין חשבונות ואשראי מתגלגל אינם הוצאה", "אשראי נספר לפי חודש העסקה בדוח, לא לפי מועד הירידה מהבנק"],
+        limitations: ["זה הפרש בין הכנסות להוצאות שנרשמו — לא יתרת הבנק ולא כסף פנוי", "קרן הלוואה, העברות בין חשבונות ואשראי מתגלגל אינם הוצאה", "אשראי נספר לפי חודש העסקה בדוח, לא לפי מועד הירידה מהבנק"],
       };
     }
     case "category_spend": {
@@ -94,16 +104,16 @@ export async function answerQuestion(userId: number, routed: RoutedQuestion, doc
           : "אין הלוואות פעילות רשומות.",
         facts: [fact("יתרה להחזר", summary.totalBalance), fact("תשלום חודשי", summary.monthlyPayment), fact("ריבית חודשית משוערת", summary.monthlyInterest)],
         links: [{ label: "ההלוואות", to: "/accounts?tab=loans" }],
-        limitations: ["היתרה היא האחרונה שנרשמה להלוואה, ומתעדכנת בייבוא לוח סילוקין או בעריכה"],
+        limitations: ["היתרה היא האחרונה שנרשמה להלוואה, ומתעדכנת בייבוא לוח סילוקין או בעריכה", "הריבית המשוערת מחושבת מהיתרה ומשיעור הריבית; בהלוואה בריבית מותנית היא עלולה לא להיגבות. הריבית בפועל — מדף הבנק"],
       };
     }
     case "goals": {
       const { goals, summary } = await savingsService.list(userId);
       return {
         intent: routed.intent,
-        answer: goals.length
-          ? `ביעדי החיסכון נרשמו ${money(summary.savedTotal)} מתוך ${money(summary.targetTotal)}.`
-          : "עדיין לא הוגדרו יעדים.",
+        answer: !goals.length ? "עדיין לא הוגדרו יעדים."
+          : !summary.setAsideCount ? "אין יעדי חיסכון; יש רק יעדי סילוק הלוואה."
+          : `ביעדי החיסכון נרשמו ${money(summary.savedTotal)} מתוך ${money(summary.targetTotal)}.`,
         facts: goals.map((g) => ({ label: g.goalName, value: g.progress.percent, display: `${g.progress.percent}%` })),
         links: [{ label: "היעדים", to: "/accounts?tab=savings" }],
         limitations: ["יעד סילוק הלוואה אינו חיסכון ולכן אינו נספר בסכום החיסכון"],
@@ -131,8 +141,7 @@ export async function answerQuestion(userId: number, routed: RoutedQuestion, doc
       const lines = routed.intent === "document_interest" ? breakdown.lines.filter((l) => interestKeys.has(l.key)) : breakdown.lines;
       return {
         intent: routed.intent,
-        answer: routed.intent === "document_interest"
-          ? breakdown.interestNet !== null ? `בקובץ ${breakdown.fileName}${coverage} נרשמה ריבית נטו של ${money(breakdown.interestNet)}.` : `לא נמצאה ריבית בקובץ ${breakdown.fileName}.`
+        answer: routed.intent === "document_interest" ? interestSentence(breakdown, coverage)
           : `הקובץ ${breakdown.fileName}${coverage} יצר ${breakdown.lines.reduce((n, l) => n + l.count, 0)} רשומות, לפי המשמעות שלהן:`,
         facts: lines.map((l) => ({ label: `${l.label} (${l.count})`, value: l.amount, display: money(l.amount) })),
         links: [{ label: "המסמך ומה שזוהה בו", to: "/data" }],

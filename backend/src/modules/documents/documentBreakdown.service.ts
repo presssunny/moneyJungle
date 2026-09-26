@@ -19,8 +19,14 @@ export interface DocumentBreakdown {
   /** False when the batch this file produced is gone (rolled back, or imported before lineage existed). */
   available: boolean;
   lines: BreakdownLine[];
-  /** Interest net of interest credits (a credit is a negative financing expense, never income); null when the file has none to speak of. */
-  interestNet: number | null;
+  /**
+   * statement: interest actually charged and credited (a credit is a negative financing
+   * expense, never income). planned: a schedule's interest over its life — a plan, not a charge.
+   */
+  interest:
+    | { kind: "statement"; charged: number; credited: number; net: number }
+    | { kind: "planned"; amount: number; payments: number }
+    | null;
   note: string | null;
 }
 
@@ -40,7 +46,7 @@ export async function documentBreakdown(userId: number, id: number): Promise<Doc
   const doc = await prisma.document.findFirst({ where: { id, userId } });
   if (!doc) throw ApiError.notFound("המסמך לא נמצא");
   const base = { documentId: doc.id, fileName: doc.fileName, kind: doc.kind, coverageFrom: day(doc.coverageFrom), coverageTo: day(doc.coverageTo) };
-  const unavailable = (note: string): DocumentBreakdown => ({ ...base, available: false, lines: [], interestNet: null, note });
+  const unavailable = (note: string): DocumentBreakdown => ({ ...base, available: false, lines: [], interest: null, note });
 
   if (doc.kind === "bank_statement") {
     if (!doc.linkedStatementImportId) return unavailable("הדף הזה לא מקושר לתנועות שנקלטו ממנו");
@@ -53,7 +59,10 @@ export async function documentBreakdown(userId: number, id: number): Promise<Doc
     const totalOf = (resolution: BankResolution) => decimalToNumber(groups.find((g) => g.resolution === resolution)?._sum.amount);
     const hasInterest = groups.some((g) => g.resolution === "financing_charge" || g.resolution === "financing_credit");
     return { ...base, available: true, note: null,
-      interestNet: hasInterest ? round2(totalOf("financing_charge") - totalOf("financing_credit")) : null,
+      interest: hasInterest ? {
+        kind: "statement", charged: round2(totalOf("financing_charge")), credited: round2(totalOf("financing_credit")),
+        net: round2(totalOf("financing_charge") - totalOf("financing_credit")),
+      } : null,
       lines: groups.map((g) => ({
       key: g.resolution ?? "unresolved",
       label: g.resolution ? RESOLUTION_LABELS[g.resolution as BankResolution] ?? g.resolution : "טרם סווג",
@@ -69,7 +78,7 @@ export async function documentBreakdown(userId: number, id: number): Promise<Doc
       by: ["transactionType"], where: { userId, creditImportId: doc.linkedCreditImportId },
       _sum: { amount: true }, _count: { _all: true },
     });
-    return { ...base, available: true, interestNet: null,
+    return { ...base, available: true, interest: null,
       note: batch.status === "confirmed" ? null : "הדוח טרם אושר, ולכן הסכומים עוד לא נספרים בהוצאות החודש",
       lines: groups.map((g) => ({ key: g.transactionType, label: CREDIT_TYPE_LABELS[g.transactionType] ?? g.transactionType,
         amount: round2(decimalToNumber(g._sum.amount)), count: g._count._all })) };
@@ -81,7 +90,7 @@ export async function documentBreakdown(userId: number, id: number): Promise<Doc
       where: { loanId: doc.linkedLoanId, loan: { userId } }, _sum: { principal: true, interest: true }, _count: { _all: true },
     });
     if (!sums._count._all) return unavailable("שורות הלוח כבר אינן קיימות");
-    return { ...base, available: true, interestNet: round2(decimalToNumber(sums._sum.interest)),
+    return { ...base, available: true, interest: { kind: "planned", amount: round2(decimalToNumber(sums._sum.interest)), payments: sums._count._all },
       note: "לוח סילוקין הוא תכנון: הריבית שבפועל נקבעת לפי דף הבנק", lines: [
       { key: "principal", label: "קרן לפי הלוח", amount: round2(decimalToNumber(sums._sum.principal)), count: sums._count._all },
       { key: "interest", label: "ריבית מתוכננת לפי הלוח", amount: round2(decimalToNumber(sums._sum.interest)), count: sums._count._all },

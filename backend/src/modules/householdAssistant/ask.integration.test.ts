@@ -99,10 +99,26 @@ describe("asking the household assistant", () => {
     const doc = await prisma.document.create({ data: { userId, fileName: "דף.xlsx", fileHash: "a".repeat(64), kind: "bank_statement", linkedStatementImportId: statement.id, coverageFrom: new Date("2026-08-01"), coverageTo: new Date("2026-08-31") } });
     const answer = await askQuestion(userId, { question: "כמה ריבית יש בדף הזה?", consent: false, documentId: doc.id }, null);
     expect(answer).toMatchObject({ mode: "rules", intent: "document_interest" });
-    expect(answer.answer).toContain("70");
+    expect(answer.answer).toContain("נגבתה ריבית של ₪100, זוכו ₪30, ובנטו ₪70");
     expect(answer.facts.map((f) => f.value)).toEqual(expect.arrayContaining([100, 30]));
     expect(answer.facts).toHaveLength(2);
     await expect(askQuestion(otherId, { question: "מה היה בקובץ?", consent: false, documentId: doc.id }, null)).rejects.toMatchObject({ statusCode: 404 });
+  });
+
+  it("calls a schedule's interest a plan, never interest charged", async () => {
+    const loan = await prisma.loan.create({ data: { userId, loanName: "הריבית עלינו", loanType: "personal", originalAmount: 10000, currentBalance: 10000, annualInterestRate: 4, monthlyPayment: 500, startDate: new Date("2026-01-01") } });
+    await prisma.loanScheduleEntry.createMany({ data: [1, 2].map((n) => ({ loanId: loan.id, paymentNumber: n, paymentDate: new Date(`2026-0${n}-15`), principal: 400, interest: 33.5, total: 433.5, balanceAfter: 10000 - 400 * n })) });
+    const doc = await prisma.document.create({ data: { userId, fileName: "לוח.xlsx", fileHash: "b".repeat(64), kind: "loan_schedule", linkedLoanId: loan.id } });
+    const answer = await askQuestion(userId, { question: "כמה ריבית יש בלוח?", consent: false, documentId: doc.id }, null);
+    expect(answer.answer).toContain("מתוכננת ריבית של ₪67 לאורך 2 תשלומים");
+    expect(answer.answer).toContain("לא ריבית שנגבתה");
+    expect(answer.answer).not.toContain("נטו");
+  });
+
+  it("does not report payoff-only goals as zero savings", async () => {
+    const loan = await prisma.loan.create({ data: { userId, loanName: "רכב", loanType: "car", originalAmount: 9000, currentBalance: 9000, annualInterestRate: 4, monthlyPayment: 500, startDate: new Date("2026-01-01") } });
+    await prisma.savingsGoal.create({ data: { userId, goalName: "סגירת רכב", goalType: "debt_payoff", loanId: loan.id, targetAmount: 9000 } });
+    expect((await askQuestion(userId, { question: "איך אני מתקדמת ביעדים?", consent: false }, null)).answer).toBe("אין יעדי חיסכון; יש רק יעדי סילוק הלוואה.");
   });
 
   it("is a read over HTTP: CSRF-protected, strict, and absent from the activity log", async () => {
