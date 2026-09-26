@@ -18,3 +18,8 @@ export function orderLedgerKeys(keys: LedgerKey[]) {
 export function filteredSummary(keys: LedgerKey[]) {
   return { filteredCount: keys.length, filteredTotal: round2(keys.reduce((sum, key) => sum + Math.round(key.amount * 100), 0) / 100) };
 }
+
+/** A page past the end — the last row deleted, or a stale link — is the last page, never an empty one. */
+export function clampPage(page: number, pageSize: number, count: number) {
+  return Math.min(page, Math.max(1, Math.ceil(count / pageSize)));
+}

@@ -43,7 +43,7 @@ export default function ExpensesPage() {
   const { monthKey } = useMonth();
   const location = useLocation();
   const navigate = useNavigate();
-  const ledger = useLedgerQuery("expenses");
+  const ledger = useLedgerQuery("expenses", monthKey);
   const { expenseCategories } = useLookups();
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Expense | null>(null);

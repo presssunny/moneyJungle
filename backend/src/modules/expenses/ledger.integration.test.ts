@@ -63,6 +63,13 @@ describe("server-paginated expense ledger", () => {
     expect((await get(`/api/expenses/ledger?year=2026&month=8&category=${foodId}&from=2026-08-01&to=2026-08-06`)).body.filteredCount).toBe(3);
   });
 
+  it("answers a page past the end with the last page, not an empty one", async () => {
+    const res = await get("/api/expenses/ledger?year=2026&month=8&pageSize=10&page=9");
+    expect(res.body).toMatchObject({ page: 2, filteredCount: 13 });
+    expect(res.body.items).toHaveLength(3);
+    expect((await get("/api/incomes/ledger?year=2026&month=8&page=5")).body).toMatchObject({ page: 1, filteredCount: 2 });
+  });
+
   it("rejects unknown filters", async () => {
     expect((await get("/api/expenses/ledger?year=2026&month=8&userId=1")).status).toBe(400);
     expect((await get("/api/expenses/ledger?year=2026&month=8&pageSize=1000")).status).toBe(400);

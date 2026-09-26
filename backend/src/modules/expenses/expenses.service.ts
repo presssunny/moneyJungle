@@ -5,7 +5,7 @@ import { monthRange } from "../../utils/date.utils";
 import { decimalToNumber, round2, sumDecimals } from "../../utils/money.utils";
 import { spendingCredit } from "../dashboard/dashboard.repository";
 import { monthTotals } from "../dashboard/dashboard.service";
-import { filteredSummary, ledgerRange, orderLedgerKeys, type LedgerKey } from "../../utils/ledger.utils";
+import { clampPage, filteredSummary, ledgerRange, orderLedgerKeys, type LedgerKey } from "../../utils/ledger.utils";
 import { expensesRepository } from "./expenses.repository";
 import { CreateExpenseBody, ExpenseLedgerQuery, UpdateExpenseBody } from "./expenses.validation";
 
@@ -129,7 +129,8 @@ export const expensesService = {
       ...expenseKeys.map((r) => ({ source: "expense", id: r.id, date: r.expenseDate, amount: decimalToNumber(r.amount) })),
       ...creditKeys.map((r) => ({ source: "credit", id: r.id, date: r.billingDate, amount: decimalToNumber(r.amount) })),
     ]);
-    const page = keys.slice((query.page - 1) * query.pageSize, query.page * query.pageSize);
+    const pageNumber = clampPage(query.page, query.pageSize, keys.length);
+    const page = keys.slice((pageNumber - 1) * query.pageSize, pageNumber * query.pageSize);
     const idsOf = (source: string) => page.filter((k) => k.source === source).map((k) => k.id);
     const [expenses, credit] = await Promise.all([
       prisma.expense.findMany({ where: { userId, id: { in: idsOf("expense") } }, include: { category: true, paymentMethod: true } }),
@@ -141,7 +142,7 @@ export const expensesService = {
     ]);
     return {
       items: page.map((k) => bySource.get(`${k.source}:${k.id}`)!),
-      page: query.page, pageSize: query.pageSize,
+      page: pageNumber, pageSize: query.pageSize,
       ...filteredSummary(keys),
       monthTotal: totals.expenseTotal,
       monthCount: monthCounts[0] + monthCounts[1],

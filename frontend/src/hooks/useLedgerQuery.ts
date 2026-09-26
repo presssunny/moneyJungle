@@ -5,10 +5,10 @@ const FILTER_KEYS = { expenses: ["category", "uncat", "recurring", "from", "to"]
 
 /**
  * The URL filters as server query params, with the free-text search debounced so
- * typing does not send a request per keystroke. A changed filter starts again at
- * page 1 without an effect: the page belongs to the filter set it was chosen for.
+ * typing does not send a request per keystroke. A changed filter or month starts
+ * again at page 1 without an effect: the page belongs to what it was chosen for.
  */
-export function useLedgerQuery(kind: "expenses" | "incomes") {
+export function useLedgerQuery(kind: "expenses" | "incomes", monthKey: string) {
   const { params, clear } = useTransactionFilters();
   const search = params.get("q") ?? "";
   const [debounced, setDebounced] = useState(search);
@@ -19,7 +19,7 @@ export function useLedgerQuery(kind: "expenses" | "incomes") {
   const filters: Record<string, string> = {};
   for (const key of FILTER_KEYS[kind]) { const value = params.get(key); if (value) filters[key] = value; }
   if (debounced.trim()) filters.q = debounced.trim();
-  const filterKey = JSON.stringify(filters);
+  const filterKey = JSON.stringify([monthKey, filters]);
   const [paging, setPaging] = useState({ filterKey, page: 1 });
   const page = paging.filterKey === filterKey ? paging.page : 1;
   return {

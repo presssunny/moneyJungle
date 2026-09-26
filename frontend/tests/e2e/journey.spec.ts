@@ -322,6 +322,7 @@ test('Phones get sheets, a quick-add button and a way back; menus work from the 
  if(mobile){
   await fab.click();
   await expect(page.locator('.modal-overlay')).toHaveCSS('align-items','flex-end');
+  await expect(page.locator('.modal')).toHaveCSS('animation-name','sheet-rise');
   await expect(page.getByRole('textbox',{name:'הוספת הוצאה בשפה חופשית'})).toBeVisible();
   await page.keyboard.press('Escape');
  }else{
@@ -350,6 +351,17 @@ test('The expense table pages on the server and a new filter starts again at pag
  await expect(page.getByRole('status').filter({hasText:'תנועות בסינון'})).toContainText('3 תנועות');
  await expect(page.getByRole('button',{name:'עמוד הבא'})).toHaveCount(0);
  expect(pages).toEqual(['1:','2:','1:שורה']);
+});
+test('Changing month returns the ledger to its first page',async({page})=>{
+ await mockApi(page);const asked:string[]=[];
+ await page.route('**/api/expenses/ledger?**',async route=>{const q=new URL(route.request().url()).searchParams;const p=Number(q.get('page'));asked.push(`${q.get('month')}:${p}`);
+  const items=Array.from({length:10},(_,i)=>({id:p*100+i,amount:1,businessName:`ח${p}-${i}`,expenseDate:'2026-08-10',categoryId:null,isRecurring:false,source:'manual'}));
+  await route.fulfill({json:{items,page:p,pageSize:50,filteredCount:120,filteredTotal:120,monthTotal:120,monthCount:120}});});
+ await page.goto('/transactions?tab=expenses&month=2026-09');
+ await page.getByRole('button',{name:'עמוד הבא'}).click();await expect(page.getByText('עמוד 2 מתוך 3',{exact:false})).toBeVisible();
+ await page.getByLabel('חודש',{exact:true}).selectOption('8');
+ await expect(page.getByText('עמוד 1 מתוך 3',{exact:false})).toBeVisible();
+ expect(asked.at(-1)).toBe('8:1');
 });
 test('With several accounts the household picks the spending account and confirms who pays what',async({page})=>{
  await mockApi(page);let saved:any=null;

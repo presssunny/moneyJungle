@@ -39,10 +39,6 @@ documentsRoutes.get(
   })
 );
 
-/**
- * What was recognized from the file, row by row — so a preview can show it
- * alongside (or instead of) the raw bytes, before the numbers are trusted.
- */
 documentsRoutes.get(
   "/:id/breakdown",
   validate({ params: idParamSchema }),
@@ -52,6 +48,10 @@ documentsRoutes.get(
   })
 );
 
+/**
+ * What was recognized from the file, row by row — so a preview can show it
+ * alongside (or instead of) the raw bytes, before the numbers are trusted.
+ */
 documentsRoutes.get(
   "/:id/rows",
   validate({ params: idParamSchema }),

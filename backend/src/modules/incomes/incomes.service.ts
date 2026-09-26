@@ -1,7 +1,7 @@
 import { prisma } from "../../config/database";
 import type { Prisma } from "../../../generated/prisma/client";
 import { ApiError } from "../../utils/ApiError";
-import { filteredSummary, ledgerRange, orderLedgerKeys } from "../../utils/ledger.utils";
+import { clampPage, filteredSummary, ledgerRange, orderLedgerKeys } from "../../utils/ledger.utils";
 import { monthTotals } from "../dashboard/dashboard.service";
 import { monthRange } from "../../utils/date.utils";
 import { decimalToNumber, sumDecimals } from "../../utils/money.utils";
@@ -43,12 +43,13 @@ export const incomesService = {
       prisma.income.count({ where: { userId, incomeDate: { gte: start, lt: end }, isRecurring: true } }),
     ]);
     const ordered = orderLedgerKeys(keys.map((k) => ({ source: "income", id: k.id, date: k.incomeDate, amount: decimalToNumber(k.amount) })));
-    const pageIds = ordered.slice((query.page - 1) * query.pageSize, query.page * query.pageSize).map((k) => k.id);
+    const pageNumber = clampPage(query.page, query.pageSize, ordered.length);
+    const pageIds = ordered.slice((pageNumber - 1) * query.pageSize, pageNumber * query.pageSize).map((k) => k.id);
     const rows = await prisma.income.findMany({ where: { userId, id: { in: pageIds } } });
     const byId = new Map(rows.map((row) => [row.id, serialize(row)]));
     return {
       items: pageIds.map((id) => byId.get(id)!),
-      page: query.page, pageSize: query.pageSize,
+      page: pageNumber, pageSize: query.pageSize,
       ...filteredSummary(ordered),
       /** The filtered rows grouped by kind, for the breakdown beside the table. */
       byType: byType.map((g) => ({ type: g.type, label: INCOME_TYPE_LABELS[g.type] ?? g.type, amount: decimalToNumber(g._sum.amount) })),

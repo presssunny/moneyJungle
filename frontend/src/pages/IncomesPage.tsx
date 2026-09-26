@@ -54,7 +54,7 @@ export default function IncomesPage() {
   const [saving, setSaving] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
-  const ledger = useLedgerQuery("incomes");
+  const ledger = useLedgerQuery("incomes", monthKey);
   const incomesRes = useAsync(() => listIncomeLedger(monthKey, ledger.filters, ledger.page), [monthKey, reloadKey, ledger.filterKey, ledger.page], "לא הצלחנו לטעון את ההכנסות", ["incomes","imports","bank","documents"]);
   const load = () => setReloadKey((k) => k + 1);
 

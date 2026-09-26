@@ -21,7 +21,7 @@ export type AlertType =
   | "uncategorized_expense"
   | "expensive_loan";
 
-/** Same default window as GET /api/dashboard/upcoming, so the two never disagree. */
+/** Same default window as buildUpcoming's callers, so the two never disagree. */
 export const UPCOMING_WINDOW_DAYS = 45;
 /** Share of one monthly cycle's outflow that makes a single day worth warning about. */
 export const HEAVY_DAY_SHARE = 0.3;
