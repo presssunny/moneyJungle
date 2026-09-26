@@ -21,7 +21,7 @@ export const gateService = {
     if (!identity) {
       // One message for every failure mode — naming which part was wrong (or
       // whether the account exists/is disabled) would leak that information.
-      throw ApiError.unauthorized("שם המשתמש או הסיסמה שגויים");
+      throw ApiError.unauthorized("האימייל או הסיסמה שגויים");
     }
 
     const token = crypto.randomBytes(32).toString("hex");
