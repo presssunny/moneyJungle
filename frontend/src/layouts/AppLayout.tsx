@@ -1,4 +1,5 @@
 import { Link, Outlet, useSearchParams } from "react-router-dom";
+import { QuickAddFab } from "../components/common/QuickAddFab";
 import { Toaster } from "../components/common/Toaster";
 import { FilterBar } from "../components/filters/FilterBar";
 import { Header } from "../components/header/Header";
@@ -32,6 +33,7 @@ export function AppLayout() {
           </main>
         </div>
       </div>
+      <QuickAddFab />
       <BottomNav />
       <Toaster />
     </FiltersProvider>

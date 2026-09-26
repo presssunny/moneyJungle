@@ -1,7 +1,7 @@
 import { Icon } from "../common/Icon";
 import { CommandPalette } from "../search/CommandPalette";
-import { NavLink, useLocation } from "react-router-dom";
-import { MANAGE_NAV, routeTitle } from "../../app/navigation";
+import { Link, NavLink, useLocation } from "react-router-dom";
+import { MANAGE_NAV, breadcrumbTrail, routeTitle } from "../../app/navigation";
 import { useGateAuth } from "../../hooks/useGateAuth";
 
 /**
@@ -12,12 +12,26 @@ export function Header() {
   const location = useLocation();
   const { logout } = useGateAuth();
   const current = routeTitle(location.pathname);
+  const trail = breadcrumbTrail(location.pathname);
 
   return (
     <header className="header">
-      <h1 className="header-title">
-        {current?.label ?? ""}
-      </h1>
+      <div>
+        {trail.length > 0 && (
+          <nav className="breadcrumbs" aria-label="מיקום">
+            <ol>
+              {trail.map((item, index) => (
+                <li key={item.path}>
+                  {index < trail.length - 1 ? <Link to={item.path}>{item.label}</Link> : <span aria-current="page">{item.label}</span>}
+                </li>
+              ))}
+            </ol>
+          </nav>
+        )}
+        <h1 className="header-title">
+          {current?.label ?? ""}
+        </h1>
+      </div>
       <div className="header-actions">
         <CommandPalette />
         <NavLink to="/imports" className="btn btn-ghost btn-sm"><Icon name="upload"/>העלאת מידע</NavLink>

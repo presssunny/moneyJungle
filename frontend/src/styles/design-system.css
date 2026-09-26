@@ -344,3 +344,26 @@ input[type=checkbox], input[type=radio] { accent-color: var(--primary); width: 1
 .palette-option-active { background: var(--surface-selected); box-shadow: inset 0 0 0 1px var(--primary); }
 .palette-detail { font-size: 13px; flex-shrink: 0; }
 .palette-status { font-size: 13px; margin: 0; min-height: 1.2em; }
+/* On a phone every dialog is a bottom sheet: it rises from where the thumb already is. */
+@media (max-width: 860px) {
+  .modal-overlay { align-items: flex-end; padding: 0; }
+  .modal, .modal-wide { max-width: 100%; max-height: 92vh; border-radius: var(--radius-surface) var(--radius-surface) 0 0; border-bottom: 0; padding-bottom: env(safe-area-inset-bottom, 0px); animation: sheet-rise .2s ease-out; }
+  .modal::before { content: ""; display: block; width: 44px; height: 4px; border-radius: 99px; background: var(--divider); margin: 8px auto 0; }
+}
+@keyframes sheet-rise { from { transform: translateY(24px); opacity: .6; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .modal, .modal-wide { animation: none; } }
+
+.action-menu { position: relative; display: inline-flex; }
+.action-menu-list { position: absolute; inset-inline-end: 0; top: calc(100% + 4px); z-index: 30; min-width: 11rem; margin: 0; padding: var(--space-1); list-style: none; background: var(--surface); border: 1px solid var(--divider); border-radius: var(--radius-control); box-shadow: 0 8px 24px #0000001f; }
+.action-menu-item { display: flex; width: 100%; align-items: center; gap: var(--space-2); min-height: 44px; padding: var(--space-2) var(--space-3); border: 0; border-radius: 8px; background: none; color: var(--text); font: inherit; text-align: start; cursor: pointer; }
+.action-menu-item:hover, .action-menu-item:focus-visible { background: var(--surface-selected); outline: none; }
+.action-menu-item-danger { color: var(--danger); }
+
+.quick-add-fab { display: none; }
+@media (max-width: 860px) {
+  .quick-add-fab { display: grid; place-items: center; position: fixed; inset-inline-start: 16px; bottom: calc(84px + env(safe-area-inset-bottom, 0px)); z-index: 40; width: 56px; height: 56px; border: 0; border-radius: 50%; background: var(--primary); color: var(--primary-contrast); font-size: 28px; line-height: 1; box-shadow: 0 6px 18px #00000033; cursor: pointer; }
+}
+
+.breadcrumbs ol { display: flex; flex-wrap: wrap; gap: var(--space-1); margin: 0 0 var(--space-1); padding: 0; list-style: none; font-size: 13px; color: var(--text-muted); }
+.breadcrumbs li + li::before { content: "‹"; margin-inline-end: var(--space-1); }
+.breadcrumbs a { color: inherit; }

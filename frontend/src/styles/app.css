@@ -1999,33 +1999,8 @@
 
 /* ---------- Mobile "עוד" sheet (§8.1) ---------- */
 
-.bottom-sheet-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 45;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: flex-end;
-}
 
-.bottom-sheet {
-  width: 100%;
-  background: var(--bg-card);
-  border-top: 1px solid var(--border);
-  border-radius: 16px 16px 0 0;
-  padding: 10px 16px calc(80px + env(safe-area-inset-bottom, 0px));
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
 
-.bottom-sheet-handle {
-  width: 44px;
-  height: 4px;
-  border-radius: 99px;
-  background: var(--border);
-  margin: 4px auto 10px;
-}
 
 .bottom-sheet-item {
   display: flex;
@@ -2044,15 +2019,6 @@
   color: var(--primary);
 }
 
-.bottom-sheet-close {
-  min-height: 48px;
-  margin-top: 6px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: none;
-  color: var(--text-muted);
-  font-size: 14px;
-}
 
 /* ---------- Accounts hub overview strip (§6.1) ---------- */
 

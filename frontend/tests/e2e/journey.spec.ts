@@ -306,3 +306,29 @@ test('The command palette opens from the keyboard, finds screens and records, an
  await page.getByRole('option',{name:/לשאול את העוזר/}).click();
  await expect(page).toHaveURL(/\/assistant\?ask=/);
 });
+test('Phones get sheets, a quick-add button and a way back; menus work from the keyboard',async({page},info)=>{
+ await mockApi(page);const mobile=info.project.name==='mobile';
+ await page.route('**/api/savings',route=>route.fulfill({json:{goals:[{id:1,goalName:'חופשה',goalType:'savings',loanId:null,loan:null,targetAmount:'5000.00',currentAmount:'1000.00',monthlyTarget:null,targetDate:null,progress:{current:1000,target:5000,remaining:4000,percent:20,complete:false,source:'manual',asOf:null}}],summary:{savedTotal:1000,targetTotal:5000,setAsideCount:1,completion:20}}}));
+ await page.goto('/activity');
+ const crumbs=page.getByRole('navigation',{name:'מיקום'});
+ await expect(crumbs.getByText('יומן פעילות')).toHaveAttribute('aria-current','page');
+ await crumbs.getByRole('link',{name:'הגדרות וניהול'}).click();await expect(page).toHaveURL(/\/manage$/);
+ await page.goto('/accounts?tab=savings');
+ const fab=page.getByRole('button',{name:'הוספת הוצאה מהירה'});
+ if(mobile){
+  await fab.click();
+  await expect(page.locator('.modal-overlay')).toHaveCSS('align-items','flex-end');
+  await expect(page.getByRole('textbox',{name:'הוספת הוצאה בשפה חופשית'})).toBeVisible();
+  await page.keyboard.press('Escape');
+ }else{
+  await expect(fab).toBeHidden();
+ }
+ const menu=page.getByRole('button',{name:'פעולות ליעד חופשה'});
+ await menu.focus();await page.keyboard.press('ArrowDown');
+ await expect(page.getByRole('menuitem',{name:'עריכה'})).toBeFocused();
+ await page.keyboard.press('ArrowDown');await expect(page.getByRole('menuitem',{name:'מחיקה'})).toBeFocused();
+ await page.keyboard.press('Escape');await expect(page.getByRole('menu')).toHaveCount(0);await expect(menu).toBeFocused();
+ await menu.click();await page.getByRole('menuitem',{name:'עריכה'}).click();
+ await expect(page.getByRole('dialog',{name:'עריכת יעד'})).toBeVisible();
+ if(!mobile)await expect(page.locator('.modal-overlay')).toHaveCSS('align-items','center');
+});

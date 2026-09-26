@@ -2,6 +2,7 @@ import { MetricExplanation } from "../components/common/MetricExplanation";
 import { useState, type FormEvent } from "react";
 import { AsyncSection } from "../components/common/AsyncSection";
 import { PageShell } from "../components/common/PageShell";
+import { ActionMenu } from "../components/common/ActionMenu";
 import { Button } from "../components/common/Button";
 import { Card } from "../components/common/Card";
 import { useConfirm } from "../components/common/ConfirmDialog";
@@ -190,10 +191,13 @@ export default function SavingsPage() {
               <Card key={goal.id} className="budget-card">
                 <div className="budget-card-head">
                   <span className="budget-card-name">{iconOf(goal.goalType)} {goal.goalName}</span>
-                  <span className="row-actions">
-                    <Button size="sm" variant="ghost" onClick={() => openEdit(goal)} aria-label="עריכה">✏️</Button>
-                    <Button size="sm" variant="ghost" onClick={() => remove(goal)} aria-label="מחיקה">🗑️</Button>
-                  </span>
+                  <ActionMenu
+                    label={`פעולות ליעד ${goal.goalName}`}
+                    items={[
+                      { label: "עריכה", onSelect: () => openEdit(goal) },
+                      { label: "מחיקה", tone: "danger", onSelect: () => remove(goal) },
+                    ]}
+                  />
                 </div>
                 <div className="budget-bar">
                   <div className="budget-bar-fill tone-success-bg" style={{ width: `${percent}%` }} />

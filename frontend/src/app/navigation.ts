@@ -86,3 +86,13 @@ export function routeTitle(pathname: string): NavItem | undefined {
     .sort((a, b) => b.length - a.length)[0];
   return match ? ROUTE_TITLES[match] : ROUTE_TITLES["/"];
 }
+
+/** Screens reached from the management hub, whose header shows the way back to it. */
+const MANAGE_CHILDREN = new Set(["/assistant", "/activity", "/alerts", "/settings", "/commitments", "/data", "/review", "/check-in"]);
+
+/** The trail above a screen's title; empty on primary destinations, which are their own root. */
+export function breadcrumbTrail(pathname: string): NavItem[] {
+  const current = routeTitle(pathname);
+  if (!current || !MANAGE_CHILDREN.has(current.path)) return [];
+  return [MANAGE_NAV, current];
+}
