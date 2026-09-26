@@ -1,6 +1,6 @@
 # AGENTS.md — The Money Jungle (handoff for Codex)
 
-Written 2026-09-26 at commit `d485c43`; state re-verified against the code on 2026-09-26.
+Written 2026-09-26; updated after the plan completion batch (through commit `1c55be9`).
 Read this first, then `CLAUDE.md` (the project constitution, in Hebrew) — its rules are binding for you too.
 
 ## 1. What the app is
@@ -48,7 +48,7 @@ Shared types: `backend/src/types/` and `frontend/src/types/models.ts`.
 
 Never run `npm run test:golden:record` to "fix" a red test — it overwrites the verified golden amounts. Only after a number change was intentionally verified against the bank.
 
-Last known full results: backend 434 tests / 42 files green; Playwright suites green (see `docs/research/household-assistant-implementation.md` §Validation).
+Last known full results (2026-09-26): backend 480 tests / 49 files green; main Playwright run 64 passed (mocked journey + real-data design and onboarding suites, desktop + mobile); assistant real-API suite 12 passed; frontend build and lint (0 warnings) clean; 29 migrations applied, no schema drift; all fixtures present.
 
 ## 4. Running locally (WSL on /mnt/c — gotchas)
 
@@ -69,23 +69,18 @@ cd frontend && npm run dev         # port 5173
 
 - **DB is intentionally empty** for user 1 — the user wiped all financial data on 2026-09-19 to re-upload from scratch. Not a bug. Backup: `~/finance-db/backups/finance_planner-before-reset-20260919-225301.sql`.
 - Source files for re-import are in `/mnt/c/Users/sunny/Downloads/` (`report__2026-01-01__2026-07-24.xlsx`, `report__2026-07-01__2026-08-01.xlsx`, `פירוט עסקאות וזיכויים*.xlsx`, `FibiSave1785065794047.xls`).
-- Last completed work (2026-09-23): **Household assistant** at `/assistant` (הגדרות וניהול → העוזר המשפחתי) — duplicate-candidate review with audited decisions and undo, evidence-keyed `duplicate_transaction` alerts that are withdrawn (`withdrawn_at`) instead of deleted, optional AI step planning. Full contract: `docs/research/household-assistant-implementation.md`.
-- Before that: 6-phase product/UX plan + P0 remediation (G1/G2/G3/G8) — `docs/money-jungle-implementation-progress.md`. Visual redesign — `docs/design/money-jungle-visual-redesign.md`. Roadmap — `docs/roadmap-next-phase.md`.
+- Last completed work (2026-09-26): the remaining roadmap items and audit P1/P2 — activity log, general goals, question answering (household + per document), command palette, mobile sheets/menus/FAB/breadcrumbs, server-side ledger pagination, `Income.source`, multi-account funding allocation, dead-code removal and single-source-of-truth consolidation (`spendingCredit`, `monthTotals.balance`). Commits and scope: `docs/money-jungle-implementation-progress.md` § "Plan completion batch"; status per item: `docs/roadmap-next-phase.md`.
+- Earlier: household assistant with duplicate review (`docs/research/household-assistant-implementation.md`), 6-phase product/UX plan + P0 remediation, visual redesign.
 
 ## 6. Open items / known issues
 
-1. **Cal credit import — fixed in code, not yet re-verified by a real import.** Cal statements hold a triple per purchase (immediate charge חיוב מיידי + reversal + regular billing). The old dedup collapsed the two positive legs inside one file, so a purchase netted to zero (₪21,189 → ₪14,549). Since 2026-09-18 (`25d5597`, `256b7ce`) dedup is a multiset against rows **already in the DB** only (`credit.service.ts` `remaining` map; `imports/importRows.service.ts` "one existing occurrence suggests one duplicate"), so repeated rows inside one file stay distinct. Verified read-only on 2026-09-26: `parseCreditFile` on the real `פירוט עסקאות וזיכויים.xlsx` → 442 rows, net ₪21,189.16, non-financing ₪20,683.00 (= the last correct import). Still to do: import it through the app into the DB and confirm the stored total matches.
-2. **Loan 108 conditional interest.** Loan 108 has two tracks: 432 (fixed interest) and 562 "הריבית עלינו" (interest waived while a ~₪7,000 salary lands). Never derive "condition met" from the presence of an interest credit — that hypothesis was disproven.
-3. **Single-source-of-truth violation:** `backend/src/modules/journey/metrics.service.ts` (lines ~30 and ~52) re-declares the confirmed/non-financing credit filter instead of consuming it from `dashboard.repository.ts`.
-4. **Dead code (verified: no importer / no client):**
-   - `backend/src/modules/imports/smartImport.service.ts` — `smartImportService` is never imported; `/imports/smart` now goes through `legacyImportAdapter.stageLegacyImport`.
-   - `frontend/src/components/dashboard/AttentionPanel.tsx` and `getAttention` in `frontend/src/services/dashboard.service.ts` — unused, so `GET /api/dashboard/attention` and `buildAttention` have no client. **Keep** `collectAttentionCandidates`/`mergeAttention` — `journey/actions.service.ts` uses them.
-   - `frontend/src/components/dashboard/UpdatesTicker.tsx` and `frontend/src/services/updates.service.ts` — the ticker is not rendered anywhere, so `backend/src/modules/updates/` (`/api/updates/ticker`) has no client. The roadmap's "fifth unmerged attention source" is therefore moot — nothing to merge, only to delete.
-   - `smartImportFile`/`importExpensesFile` in `frontend/src/services/finance.service.ts` — compatibility exports with no caller.
-5. Other P1/P2 not yet done: server-side pagination for ordinary transaction tables; frontend lint warnings (~22); multi-account funding-allocation model.
-6. Roadmap (`docs/roadmap-next-phase.md`) items still open: 2.1 AI orchestrator (provider + bounded planning exist; no tool-calling / free-form Q&A), 2.4 command palette, 3.3 general goals, 4.2 audit/activity log, 4.3 mobile components (bottom sheet, context menu, FAB, nested breadcrumbs), 4.4 chat with a document. 4.1 health/status is mostly covered by the coverage panel. Deferred by explicit decision: `unused_subscription` alert, OCR.
-7. Household assistant follow-ups: live AI provider not verified (no key locally); `Income` has no source/provenance column; duplicate matching is exact-only; periodic-expense planning and variable-income scenarios not built.
-8. **No real data in the DB**, and the available bank files end 2026-08-01 — August/September statements are needed for a current picture.
+1. **Billing-date contradiction (needs a domain decision).** `credit.service` `attributionDateOf` writes the transaction date into `billingDate`, while CLAUDE.md §5 says monthly attribution is by billing date; `frontend/src/components/common/financeTerms.ts` ("מועד חיוב") may describe the opposite of the code. Do not change without a banker ruling.
+2. **No "cash" paying account.** With several bank accounts, an obligation paid in cash stays unassigned and blocks the daily allowance (banker-approved for now).
+3. **AI provider not configured.** Free-form question routing via the model and the step planner are tested only with injected providers; set `ANTHROPIC_API_KEY` to verify live.
+4. **No real data in the DB** (wiped 2026-09-19). Cal credit import is fixed in code (multiset dedup since 2026-09-18; parser on the real file: 442 rows, net ₪21,189.16, non-financing ₪20,683.00) but not yet re-verified by an import. Bank files available end 2026-08-01.
+5. **Loan 108 conditional interest.** Track 562 "הריבית עלינו": never derive "condition met" from an interest credit; there is no `interestType` field, so answers word schedule interest as planned only.
+6. Deferred by the user: OCR, `unused_subscription` alert. Gated until v1 is validated on real data: periodic-expense planning, variable-income scenarios, fuzzy duplicate matching.
+7. Minor: a negative balance in another account that has no charges creates no transfer and no warning (banker: warning optional).
 
 ## 7. Where to look
 

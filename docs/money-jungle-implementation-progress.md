@@ -107,3 +107,33 @@ Additional named test gaps from the audit closed in the same batch (commit `855b
 Validation for this batch: backend suite 365/365 passed (up from the prior 337, all newly added tests are net-new coverage, not replacements of weakened assertions), full Playwright E2E 22/22 passed (the prior audit's "22 vs. up to 24" concern was a miscount -- the spec file has 11 `test()` calls x 2 projects = 22, matching exactly), backend and frontend typecheck/lint clean, frontend production build passed, all 21 migrations applied with zero schema drift, all six real fixtures present with five golden entries.
 
 Deliberately not touched in this batch (P1/P2, tracked separately, not correctness bugs): server-side transaction pagination, lint-warning cleanup, dead-code removal (`AttentionPanel`/`getAttention`/`buildAttention`/`mergeAttention`, `imports/smartImport.service.ts`), `metrics.service.ts` redefining its financing/confirmed filter instead of importing it from `dashboardRepository`, the weekly check-in's per-stage UI content fidelity against the plan's table, and the multi-account funding-allocation model itself.
+
+## Plan completion batch (2026-09-26)
+
+Built the open roadmap items and audit P1/P2 in dependency order, each as its own commit, with banker review on every financial change (all approved after fixes).
+
+| Commit | Scope |
+| --- | --- |
+| `97cf5d8` | One `spendingCredit` / `spendingCreditInMonth` predicate replaces nine copies of the confirmed + non-financing filter |
+| `b80bcbd` | Dead code removed (smart-import service, updates ticker module, `/dashboard/attention` and `/dashboard/upcoming`, orphaned panels, compatibility upload wrappers) |
+| `3a9dd0c` | Regression fix: reminders could no longer be created after the journey rewrite; the calendar opens the form again |
+| `cd001a1` | 4.2 activity log (`activity_events`, `/activity`) |
+| `bcad568`, `553ab15` | 3.3 goals: savings / purchase / loan payoff; payoff progress read from the loan balance with its date; goal edit no longer resets the saved amount |
+| `1277530` | `Income.source` provenance, backfilled from bank links |
+| `f869ed2` | `monthTotals` returns `balance`; reports and insights drop their own copies of the monthly sum |
+| `6286ed5`, `1d79324` | 2.1 / 4.4 question answering (household and per document), gross-then-net interest, planned interest never called charged |
+| `2ab4b5b` | 2.4 command palette and `/search` |
+| `558da7f` | 4.3 bottom sheets, ActionMenu, quick-add FAB, breadcrumbs |
+| `1fdc109` | Server-side pagination and filters for the expense and income ledgers; `monthSpend` replaced by `monthTotals` |
+| `d9340df` | Frontend lint: 20 warnings → 0 |
+| `1c55be9` | Multi-account funding allocation per the banker ruling of 2026-09-26 |
+
+Validation: backend `npm test` 480/480 (49 files, run alone); typecheck, test typecheck, lint and build clean; `test:fixtures` all present with golden entries; 29 migrations applied, `prisma migrate diff` shows no difference. Frontend build clean, oxlint 0 warnings. Playwright main config with `MONEY_JUNGLE_DESIGN_E2E=1 MONEY_JUNGLE_REAL_E2E=1`: 64 passed (26.4 min) against the backend restarted on the current code. Assistant real-API suite: 12 passed. New browser cases cover the calendar reminder, activity log, payoff goal, questions, command palette, mobile sheets and menu, ledger paging, and funding allocation.
+
+Deferred by earlier decision, unchanged: OCR, the `unused_subscription` alert. Gated by the research plan until v1 is validated on real data: periodic-expense planning, variable-income scenarios.
+
+Open, not fixed in this batch:
+- `credit.service` `attributionDateOf` stores the transaction date in `billingDate`. That contradicts CLAUDE.md §5, and the "מועד חיוב" wording in `financeTerms.ts` may describe the opposite. Needs a domain decision.
+- There is no "cash" paying-account option. With several accounts, a cash-paid obligation stays unassigned and blocks the allowance.
+- Model routing for free-form questions is tested only with an injected provider. No `ANTHROPIC_API_KEY` is configured locally.
+- The DB still holds no real data (wiped 2026-09-19). Real-data verification of the new flows is through the fixtures and disposable accounts only.
