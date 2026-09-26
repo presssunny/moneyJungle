@@ -33,15 +33,15 @@
 ## 4. מקור אמת יחיד (Single Source of Truth)
 - **אין חישוב כפול של אותו נתון בשני מקומות.** כל חישוב פיננסי יושב בשכבת שירות אחת; ה־UI רק צורך אותה.
 - מקורות האמת הקיימים (לא לשכפל, לצרוך):
-  - **סכומי כסף חודשיים** → `backend/src/modules/dashboard/dashboard.repository.ts` (מסכם `expenses` + confirmed non-financing credit לפי `billingDate`). `expenses.service.monthSpend` וכל השאר משתמשים בו.
-  - **סיווג/קטגוריזציה** → `buildCategorizer` שמיוצא מ־`credit.service`.
+  - **סכומי כסף חודשיים** → `monthTotals` ב־`backend/src/modules/dashboard/dashboard.service.ts`, מעל `dashboard.repository.ts` (`expenses` + אשראי מאושר שאינו financing, לפי `spendingCreditInMonth`). כל השאר צורכים אותו.
+  - **סיווג/קטגוריזציה** → `buildCategorizer` ב־`backend/src/modules/imports/imports.service.ts`.
   - **מקור אמת לתנועות אשראי מול הוצאות**: ה־`הוצאות` הוא READ-TIME MERGE של `expenses` + credit (ראה `expenses.repository.findCreditByMonth`). **אין להעתיק נתונים בין הטבלאות** — זה יגרום ל־double-count בדשבורד.
 
 ## 5. חוקי דומיין פיננסי מחייבים (banker הוא הסמכות)
 - **סיווג הכנסה/הוצאה נקבע לפי העמודה הפיזית** (זכות = הכנסה / חובה = הוצאה) — **לא לפי טקסט התיאור**. תיאור משמש רק לקטגוריזציה משנית.
 - **אשראי מתגלגל / financing** (`transactionType: "financing"`) הוא מימון פנימי — **מוחרג מכל סכומי ההוצאה**.
 - **החזרי הלוואה**: כשהמידע קיים בשורה — לפצל ל**קרן** (principal) ו**ריבית** (interest). ריבית = הוצאה מימונית, לא הוצאה שוטפת.
-- ייחוס חודשי של אשראי מאושר תמיד לפי `billingDate`, לא `transactionDate`.
+- ייחוס חודשי של אשראי מאושר לפי **תאריך העסקה** — הוא שנשמר בעמודה `billingDate` (שמה היסטורי). **מועד החיוב** (`chargeDate`) משמש לתזרים בלבד: חיובים קרובים, אומדן יומי והתאמה לסילוק הכרטיס בבנק.
 - סכומים מגיעים מ־Prisma Decimal כ־**string** ב־frontend — לטפל בהתאם.
 
 ## 6. Definition of Done

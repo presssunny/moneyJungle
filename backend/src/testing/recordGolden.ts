@@ -10,7 +10,8 @@ import { parseBankStatement, parseBankStatementPdf } from "../modules/bank/bankP
 import { parseLoanSchedule } from "../modules/loans/loanSchedule.parser";
 import { FixtureName, hasFixture, readFixture } from "./fixtures";
 import { GOLDEN_FILE, writeGolden } from "./golden";
-import { bankGolden, scheduleGolden } from "./goldenShape";
+import { parseCreditFile } from "../modules/credit/creditParser.service";
+import { bankGolden, creditGolden, scheduleGolden } from "./goldenShape";
 
 const bankExcel: Array<{ key: string; fixture: FixtureName }> = [
   { key: "bank/excel/july", fixture: "bankStatementJuly" },
@@ -61,6 +62,14 @@ async function main() {
     const parsed = parseLoanSchedule(readFixture(fixture));
     writeGolden(key, scheduleGolden(parsed));
     note(true, key, `הלוואה ${parsed.loanNumber}/${parsed.trackNumber} · יתרה ${parsed.currentBalance}`);
+  }
+
+  if (hasFixture("creditStatement")) {
+    const rows = parseCreditFile(readFixture("creditStatement"));
+    writeGolden("credit/cal", creditGolden(rows));
+    note(true, "credit/cal", `${rows.length} שורות · נטו ${creditGolden(rows).net}`);
+  } else {
+    note(false, "credit/cal", "קובץ חסר — מדולג");
   }
 
   console.log(`\nנרשמו ${recorded}, דולגו ${skipped}`);

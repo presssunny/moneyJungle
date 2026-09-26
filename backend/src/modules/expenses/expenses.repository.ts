@@ -16,7 +16,7 @@ export const expensesRepository = {
   },
 
   // Confirmed, non-financing credit-card transactions attributed to this month
-  // (by billingDate — same rule the dashboard uses). Read-only in the expenses
+  // (by purchase date, stored as billingDate — the dashboard's rule). Read-only in the expenses
   // view; the source of truth stays in the credit (אשראי) module.
   findCreditByMonth(userId: number, start: Date, end: Date, categoryId?: number) {
     return prisma.creditTransaction.findMany({

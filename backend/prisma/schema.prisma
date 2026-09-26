@@ -323,8 +323,8 @@ model CreditTransaction {
   transactionDate DateTime  @map("transaction_date") @db.Date
   // מועד חיוב — the real charge date from the statement (null for in-process/foreign rows)
   chargeDate      DateTime? @map("charge_date") @db.Date
-  // Date the expense is attributed to (which month it counts in) = transactionDate,
-  // i.e. when the purchase was made — not when the card charges it (see chargeDate).
+  // The month a row counts in: the purchase date, same value as transactionDate (the
+  // name is historical). chargeDate is for cash flow only (CLAUDE.md §5).
   billingDate     DateTime  @map("billing_date") @db.Date
   businessName    String    @map("business_name") @db.VarChar(255)
   amount          Decimal   @db.Decimal(12, 2)

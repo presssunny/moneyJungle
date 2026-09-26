@@ -7,7 +7,7 @@ export const spendingCredit = {
   creditImport: { status: "confirmed" },
 } satisfies Prisma.CreditTransactionWhereInput;
 
-/** Spending credit attributed to a month by billingDate, never transactionDate. */
+/** Spending credit in a month by its attribution date (`billingDate` = the purchase date), never by chargeDate. */
 export function spendingCreditInMonth(userId: number, start: Date, end: Date) {
   return { userId, billingDate: { gte: start, lt: end }, ...spendingCredit } satisfies Prisma.CreditTransactionWhereInput;
 }

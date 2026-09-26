@@ -12,6 +12,7 @@ const GOLDEN_KEYS: Partial<Record<FixtureName, string>> = {
   bankStatementPdf: "bank/pdf",
   loanSchedule432: "schedule/432",
   loanSchedule562: "schedule/562",
+  creditStatement: "credit/cal",
 };
 
 console.log(`תיקיית ה־fixtures: ${FIXTURES_DIR}\n`);

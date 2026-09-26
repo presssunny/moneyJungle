@@ -16,7 +16,7 @@
 | `bank-statement.pdf` | אותו דף חשבון כ־PDF | `bankStatement.golden.test.ts` (מסלול PDF) |
 | `loan-schedule-1.xlsx` | לוח סילוקין — הלוואה 108, מסלול 432 | `loanSchedule.golden.test.ts` |
 | `loan-schedule-2.xlsx` | לוח סילוקין — הלוואה 108, מסלול 562 | `loanSchedule.golden.test.ts` |
-| `credit-statement.xlsx` | פירוט עסקאות וזיכויים (כרטיס אשראי) | שמור לשלב הבא |
+| `credit-statement.xlsx` | פירוט עסקאות וזיכויים (כאל) | תאריכים כפי שהודפסו, מספר תשלומים מההערות, סכום = סה"כ הגיליון של כאל, golden `credit/cal` |
 
 ## שתי שכבות בדיקה
 

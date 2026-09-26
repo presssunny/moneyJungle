@@ -1,6 +1,7 @@
 import * as XLSX from "xlsx";
 import { ApiError } from "../../utils/ApiError";
 import { round2 } from "../../utils/money.utils";
+import { parseCellDate } from "../../utils/sheetDates";
 
 export type CreditTransactionType = "regular" | "standing_order" | "credit" | "refund" | "financing";
 
@@ -15,7 +16,7 @@ export interface ParsedCreditRow {
   raw: Record<string, unknown>;
 }
 
-type Role = "date" | "business" | "amount" | "payments" | "charge" | "type";
+type Role = "date" | "business" | "amount" | "payments" | "charge" | "type" | "notes";
 
 /**
  * Header keywords → column role. Matched case-insensitively, substring.
@@ -30,6 +31,7 @@ const HEADER_MATCHERS: Array<{ role: Role; keywords: string[] }> = [
   { role: "amount", keywords: ["סכום חיוב", "סכום בש", "סכום בשח", "סכום עסקה", "סכום"] },
   { role: "payments", keywords: ["מספר תשלום", "תשלומים", "מספר תשלומים"] },
   { role: "type", keywords: ["סוג עסקה", "סוג העסקה", "סוג"] },
+  { role: "notes", keywords: ["הערות"] },
 ];
 
 type Cell = string | number | Date | boolean | null | undefined;
@@ -75,29 +77,6 @@ function findHeaderRow(rows: Cell[][]): { rowIndex: number; columns: Partial<Rec
   return null;
 }
 
-function parseCellDate(value: Cell): Date | null {
-  if (value instanceof Date) {
-    return Number.isNaN(value.getTime()) ? null : value;
-  }
-  if (typeof value === "number") {
-    // Excel serial date
-    const parsed = XLSX.SSF.parse_date_code(value);
-    if (!parsed) return null;
-    return new Date(Date.UTC(parsed.y, parsed.m - 1, parsed.d));
-  }
-  if (typeof value === "string") {
-    const match = /^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})/.exec(value.trim());
-    if (!match) return null;
-    const day = Number(match[1]);
-    const month = Number(match[2]);
-    let year = Number(match[3]);
-    if (year < 100) year += 2000;
-    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
-    return new Date(Date.UTC(year, month - 1, day));
-  }
-  return null;
-}
-
 function parseCellAmount(value: Cell): number | null {
   if (typeof value === "number") return round2(value);
   if (typeof value === "string") {
@@ -128,6 +107,18 @@ function parseCellPayments(value: Cell): number {
   return 1;
 }
 
+/**
+ * Cal has no payments column; the count is in its note ("עסקה ב-2 תשלומים",
+ * "עסקה ב-1 תשלומי קרדיט", "תשלום 3 מתוך 12"). Any other note means one payment.
+ */
+function paymentsFromNote(value: Cell): number {
+  const text = typeof value === "string" ? value : "";
+  const ofTotal = /תשלום\s*\d+\s*מתוך\s*(\d+)/.exec(text);
+  if (ofTotal) return Number(ofTotal[1]);
+  const inPayments = /ב-?\s*(\d+)\s*תשלומ/.exec(text);
+  return inPayments && Number(inPayments[1]) >= 1 ? Number(inPayments[1]) : 1;
+}
+
 function parseSheet(rows: Cell[][]): ParsedCreditRow[] {
   const header = findHeaderRow(rows);
   if (!header) return [];
@@ -154,7 +145,8 @@ function parseSheet(rows: Cell[][]): ParsedCreditRow[] {
       // Sign is kept: negative = זיכוי/refund, so totals come out right
       amount,
       paymentCount:
-        header.columns.payments !== undefined ? parseCellPayments(row[header.columns.payments]) : 1,
+        header.columns.payments !== undefined ? parseCellPayments(row[header.columns.payments])
+          : header.columns.notes !== undefined ? paymentsFromNote(row[header.columns.notes]) : 1,
       transactionType: normalizeType(typeText, amount, businessName),
       raw: Object.fromEntries(row.map((cell, i) => [String(i), cell instanceof Date ? cell.toISOString() : cell])),
     });

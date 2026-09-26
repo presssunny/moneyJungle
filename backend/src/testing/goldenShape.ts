@@ -4,6 +4,7 @@
  * supplier names in a file outliving the fixture. Shared by recorder and suites.
  */
 import type { ParsedBankStatement } from "../modules/bank/bankParser.service";
+import type { ParsedCreditRow } from "../modules/credit/creditParser.service";
 import type { ParsedSchedule } from "../modules/loans/loanSchedule.parser";
 
 export interface BankGolden {
@@ -88,5 +89,43 @@ export function scheduleGolden(s: ParsedSchedule): ScheduleGolden {
     principalSum: s.checks.principalSum,
     principalSumMatchesBalance: s.checks.principalSumMatchesBalance,
     rateSpreadPpm: s.checks.rateSpreadPpm,
+  };
+}
+
+export interface CreditGolden {
+  rows: number;
+  net: number;
+  nonFinancing: number;
+  inProcess: number;
+  byType: Record<string, { rows: number; total: number }>;
+  /** Non-financing spend by purchase month — the month a row counts in. */
+  byMonth: Record<string, number>;
+  /** Everything with a charge date, by the month the card charges it. */
+  byChargeMonth: Record<string, number>;
+  multiPayment: number;
+}
+
+export function creditGolden(rows: ParsedCreditRow[]): CreditGolden {
+  const cents = (xs: ParsedCreditRow[]) => xs.reduce((sum, r) => sum + Math.round(r.amount * 100), 0) / 100;
+  const group = (xs: ParsedCreditRow[], key: (r: ParsedCreditRow) => string) => {
+    const out: Record<string, number> = {};
+    for (const r of xs) out[key(r)] = Math.round(((out[key(r)] ?? 0) + r.amount) * 100) / 100;
+    return out;
+  };
+  const byType: CreditGolden["byType"] = {};
+  for (const r of rows) {
+    const entry = byType[r.transactionType] ?? { rows: 0, total: 0 };
+    byType[r.transactionType] = { rows: entry.rows + 1, total: Math.round((entry.total + r.amount) * 100) / 100 };
+  }
+  const nonFinancing = rows.filter((r) => r.transactionType !== "financing");
+  return {
+    rows: rows.length,
+    net: cents(rows),
+    nonFinancing: cents(nonFinancing),
+    inProcess: cents(rows.filter((r) => r.chargeDate === null && r.transactionType !== "financing")),
+    byType,
+    byMonth: group(nonFinancing, (r) => r.transactionDate.toISOString().slice(0, 7)),
+    byChargeMonth: group(rows.filter((r) => r.chargeDate !== null), (r) => r.chargeDate!.toISOString().slice(0, 7)),
+    multiPayment: rows.filter((r) => r.paymentCount > 1).length,
   };
 }
