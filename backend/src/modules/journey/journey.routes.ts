@@ -12,6 +12,7 @@ import { businessDate, json } from "./journey.utils";
 import { journeyActions, upcomingCommitments } from "./actions.service";
 import { sessionSourceExists } from "../imports/importLifecycle.service";
 import { checkIns } from "./checkin.service";
+import { fundingInput, fundingOverview, saveFunding } from "./funding.service";
 export const journeyRoutes=Router(); journeyRoutes.use(gateAuth);
 const situationSchema=z.object({bankAccounts:z.number().int().min(0).max(100).nullable(),creditCards:z.number().int().min(0).max(100).nullable(),loans:z.number().int().min(0).max(100).nullable(),cashActivity:z.boolean().nullable()}).strict();
 journeyRoutes.patch("/situation",asyncHandler(async(req,res)=>{
@@ -64,6 +65,12 @@ journeyRoutes.post("/onboarding/complete",asyncHandler(async(req,res)=>{
     if(!state.picture.hasUsefulData && !completed && (!scope.manualOnly || (!manual && !body.noActivity))) throw ApiError.conflict("יש להשלים קליטה ראשונה או לבחור בהזנה ידנית ולבדוק את המידע שנרשם");
     return prisma.financialProfile.update({where:{userId:req.userId!},data:{onboarding:"completed",completedAt:new Date(),reviewedAt:new Date()}});
   }));
+}));
+journeyRoutes.get("/funding",asyncHandler(async(req,res)=>{res.json(await fundingOverview(req.userId!));}));
+journeyRoutes.put("/funding",asyncHandler(async(req,res)=>{
+  const body=fundingInput.safeParse(req.body);
+  if(!body.success) throw ApiError.badRequest("בחירת החשבונות אינה תקינה");
+  res.json(await saveFunding(req.userId!,body.data));
 }));
 journeyRoutes.get("/review",asyncHandler(async(req,res)=>{res.json(await review(req.userId!));}));
 journeyRoutes.get("/commitments",asyncHandler(async(req,res)=>{res.json(await commitments(req.userId!));}));

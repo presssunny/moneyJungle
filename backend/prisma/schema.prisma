@@ -96,6 +96,7 @@ model User {
   checkIns           MoneyCheckIn[]
   duplicateReviews   DuplicateReview[]
   activityEvents     ActivityEvent[]
+  fundingAssignments FundingAssignment[]
   familyMembers      FamilyMember[]
   sessions           GateSession[]
   settings           Settings?
@@ -385,6 +386,8 @@ model BankAccount {
   user         User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   transactions BankTransaction[]
   statements   BankStatementImport[]
+  fundedSources FundingAssignment[]
+  spendingFor  FinancialProfile[] @relation("SpendingAccount")
 
   @@index([userId])
   @@map("bank_accounts")
@@ -798,10 +801,15 @@ model FinancialProfile {
   cashBuffer     Decimal  @default(0) @map("cash_buffer") @db.Decimal(12, 2)
   essentialReserve Decimal @default(0) @map("essential_reserve") @db.Decimal(12, 2)
   savedReserve   Decimal  @default(0) @map("saved_reserve") @db.Decimal(12, 2)
+  /// With several bank accounts, the one the daily allowance is planned from.
+  spendingAccountId Int? @map("spending_account_id")
+  /// Where savedReserve is held: "spending" (deducted) | "elsewhere" (already outside the plan) | null (not yet answered).
+  savedReserveLocation String? @map("saved_reserve_location") @db.VarChar(12)
   reviewedAt     DateTime? @map("reviewed_at")
   completedAt    DateTime? @map("completed_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  spendingAccount BankAccount? @relation("SpendingAccount", fields: [spendingAccountId], references: [id], onDelete: SetNull)
   @@map("financial_profiles")
 }
 
@@ -895,4 +903,20 @@ model ActivityEvent {
 
   @@index([userId, createdAt, id])
   @@map("activity_events")
+}
+
+/// Which bank account pays an obligation source (a card, loan, recurring payment,
+/// subscription or reminder), as confirmed by the household. A suggestion is never stored here.
+model FundingAssignment {
+  id            Int      @id @default(autoincrement())
+  userId        Int      @map("user_id")
+  sourceKey     String   @map("source_key") @db.VarChar(40)
+  bankAccountId Int      @map("bank_account_id")
+  confirmedAt   DateTime @default(now()) @map("confirmed_at")
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bankAccount   BankAccount @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, sourceKey])
+  @@index([bankAccountId])
+  @@map("funding_assignments")
 }

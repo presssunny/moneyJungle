@@ -25,6 +25,7 @@ async function mockApi(page:Page,{pending=false,coverageAcknowledged=true}={}){
   else if(path==='/api/expenses/ledger'){const items=expense&&!removed?[expense]:[];body={items,page:1,pageSize:50,filteredCount:items.length,filteredTotal:items.reduce((s:number,r:any)=>s+r.amount,0),monthTotal:items.reduce((s:number,r:any)=>s+r.amount,0),monthCount:items.length};}
   else if(path==='/api/incomes/ledger')body={items:[],page:1,pageSize:50,filteredCount:0,filteredTotal:0,monthTotal:0,monthCount:0,byType:[],recurringCount:0};
   else if(path==='/api/incomes')body={incomes:[],total:0};
+  else if(path==='/api/savings')body={goals:[],summary:{savedTotal:0,targetTotal:0,setAsideCount:0,completion:null}};
   else if(path==='/api/loans')body={loans:[],totals:{totalBalance:0}};
   else if(path==='/api/imports/sessions'&&method==='POST'){
    session={id:'00000000-0000-4000-8000-000000000001',fileName:'expenses.csv',kind:'expense_sheet',status:'needs_input',version:0,answers:{},preview:{rows:[{name:'קפה',amount:18,date:null}],count:1,total:18,warnings:['השורות ללא תאריך יירשמו לפי החודש שנבחר'],questions:['נדרש חודש']},result:null};body=session;
@@ -349,4 +350,23 @@ test('The expense table pages on the server and a new filter starts again at pag
  await expect(page.getByRole('status').filter({hasText:'תנועות בסינון'})).toContainText('3 תנועות');
  await expect(page.getByRole('button',{name:'עמוד הבא'})).toHaveCount(0);
  expect(pages).toEqual(['1:','2:','1:שורה']);
+});
+test('With several accounts the household picks the spending account and confirms who pays what',async({page})=>{
+ await mockApi(page);let saved:any=null;
+ const overview=(spending:number|null,assigned:number|null)=>({accounts:[{id:1,name:'עו״ש'},{id:2,name:'משני'}],spendingAccountId:spending,savedReserve:500,savedReserveLocation:saved?.savedReserveLocation??null,sources:[{sourceKey:'credit:7',name:'ויזה',kind:'credit',assignedAccountId:assigned,suggestedAccountId:2,suggestionReason:'חיובי הכרטיס נפרעו רק מחשבון זה'}]});
+ await page.route('**/api/journey/funding',async route=>{
+  if(route.request().method()==='PUT'){saved=route.request().postDataJSON();return route.fulfill({json:overview(saved.spendingAccountId,saved.assignments?.[0]?.bankAccountId??null)});}
+  await route.fulfill({json:overview(null,null)});
+ });
+ await page.goto('/accounts?tab=bank');
+ await expect(page.getByRole('heading',{name:'תכנון יומי כשיש כמה חשבונות'})).toBeVisible();
+ await expect(page.getByText('הצעה: משני',{exact:false})).toBeVisible();
+ await page.getByLabel('החשבון שממנו יוצאות ההוצאות השוטפות').selectOption('1');
+ await page.getByRole('radio',{name:/בחשבון אחר/}).check();
+ await page.getByRole('button',{name:'אישור ההצעה'}).click();
+ await expect(page.getByLabel('החשבון שמשלם את ויזה')).toHaveValue('2');
+ await page.getByRole('button',{name:'שמירת השיוך'}).click();
+ await expect(page.getByRole('status').filter({hasText:'נשמר'})).toBeVisible();
+ expect(saved).toEqual({spendingAccountId:1,savedReserveLocation:'elsewhere',assignments:[{sourceKey:'credit:7',bankAccountId:2}]});
+ await expect(page.getByText('הצעה: משני',{exact:false})).toHaveCount(0);
 });

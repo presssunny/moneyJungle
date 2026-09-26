@@ -20,3 +20,26 @@ export interface ImportSession {
 export interface CheckInView {draft:{id:string;step:number}|null;previousCompletedAt:string|null;due:boolean;token:string;action:{title:string;to:string;reason?:string};status:FinancialStatus & {upcoming:Commitment[]};comparison:{baseline:boolean;added:number|null;late:number|null;changed:number|null;removed:number|null;cashChange:number|null;limited:boolean;historyChanged:boolean|null}}
 export interface JourneyAction {id:string;topic:string;title:string;reason:string;to:string;priority:number}
 export interface HomeStatus extends FinancialStatus {actions:JourneyAction[];actionCount:number;upcoming:Commitment[]}
+
+export interface FundingSource {
+  sourceKey: string;
+  name: string;
+  kind: string;
+  assignedAccountId: number | null;
+  suggestedAccountId: number | null;
+  suggestionReason: string | null;
+}
+
+export interface FundingOverview {
+  accounts: Array<{ id: number; name: string }>;
+  spendingAccountId: number | null;
+  savedReserve: number;
+  savedReserveLocation: "spending" | "elsewhere" | null;
+  sources: FundingSource[];
+}
+
+export interface FundingInput {
+  spendingAccountId?: number | null;
+  savedReserveLocation?: "spending" | "elsewhere" | null;
+  assignments?: Array<{ sourceKey: string; bankAccountId: number | null }>;
+}

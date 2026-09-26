@@ -23,3 +23,5 @@ export async function getHomeStatus():Promise<HomeStatus>{return (await api.get(
 export async function getJourneyActions():Promise<JourneyAction[]>{return (await api.get("/journey/actions")).data;}
 
 export async function saveSituation(input:import("../types/picture.types").Situation){return (await api.patch("/journey/situation",input)).data;}
+export async function getFunding():Promise<import("../types/journey.types").FundingOverview>{return (await api.get("/journey/funding")).data;}
+export async function saveFunding(input:import("../types/journey.types").FundingInput):Promise<import("../types/journey.types").FundingOverview>{return (await api.put("/journey/funding",input)).data;}

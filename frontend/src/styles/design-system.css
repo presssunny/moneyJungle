@@ -367,3 +367,10 @@ input[type=checkbox], input[type=radio] { accent-color: var(--primary); width: 1
 .breadcrumbs ol { display: flex; flex-wrap: wrap; gap: var(--space-1); margin: 0 0 var(--space-1); padding: 0; list-style: none; font-size: 13px; color: var(--text-muted); }
 .breadcrumbs li + li::before { content: "‹"; margin-inline-end: var(--space-1); }
 .breadcrumbs a { color: inherit; }
+.funding-plan { display: flex; flex-direction: column; gap: var(--space-4); }
+.funding-reserve { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.funding-reserve legend { font-weight: 600; margin-bottom: var(--space-2); }
+.funding-sources { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+.funding-source { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 14rem); gap: var(--space-2) var(--space-4); align-items: center; padding-block: var(--space-2); border-bottom: 1px solid var(--divider); overflow-wrap: anywhere; }
+.funding-suggestion { grid-column: 1 / -1; margin: 0; font-size: 13px; }
+@media (max-width: 480px) { .funding-source { grid-template-columns: 1fr; } }

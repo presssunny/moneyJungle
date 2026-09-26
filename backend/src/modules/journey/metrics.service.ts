@@ -127,12 +127,18 @@ export async function financialMetric(userId: number, name: MetricName, month: s
     metric.state=metric.value===null?"unavailable":"provisional";
     metric.formula=state.allowance.formula;
     metric.assumptions=[...state.allowance.assumptions, ...(state.allowance.limitingDate?[`היום המגביל: ${state.allowance.limitingDate}`]:[])];
+    // Components come from the calculation itself, so the explanation cannot drift from the number.
+    const { allowance } = state;
+    const spending = state.balances.find(b => b.id === allowance.spendingAccountId);
+    const eventTo = new Map(state.events.map(e => [e.key, e.to]));
     components=[
-      {key:"cash",label:"יתרות בנק",value:state.balances.length?state.allowance.cash:null,to:"/accounts?tab=bank"},
+      {key:"cash",label:spending?`יתרת ${spending.name} — החשבון לתכנון`:"יתרות בנק",value:state.balances.length?allowance.cashInPlan:null,to:"/accounts?tab=bank"},
       {key:"buffer",label:"כרית ביטחון",value:-Number(state.profile.cashBuffer),to:"/data"},
-      {key:"saved",label:"חיסכון ששוריין",value:-Number(state.profile.savedReserve),to:"/data"},
-      {key:"essential",label:"הוצאות חיוניות שנותרו — נפרסות על ימי התקופה",value:-state.allowance.essentialReserve,to:"/data"},
-      ...state.events.filter(e=>e.decision==="unpaid"&&(e.date<=state.end||e.kind==="credit")).map(e=>({key:e.key,label:e.name,value:e.amount===null?null:-Math.max(0,e.amount),date:e.date,to:e.to})),
+      {key:"saved",label:"חיסכון ששוריין",value:-allowance.savedReserveCounted,to:"/data"},
+      {key:"essential",label:"הוצאות חיוניות שנותרו — נפרסות על ימי התקופה",value:-allowance.essentialReserve,to:"/data"},
+      ...allowance.obligations.map(o=>({key:o.key,label:o.name,value:-o.amount,date:o.date,to:eventTo.get(o.key)??"/commitments"})),
+      ...state.events.filter(e=>e.decision==="unpaid"&&e.amount===null&&(e.date<=state.end||e.kind==="credit")).map(e=>({key:e.key,label:e.name,value:null,date:e.date,to:e.to})),
+      ...allowance.transfers.map(t=>({key:`transfer:${t.accountId}`,label:`העברה לכיסוי החיובים ב${t.name}`,value:-t.amount,date:t.date,to:"/accounts?tab=bank"})),
     ];
   }
   metric.total=components.length;
