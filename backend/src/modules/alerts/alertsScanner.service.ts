@@ -3,6 +3,7 @@ import { prisma } from "../../config/database";
 import { monthRange } from "../../utils/date.utils";
 import { decimalToNumber, formatILS, percent, round2 } from "../../utils/money.utils";
 import { buildUpcoming, type UpcomingResponse } from "../dashboard/cashflow.service";
+import { spendingCreditInMonth } from "../dashboard/dashboard.repository";
 import { spentByCategory } from "../dashboard/dashboard.service";
 import { expensesRepository } from "../expenses/expenses.repository";
 import { computeLoan } from "../loans/loanCalculator.service";
@@ -190,7 +191,7 @@ export async function scanForAlerts(userId: number): Promise<void> {
   // not a statement she stands behind yet.
   const baselineStart = new Date(Date.UTC(year, month - 1 - HIGH_CHARGE_BASELINE_MONTHS, 1));
   const baselineRows = await prisma.creditTransaction.findMany({
-    where: { userId, billingDate: { gte: baselineStart, lt: start }, transactionType: { not: "financing" }, creditImport: { status: "confirmed" } },
+    where: spendingCreditInMonth(userId, baselineStart, start),
     select: { amount: true },
   });
   const baselineAvg = baselineRows.length ? baselineRows.reduce((sum, row) => sum + decimalToNumber(row.amount), 0) / baselineRows.length : 0;

@@ -49,6 +49,22 @@ describe("versioned financial metric drill-down",()=>{
   expect(metric.value).toBe(15);expect(metric.total).toBe(2);expect(metric.components[0].detail).toContain("source.xlsx");
   expect((await financialMetric(userId,"creditCharge","2026-09",1,undefined,String(card.id))).value).toBeNull();
  });
+ it("leaves financing and draft imports out of the next card charge",async()=>{
+  const owner=(await prisma.user.create({data:{name:"__metric_charge",email:`${crypto.randomUUID()}@example.test`}})).id;
+  try{
+   const chargeDate=new Date(nextDate(businessDate(),3));
+   const confirmed=await prisma.creditImport.create({data:{userId:owner,fileName:"confirmed.xlsx",importMonth:9,importYear:2026,status:"confirmed"}});
+   const draft=await prisma.creditImport.create({data:{userId:owner,fileName:"draft.xlsx",importMonth:9,importYear:2026,status:"pending"}});
+   const base={userId:owner,businessName:"purchase",billingDate:new Date("2026-09-01"),transactionDate:new Date("2026-09-01"),chargeDate};
+   await prisma.creditTransaction.createMany({data:[
+    {...base,creditImportId:confirmed.id,amount:40,transactionType:"regular"},
+    {...base,creditImportId:confirmed.id,amount:900,transactionType:"financing"},
+    {...base,creditImportId:draft.id,amount:70,transactionType:"regular"},
+   ]});
+   const metric=await financialMetric(owner,"creditCharge","2026-09");
+   expect(metric.value).toBe(40);expect(metric.total).toBe(1);
+  }finally{await prisma.user.delete({where:{id:owner}});}
+ });
  it("explains the same anchor and net movement used by Home",async()=>{
   await prisma.bankAccount.create({data:{userId:otherId,accountName:"anchor",bankName:"test",initialBalance:0,currentBalance:0,anchorBalance:500,anchorDate:new Date(businessDate())}});
   const [state,metric]=await Promise.all([financialStatus(otherId),financialMetric(otherId,"cash","2026-09")]);

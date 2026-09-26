@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { journeyActions, upcomingCommitments } from "./actions.service";
 import { prisma, withFinancialTransaction } from "../../config/database";
+import { spendingCredit } from "../dashboard/dashboard.repository";
 import { ApiError } from "../../utils/ApiError";
 import { financialStatus } from "./coverage.service";
 import { businessDate, fingerprint, json } from "./journey.utils";
@@ -43,7 +44,7 @@ async function snapshot(userId:number) {
   const readers:Array<(after:number)=>Promise<SnapshotRow[]>>=[
     async after=>(await prisma.expense.findMany({where:{userId,id:{gt:after}},select:{id:true,expenseDate:true,amount:true,updatedAt:true},orderBy:{id:"asc"},take:500})).map(r=>({key:`expense:${r.id}`,date:r.expenseDate.toISOString().slice(0,10),amount:-Number(r.amount),hash:fingerprint(r)})),
     async after=>(await prisma.income.findMany({where:{userId,id:{gt:after}},select:{id:true,incomeDate:true,amount:true,updatedAt:true},orderBy:{id:"asc"},take:500})).map(r=>({key:`income:${r.id}`,date:r.incomeDate.toISOString().slice(0,10),amount:Number(r.amount),hash:fingerprint(r)})),
-    async after=>(await prisma.creditTransaction.findMany({where:{userId,id:{gt:after},creditImport:{status:"confirmed"},transactionType:{not:"financing"}},select:{id:true,billingDate:true,amount:true,updatedAt:true},orderBy:{id:"asc"},take:500})).map(r=>({key:`credit:${r.id}`,date:r.billingDate.toISOString().slice(0,10),amount:-Number(r.amount),hash:fingerprint(r)})),
+    async after=>(await prisma.creditTransaction.findMany({where:{userId,id:{gt:after},...spendingCredit},select:{id:true,billingDate:true,amount:true,updatedAt:true},orderBy:{id:"asc"},take:500})).map(r=>({key:`credit:${r.id}`,date:r.billingDate.toISOString().slice(0,10),amount:-Number(r.amount),hash:fingerprint(r)})),
   ];
   for(const read of readers) {
     let cursor=0;

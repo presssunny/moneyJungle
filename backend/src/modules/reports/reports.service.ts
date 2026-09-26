@@ -1,7 +1,7 @@
 import { prisma } from "../../config/database";
 import { monthRange, toMonthKey } from "../../utils/date.utils";
 import { decimalToNumber, round2 } from "../../utils/money.utils";
-import { dashboardRepository } from "../dashboard/dashboard.repository";
+import { dashboardRepository, spendingCreditInMonth } from "../dashboard/dashboard.repository";
 import { spentByCategory } from "../dashboard/dashboard.service";
 
 const INCOME_TYPE_LABELS: Record<string, string> = {
@@ -52,12 +52,7 @@ export const reportsService = {
           select: { expenseDate: true, amount: true },
         }),
         prisma.creditTransaction.findMany({
-          where: {
-            userId,
-            billingDate: { gte: start, lt: end },
-            transactionType: { not: "financing" },
-            creditImport: { status: "confirmed" },
-          },
+          where: spendingCreditInMonth(userId, start, end),
           select: { billingDate: true, amount: true },
         }),
       ]);

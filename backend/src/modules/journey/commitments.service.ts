@@ -1,5 +1,6 @@
 import { prisma } from "../../config/database";
 import { buildUpcoming } from "../dashboard/cashflow.service";
+import { spendingCredit } from "../dashboard/dashboard.repository";
 import { businessDate, fingerprint, json } from "./journey.utils";
 import { creditCardRefOf } from "../bank/bankParser.service";
 import { CHARGE_MATCH_DAYS, ISSUER_ONLY_MATCH_DAYS } from "../bank/creditCoverage.service";
@@ -53,7 +54,7 @@ export async function commitments(userId: number): Promise<Commitment[]> {
   const today = businessDate();
   const [upcoming, cards, decisions] = await Promise.all([
     buildUpcoming(userId, 62, new Date(today), true),
-    prisma.creditTransaction.findMany({ where: { userId, creditImport: { status: "confirmed" }, chargeDate: { not: null }, transactionType: { not: "financing" } }, include: { card: true }, orderBy: { id: "asc" } }),
+    prisma.creditTransaction.findMany({ where: { userId, ...spendingCredit, chargeDate: { not: null } }, include: { card: true }, orderBy: { id: "asc" } }),
     prisma.commitmentDecision.findMany({ where: { userId } }),
   ]);
   const rows: Array<Pick<Commitment, "key" | "date" | "name" | "amount" | "kind" | "to">> = upcoming.events.map(e => ({ key: e.key!, date: e.date.slice(0, 10), name: e.name,

@@ -4,6 +4,7 @@ import { monthRange } from "../../utils/date.utils";
 import { decimalToNumber, round2 } from "../../utils/money.utils";
 import type { FinancialMetric, MetricComponent, MetricName } from "../../types/metric.types";
 import { monthTotals } from "../dashboard/dashboard.service";
+import { spendingCredit, spendingCreditInMonth } from "../dashboard/dashboard.repository";
 import { loansService } from "../loans/loans.service";
 import { financialStatus } from "./coverage.service";
 
@@ -27,7 +28,7 @@ export async function financialMetric(userId: number, name: MetricName, month: s
   };
   let components: MetricComponent[] = [];
   if (name === "creditCharge") {
-    const where={userId,creditImport:{status:"confirmed" as const},transactionType:{not:"financing"},chargeDate:{gte:new Date(state.today)},...(card==="unassigned"?{cardId:null}:card&&card!=="all"?{cardId:Number(card)}:{})};
+    const where={userId,...spendingCredit,chargeDate:{gte:new Date(state.today)},...(card==="unassigned"?{cardId:null}:card&&card!=="all"?{cardId:Number(card)}:{})};
     const next=await prisma.creditTransaction.findFirst({where,orderBy:[{chargeDate:"asc"},{id:"asc"}]});
     metric.formula="עסקאות מאושרות למועד החיוב הקרוב, בניכוי זיכויים וללא מימון פנימי";
     metric.assumptions=["מועד הירידה הרשום בדוח; יום חיוב שהוגדר בכרטיס אינו תחליף", "עסקאות ללא תאריך חיוב ודוחות חסרים אינם נכללים; הסכום עשוי להיות חלקי"];
@@ -49,7 +50,7 @@ export async function financialMetric(userId: number, name: MetricName, month: s
     // Concatenate source streams in stable source/id order. Only the requested
     // 50 records are fetched, without loading the full monthly ledger.
     const expenseWhere = {userId,expenseDate:{gte:start,lt:end}};
-    const creditWhere = {userId,billingDate:{gte:start,lt:end},transactionType:{not:"financing"},creditImport:{status:"confirmed" as const}};
+    const creditWhere = spendingCreditInMonth(userId,start,end);
     const incomeWhere = {userId,incomeDate:{gte:start,lt:end}};
     const counts = await Promise.all([
       name === "income" ? 0 : prisma.expense.count({where:expenseWhere}),

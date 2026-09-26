@@ -1,4 +1,16 @@
 import { prisma } from "../../config/database";
+import type { Prisma } from "../../../generated/prisma/client";
+
+/** The only card rows that count as spending: confirmed imports, never internal financing (CLAUDE.md §5). */
+export const spendingCredit = {
+  transactionType: { not: "financing" },
+  creditImport: { status: "confirmed" },
+} satisfies Prisma.CreditTransactionWhereInput;
+
+/** Spending credit attributed to a month by billingDate, never transactionDate. */
+export function spendingCreditInMonth(userId: number, start: Date, end: Date) {
+  return { userId, billingDate: { gte: start, lt: end }, ...spendingCredit } satisfies Prisma.CreditTransactionWhereInput;
+}
 
 export const dashboardRepository = {
   sumIncomes(userId: number, start: Date, end: Date) {
@@ -16,14 +28,8 @@ export const dashboardRepository = {
   },
 
   sumConfirmedCredit(userId: number, start: Date, end: Date) {
-    // Attribute by billingDate — the month the purchase was made (see schema)
     return prisma.creditTransaction.aggregate({
-      where: {
-        userId,
-        billingDate: { gte: start, lt: end },
-        transactionType: { not: "financing" },
-        creditImport: { status: "confirmed" },
-      },
+      where: spendingCreditInMonth(userId, start, end),
       _sum: { amount: true },
     });
   },
@@ -39,12 +45,7 @@ export const dashboardRepository = {
   creditByCategory(userId: number, start: Date, end: Date) {
     return prisma.creditTransaction.groupBy({
       by: ["categoryId"],
-      where: {
-        userId,
-        billingDate: { gte: start, lt: end },
-        transactionType: { not: "financing" },
-        creditImport: { status: "confirmed" },
-      },
+      where: spendingCreditInMonth(userId, start, end),
       _sum: { amount: true },
     });
   },
@@ -110,7 +111,7 @@ export const dashboardRepository = {
 
   recentCredit(userId: number, take = 5) {
     return prisma.creditTransaction.findMany({
-      where: { userId, transactionType: { not: "financing" }, creditImport: { status: "confirmed" } },
+      where: { userId, ...spendingCredit },
       orderBy: [{ billingDate: "desc" }, { id: "desc" }],
       include: { category: true },
       take,
