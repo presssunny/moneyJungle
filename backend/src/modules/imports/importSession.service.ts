@@ -25,13 +25,13 @@ type Answers = z.infer<typeof answersSchema>;
 export interface ImportPreview { rows: PreviewRow[]; total: number; count: number; warnings: string[]; questions: string[]; previousImportId?: number }
 async function owned(userId: number, id: string) {
   const session = await prisma.importSession.findFirst({ where: { id, userId } });
-  if (!session) throw ApiError.notFound("הקליטה לא נמצאה");
+  if (!session) throw ApiError.notFound("הייבוא לא נמצא");
   return session;
 }
 async function bytes(storagePath: string) {
   const path = documentStorage.resolve(storagePath);
   if (!path) throw ApiError.badRequest("הקובץ אינו זמין — יש להעלות אותו מחדש");
-  try { return await readFile(path); } catch { throw ApiError.badRequest("הקובץ אינו זמין — יש לבטל את הקליטה ולהעלות אותו מחדש"); }
+  try { return await readFile(path); } catch { throw ApiError.badRequest("הקובץ אינו זמין — יש לבטל את הייבוא ולהעלות אותו מחדש"); }
 }
 async function prepare(userId: number, buffer: Buffer, fileName: string, answers: Answers) {
   const detected = detectStatement(buffer, fileName);
@@ -41,40 +41,40 @@ async function prepare(userId: number, buffer: Buffer, fileName: string, answers
     try { if (parseExpensesFile(buffer).length) kind = "expense_sheet"; } catch { /* Ask, do not import. */ }
   }
   const preview: ImportPreview = { rows: [], total: 0, count: 0, warnings: [], questions: [] };
-  if (kind === "unknown") { preview.questions.push("יש לבחור את סוג הקובץ. PDF נתמך כאן כדף חשבון בנק בלבד."); return { kind, preview }; }
+  if (kind === "unknown") { preview.questions.push("יש לבחור את סוג הדוח. קובץ PDF נתמך כאן רק כדף חשבון עו״ש."); return { kind, preview }; }
   if (kind === "bank") {
     const parsed = /\.pdf$/i.test(fileName) || buffer.subarray(0,5).toString() === "%PDF-" ? await parseBankStatementPdf(buffer) : parseBankStatement(buffer);
     preview.rows = parsed.rows.map(r=>({ date: r.date.toISOString().slice(0,10), name:r.description, amount:r.type === "deposit" ? r.amount : -r.amount }));
-    if (!answers.accountId || !await prisma.bankAccount.findFirst({where:{id:answers.accountId,userId}})) preview.questions.push("יש לבחור או ליצור חשבון בנק שאליו שייך הדוח");
-    if (parsed.report.rejected.length || parsed.report.balanceMismatches.length) preview.questions.push("יש בקובץ שורות שנדחו או אי־התאמת יתרה. יש לתקן את קובץ המקור ולהעלות מחדש לפני קליטה.");
+    if (!answers.accountId || !await prisma.bankAccount.findFirst({where:{id:answers.accountId,userId}})) preview.questions.push("יש לבחור את חשבון הבנק שאליו שייך הדף, או להוסיף אותו");
+    if (parsed.report.rejected.length || parsed.report.balanceMismatches.length) preview.questions.push("בחלק מהשורות היתרה לא מתיישבת או שלא הצלחנו לקרוא אותן. כדאי להוריד את הדף מחדש מאתר הבנק ולהעלות שוב.");
     for (const issue of [...parsed.report.rejected, ...parsed.report.review]) preview.warnings.push(`${issue.line}: ${issue.reason}`);
     for (const mismatch of parsed.report.balanceMismatches) preview.warnings.push(`אי־התאמת יתרה בתאריך ${mismatch.date}: פער ${mismatch.diff}`);
-    preview.warnings.push("היתרה תחושב מהדוח. תנועות זהות שכבר קיימות בחשבון ידולגו לפי מספר המופעים; גם דוח חופף עשוי לעדכן את יתרת הבנק.");
+    preview.warnings.push("היתרה בחשבון תחושב מהדף. תנועות שכבר קיימות לא יתווספו שוב, גם אם הדף חופף לדף קודם.");
   } else if (kind === "credit") {
     const rows = parseCreditFile(buffer);
-    preview.rows = rows.map(r=>({ date:r.transactionDate.toISOString().slice(0,10), name:r.businessName, amount:r.amount, chargeDate:r.chargeDate?.toISOString().slice(0,10)??null }));
-    if (!answers.cardId || !await prisma.creditCard.findFirst({where:{id:answers.cardId,userId}})) preview.questions.push("יש לבחור או ליצור את כרטיס האשראי שאליו שייך הדוח");
-    if (rows.some(r=>!r.chargeDate)) preview.warnings.push("לחלק מהעסקאות אין מועד חיוב. הן לא מוכיחות מה יהיה חיוב הכרטיס הבא.");
+    preview.rows = rows.map(r=>({ date:r.transactionDate.toISOString().slice(0,10), name:r.businessName, amount:r.amount, chargeDate:r.chargeDate?.toISOString().slice(0,10)??null, installment:r.installmentNumber }));
+    if (!answers.cardId || !await prisma.creditCard.findFirst({where:{id:answers.cardId,userId}})) preview.questions.push("יש לבחור את כרטיס האשראי שאליו שייך הפירוט, או להוסיף אותו");
+    if (rows.some(r=>!r.chargeDate)) preview.warnings.push("חלק מהעסקאות עדיין בקליטה אצל חברת הכרטיס ואין להן מועד חיוב. הן ייספרו בחודש הקנייה, אבל עוד לא בחיוב הבא.");
     const previous = await prisma.creditImport.findFirst({where:{userId,fileHash:hashFile(buffer)}});
-    if (previous) { preview.previousImportId=previous.id; preview.warnings.push("הקובץ כבר נקלט. לא ייווצרו עסקאות נוספות; נפתח את הדוח הקיים לבדיקה."); }
-    preview.warnings.push("סכומי אשראי נכנסים לסיכום החודש רק לאחר אישור הדוח. התאמות לתנועות בנק יתעדכנו בהתאם.");
+    if (previous) { preview.previousImportId=previous.id; preview.warnings.push("הפירוט הזה כבר הועלה. לא יתווספו עסקאות כפולות; נפתח את הפירוט הקיים לבדיקה."); }
+    preview.warnings.push("העסקאות בכרטיס ייכנסו להוצאות החודש רק אחרי שתאשרי את הפירוט. החיוב המרוכז בדף הבנק לא ייספר פעמיים.");
   } else if (kind === "loan_schedule") {
     const parsed = parseLoanSchedule(buffer);
     preview.rows = parsed.rows.map(r=>({date:r.paymentDate,name:`תשלום ${r.paymentNumber}`,amount:r.total}));
     if (answers.loanId && !await prisma.loan.findFirst({where:{id:answers.loanId,userId}})) preview.questions.push("ההלוואה שנבחרה אינה זמינה");
-    if (!answers.loanId && !parsed.loanNumber) preview.questions.push("אין מספר הלוואה בקובץ — יש לבחור את ההלוואה שאליה הוא שייך");
-    if (parsed.originalAmountSource === "reconstructed") preview.warnings.push("הסכום המקורי משוחזר ואינו נתון מאומת מהחוזה");
-    preview.warnings.push("לוח זה ייצור הלוואה או יעדכן את לוח התשלומים הקיים; הוא אינו תנועת בנק.");
+    if (!answers.loanId && !parsed.loanNumber) preview.questions.push("בלוח לא מופיע מספר הלוואה — יש לבחור לאיזו הלוואה הוא שייך");
+    if (parsed.originalAmountSource === "reconstructed") preview.warnings.push("סכום ההלוואה המקורי חושב מהלוח ואינו לקוח מהחוזה");
+    preview.warnings.push("הלוח ייצור את ההלוואה או יעדכן את לוח התשלומים שלה. הוא לא מוסיף תנועות לחשבון.");
   } else {
     const rows = parseExpensesFile(buffer);
     preview.rows = rows.map(r=>({date:r.date?.toISOString().slice(0,10) ?? null,name:r.name,amount:r.amount}));
-    if (rows.some(r=>!r.date) && !answers.month) preview.questions.push("יש לבחור חודש עבור שורות ללא תאריך; הן יירשמו ליום הראשון בחודש");
-    preview.warnings.push("שורות זהות שכבר רשומות כהוצאות ידולגו לפי מספר המופעים. יש לוודא שהגיליון אינו משכפל רכישות שכבר נקלטו מדוח אשראי.");
+    if (rows.some(r=>!r.date) && !answers.month) preview.questions.push("יש לבחור חודש לשורות בלי תאריך; הן יירשמו ב־1 לחודש");
+    preview.warnings.push("הוצאות שכבר רשומות לא יתווספו שוב. כדאי לוודא שהרשימה לא כוללת קניות שכבר מופיעות בפירוט כרטיס האשראי.");
   }
   preview.count=preview.rows.length;
   preview.total=Math.round(preview.rows.reduce((sum,r)=>sum+r.amount,0)*100)/100;
-  if (!preview.count) preview.questions.push("לא נמצאו שורות לקליטה — יש לבדוק את קובץ המקור");
-  if (preview.count > 10000) throw ApiError.badRequest("הקובץ מכיל יותר מ־10,000 שורות. יש לפצל אותו.");
+  if (!preview.count) preview.questions.push("לא מצאנו תנועות בקובץ — כדאי לבדוק שזה הקובץ הנכון");
+  if (preview.count > 10000) throw ApiError.badRequest("בקובץ יותר מ־10,000 שורות. יש לפצל אותו לכמה קבצים.");
   return {kind,preview};
 }
 async function processSession(userId:number,id:string,answers:Answers) {
@@ -99,7 +99,7 @@ export const importSessions = {
       const previous=await prisma.importSession.findFirst({where:{userId,fileHash,status:{notIn:["cancelled","rolled_back"]}},orderBy:{createdAt:"desc"}});
       if(previous) return previous;
       const storagePath=await documentStorage.save(userId,fileHash,fileName,buffer);
-      if(!storagePath) throw ApiError.internal("לא ניתן לשמור את הקובץ להמשך. לא נקלטו נתונים; אפשר לנסות שוב.");
+      if(!storagePath) throw ApiError.internal("לא הצלחנו לשמור את הקובץ. לא נוסף דבר; אפשר לנסות שוב.");
       return prisma.importSession.create({data:{userId,fileName,fileHash,storagePath,answers:json(answers),status:"uploaded"}});
     });
     return session.status==="uploaded"?withFinancialTransaction(userId,async()=>{const current=await owned(userId,session.id);return current.status==="uploaded"?processSession(userId,session.id,answers):current;}):session;
@@ -107,7 +107,7 @@ export const importSessions = {
   async answer(userId:number,id:string,version:number,input:unknown) {
     return withFinancialTransaction(userId,async()=>{
       const current=await owned(userId,id);
-      if(current.version!==version||!["uploaded","processing","failed","needs_input","ready_for_review"].includes(current.status)) throw ApiError.conflict("הקליטה השתנתה או כבר הוחלה. יש לרענן");
+      if(current.version!==version||!["uploaded","processing","failed","needs_input","ready_for_review"].includes(current.status)) throw ApiError.conflict("הייבוא השתנה או כבר הוסיף תנועות — יש לרענן");
       const answers=answersSchema.parse({...current.answers as object,...answersSchema.parse(input)});
       return processSession(userId,id,answers);
     });
@@ -117,10 +117,10 @@ export const importSessions = {
       const session=await owned(userId,id);
       if(["completed","review"].includes(session.status)) {
         const prior=session.result as {commitVersion?:number}|null;
-        if(prior?.commitVersion!==undefined&&![prior.commitVersion,session.version].includes(version)) throw ApiError.conflict("הגרסה אינה תואמת לבקשת הקליטה שנשמרה");
+        if(prior?.commitVersion!==undefined&&![prior.commitVersion,session.version].includes(version)) throw ApiError.conflict("הייבוא השתנה בינתיים — יש לרענן");
         return session;
       }
-      if(session.version!==version || session.status!=="ready_for_review") throw ApiError.conflict("יש להשלים את השאלות ולבדוק את הגרסה העדכנית לפני קליטה");
+      if(session.version!==version || session.status!=="ready_for_review") throw ApiError.conflict("יש להשלים את הפרטים ולרענן לפני ההוספה");
       const buffer=await bytes(session.storagePath);
       const answers=answersSchema.parse(session.answers);
       const check=await prepare(userId,buffer,session.fileName,answers);
@@ -153,7 +153,7 @@ export const importSessions = {
         loanId=imported.loanId;result=imported;
       } else {
         const month=answers.month ?? check.preview.rows.find(r=>r.date)?.date?.slice(0,7);
-        if(!month) throw ApiError.badRequest("נדרש חודש לקליטה");
+        if(!month) throw ApiError.badRequest("יש לבחור חודש");
         const [year,m]=month.split("-").map(Number);
         const parsed=parseExpensesFile(buffer);
         const imported=await importsService.importExpenses(userId,buffer,year,m,included.map(row=>{
@@ -169,7 +169,7 @@ export const importSessions = {
         kind:session.kind==="bank"?"bank_statement":session.kind==="credit"?"credit_report":session.kind==="loan_schedule"?"loan_schedule":"expense_sheet",linkedLoanId:loanId,
         linkedAccountId:answers.accountId,linkedCreditImportId:creditImportId,linkedStatementImportId:statementImportId,
         coverageFrom:dates.length?new Date(dates[0]):null,coverageTo:dates.length?new Date(dates[dates.length-1]):null,
-        rowsParsed:check.preview.count,rowsImported:included.length,rowsSkipped:staged.length-included.length,note:"נקלט בתהליך בדיקה מתמשך"});
+        rowsParsed:check.preview.count,rowsImported:included.length,rowsSkipped:staged.length-included.length,note:"נוסף ועדיין בבדיקה"});
       const outputs: Array<{kind:SourceRef["kind"];id:number;name:string;amount:number;date:string}>=[];
       if(statementImportId) for(const row of await prisma.bankTransaction.findMany({where:{userId,statementImportId},orderBy:{id:"asc"}})) outputs.push({kind:"bank",id:row.id,name:row.description??"",amount:Number(row.amount)*(row.type==="deposit"?1:-1),date:row.transactionDate.toISOString().slice(0,10)});
       if(creditImportId) for(const row of await prisma.creditTransaction.findMany({where:{userId,creditImportId},orderBy:{id:"asc"}})) outputs.push({kind:"credit",id:row.id,name:row.businessName,amount:Number(row.amount),date:row.transactionDate.toISOString().slice(0,10)});
@@ -178,7 +178,7 @@ export const importSessions = {
         const normalized=row.normalized as unknown as PreviewRow;
         const outputIndex=outputs.findIndex(o=>o.name===normalized.name&&o.date===normalized.date&&o.amount===normalized.amount);
         const output=session.kind==="expense_sheet"?{kind:"expense",id:expenseIds[index]}:outputIndex>=0?outputs.splice(outputIndex,1)[0]:null;
-        if(!output) throw ApiError.internal("לא נמצא קישור לשורת המקור. הקליטה לא נשמרה");
+        if(!output) throw ApiError.internal("לא הצלחנו לקשר תנועה לשורה בקובץ. שום דבר לא נוסף.");
         await prisma.importRow.update({where:{id:row.id},data:{outputRef:json(output)}});
         // Reverse lineage: only for rows this commit actually created, never for
         // a matched duplicate — that target keeps pointing at its real origin.
@@ -193,14 +193,14 @@ export const importSessions = {
   async finish(userId:number,id:string) {
     return withFinancialTransaction(userId,async()=>{
       const session=await owned(userId,id);
-      if(!["completed","review"].includes(session.status)) throw ApiError.conflict("יש לקלוט ולבדוק את הנתונים לפני השלמת התהליך");
+      if(!["completed","review"].includes(session.status)) throw ApiError.conflict("יש להוסיף ולבדוק את התנועות לפני הסיוםך");
       const result=session.result as {creditImportId?:number;statementImportId?:number;loanId?:number;documentId?:number};
       if(result.documentId&&!await prisma.document.findFirst({where:{id:result.documentId,userId,status:"imported"}})) throw ApiError.conflict("מסמך המקור בוטל או נמחק");
       if(result.statementImportId&&!await prisma.bankStatementImport.findFirst({where:{id:result.statementImportId,userId}})) throw ApiError.conflict("דוח הבנק בוטל או נמחק");
-      if(result.loanId&&!await prisma.loan.findFirst({where:{id:result.loanId,userId}})) throw ApiError.conflict("ההלוואה שנקלטה אינה קיימת עוד");
+      if(result.loanId&&!await prisma.loan.findFirst({where:{id:result.loanId,userId}})) throw ApiError.conflict("ההלוואה שנוצרה מהלוח כבר לא קיימת");
       if(result.creditImportId) {
         const credit=await prisma.creditImport.findFirst({where:{id:result.creditImportId,userId}});
-        if(!credit || credit.status!=="confirmed") throw ApiError.conflict("יש לאשר את דוח האשראי לפני סיום הבדיקה");
+        if(!credit || credit.status!=="confirmed") throw ApiError.conflict("יש לאשר את פירוט הכרטיס לפני הסיום");
       }
       if(result.statementImportId && await prisma.bankTransaction.count({where:{userId,statementImportId:result.statementImportId,resolution:null}})) throw ApiError.conflict("נותרו תנועות בנק ללא משמעות כספית. יש להשלים התאמה.");
       if(session.status==="completed") return session;
@@ -209,7 +209,7 @@ export const importSessions = {
   },
   async cancel(userId:number,id:string) {
     const changed=await prisma.importSession.updateMany({where:{id,userId,status:{in:["uploaded","processing","failed","needs_input","ready_for_review"]}},data:{status:"cancelled",version:{increment:1}}});
-    if(!changed.count) throw ApiError.conflict("לא ניתן לבטל קליטה שכבר הוחלה. ביטול נתונים מתבצע דרך המסמך המקורי.");
+    if(!changed.count) throw ApiError.conflict("אי אפשר לבטל כאן ייבוא שכבר הוסיף תנועות. אפשר לבטל אותו ממסך המסמכים.");
     return owned(userId,id);
   },
 };

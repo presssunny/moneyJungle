@@ -3,9 +3,9 @@ import { prisma } from "../../config/database";
 import { ApiError } from "../../utils/ApiError";
 import { fingerprint, json } from "../journey/journey.utils";
 
-export interface PreviewRow { date: string | null; name: string; amount: number; chargeDate?: string | null }
+export interface PreviewRow { date: string | null; name: string; amount: number; chargeDate?: string | null; installment?: number | null }
 export interface SourceRef { kind: "expense" | "credit" | "bank" | "loan_schedule"; id: number; fingerprint: string }
-interface Candidate extends SourceRef { date: string; name: string; amount: number }
+interface Candidate extends SourceRef { date: string; name: string; amount: number; installment?: number | null }
 export const rowEditSchema = z.object({
   version: z.number().int().nonnegative(),
   normalized: z.object({date:z.iso.date().nullable(),name:z.string().trim().min(1).max(255),amount:z.number().finite().min(-9999999999).max(9999999999),chargeDate:z.iso.date().nullable().optional()}).optional(),
@@ -25,10 +25,12 @@ async function candidatesFor(userId:number,kind:string,answers:{accountId?:numbe
   ]);
   return [
     ...expenses.map(r=>({kind:"expense" as const,id:r.id,fingerprint:fingerprint(r),date:r.expenseDate.toISOString().slice(0,10),name:r.businessName??"",amount:Number(r.amount)})),
-    ...credit.map(r=>({kind:"credit" as const,id:r.id,fingerprint:fingerprint(r),date:r.transactionDate.toISOString().slice(0,10),name:r.businessName,amount:Number(r.amount)})),
+    ...credit.map(r=>({kind:"credit" as const,id:r.id,fingerprint:fingerprint(r),date:r.transactionDate.toISOString().slice(0,10),name:r.businessName,amount:Number(r.amount),installment:r.installmentNumber})),
   ];
 }
-const matches=(r:PreviewRow,c:Candidate)=>r.date===c.date&&r.name.trim()===c.name.trim()&&Math.round(r.amount*100)===Math.round(c.amount*100);
+// Two installments of one purchase share date, name and amount; only their number tells them apart.
+const matches=(r:PreviewRow,c:Candidate)=>r.date===c.date&&r.name.trim()===c.name.trim()&&Math.round(r.amount*100)===Math.round(c.amount*100)
+  &&!(r.installment!=null&&c.installment!=null&&r.installment!==c.installment);
 
 export const importRows = {
   async replace(userId:number,sessionId:string,kind:string,answers:{accountId?:number;cardId?:number;month?:string},rows:PreviewRow[]) {

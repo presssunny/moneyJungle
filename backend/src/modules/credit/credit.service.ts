@@ -18,7 +18,7 @@ function attributionDateOf(row: ParsedCreditRow): Date {
   return row.transactionDate;
 }
 
-/** Label the import by the billing month that holds the most real-spend transactions. */
+/** Label the import by the purchase month that holds the most real-spend transactions. */
 function inferImportMonth(rows: ParsedCreditRow[]): { month: number; year: number } {
   const counts = new Map<string, number>();
   const spendRows = rows.filter((r) => r.transactionType !== "financing");
@@ -32,7 +32,7 @@ function inferImportMonth(rows: ParsedCreditRow[]): { month: number; year: numbe
   return { year, month };
 }
 
-/** Group real-spend transactions by billing month → { "YYYY-MM": {count, total} }. */
+/** Group real-spend transactions by purchase month (stored as billingDate) → { "YYYY-MM": {count, total} }. */
 function monthlyBreakdown(
   transactions: Array<{ billingDate: Date; amount: number; transactionType: string }>
 ): Array<{ monthKey: string; count: number; total: number }> {
@@ -128,23 +128,23 @@ export const creditService = {
     // business/amount pair often, so the date must take part.
     const existing = await prisma.creditTransaction.findMany({
       where: { userId, ...(override?.cardId !== undefined ? { OR: [{ cardId: override.cardId }, { cardId: null }] } : {}) },
-      select: { transactionDate: true, businessName: true, amount: true, paymentCount: true, cardId: true },
+      select: { transactionDate: true, businessName: true, amount: true, paymentCount: true, installmentNumber: true, cardId: true },
     });
-    const keyOf = (date: Date, business: string, amount: number, payments: number) =>
-      `${date.toISOString().slice(0, 10)}|${business.trim()}|${round2(amount)}|${payments}`;
+    const keyOf = (date: Date, business: string, amount: number, payments: number, installment: number | null) =>
+      `${date.toISOString().slice(0, 10)}|${business.trim()}|${round2(amount)}|${payments}|${installment ?? ""}`;
     if (override?.cardId !== undefined && !override.staged) {
-      const unassigned = new Set(existing.filter((row) => row.cardId === null).map((row) => keyOf(row.transactionDate, row.businessName, Number(row.amount), row.paymentCount)));
-      if (parsedRows.some((row) => unassigned.has(keyOf(row.transactionDate, row.businessName, row.amount, row.paymentCount)))) {
+      const unassigned = new Set(existing.filter((row) => row.cardId === null).map((row) => keyOf(row.transactionDate, row.businessName, Number(row.amount), row.paymentCount, row.installmentNumber)));
+      if (parsedRows.some((row) => unassigned.has(keyOf(row.transactionDate, row.businessName, row.amount, row.paymentCount, row.installmentNumber)))) {
         throw ApiError.badRequest("נמצאו עסקאות זהות שעדיין לא משויכות לכרטיס. שייכו קודם את העסקאות או הדוח הקודם לכרטיס הנכון, ואז העלו שוב — כדי למנוע ספירה כפולה או השמטה.");
       }
     }
     const remaining = new Map<string, number>();
     for (const t of existing) {
-      const key = keyOf(t.transactionDate, t.businessName, Number(t.amount), t.paymentCount);
+      const key = keyOf(t.transactionDate, t.businessName, Number(t.amount), t.paymentCount, t.installmentNumber);
       remaining.set(key, (remaining.get(key) ?? 0) + 1);
     }
     const rows = override?.staged ?? parsedRows.filter(row => {
-      const key = keyOf(row.transactionDate, row.businessName, row.amount, row.paymentCount);
+      const key = keyOf(row.transactionDate, row.businessName, row.amount, row.paymentCount, row.installmentNumber);
       const count = remaining.get(key) ?? 0;
       if (!count) return true;
       remaining.set(key, count - 1); return false;
@@ -200,6 +200,7 @@ export const creditService = {
           amount: row.amount,
           categoryId: categorize(row.businessName),
           paymentCount: row.paymentCount,
+          installmentNumber: row.installmentNumber,
           transactionType: row.transactionType,
           rawData: row.raw as Prisma.InputJsonValue,
         })),

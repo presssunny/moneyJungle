@@ -12,6 +12,8 @@ export interface ParsedCreditRow {
   businessName: string;
   amount: number;
   paymentCount: number;
+  /** Which payment of paymentCount this row is, when the statement says ("תשלום 3 מתוך 12"). */
+  installmentNumber: number | null;
   transactionType: CreditTransactionType;
   raw: Record<string, unknown>;
 }
@@ -95,28 +97,30 @@ function isSummaryRow(businessName: string): boolean {
   return SUMMARY_ROW_PATTERNS.some((pattern) => pattern.test(businessName.trim()));
 }
 
-function parseCellPayments(value: Cell): number {
-  if (typeof value === "number" && Number.isFinite(value) && value >= 1) return Math.floor(value);
+interface Payments { count: number; installment: number | null }
+
+/** Payments column: "3", "2 מתוך 6", "1/6". */
+function parseCellPayments(value: Cell): Payments {
+  if (typeof value === "number" && Number.isFinite(value) && value >= 1) return { count: Math.floor(value), installment: null };
   if (typeof value === "string") {
-    // Formats like "3", "2 מתוך 6", "1/6"
     const match = /(\d+)\s*(?:מתוך|\/)\s*(\d+)/.exec(value);
-    if (match) return Number(match[2]);
+    if (match) return { count: Number(match[2]), installment: Number(match[1]) };
     const single = Number(value.trim());
-    if (Number.isFinite(single) && single >= 1) return Math.floor(single);
+    if (Number.isFinite(single) && single >= 1) return { count: Math.floor(single), installment: null };
   }
-  return 1;
+  return { count: 1, installment: null };
 }
 
 /**
  * Cal has no payments column; the count is in its note ("עסקה ב-2 תשלומים",
  * "עסקה ב-1 תשלומי קרדיט", "תשלום 3 מתוך 12"). Any other note means one payment.
  */
-function paymentsFromNote(value: Cell): number {
+function paymentsFromNote(value: Cell): Payments {
   const text = typeof value === "string" ? value : "";
-  const ofTotal = /תשלום\s*\d+\s*מתוך\s*(\d+)/.exec(text);
-  if (ofTotal) return Number(ofTotal[1]);
+  const ofTotal = /תשלום\s*(\d+)\s*מתוך\s*(\d+)/.exec(text);
+  if (ofTotal) return { count: Number(ofTotal[2]), installment: Number(ofTotal[1]) };
   const inPayments = /ב-?\s*(\d+)\s*תשלומ/.exec(text);
-  return inPayments && Number(inPayments[1]) >= 1 ? Number(inPayments[1]) : 1;
+  return { count: inPayments && Number(inPayments[1]) >= 1 ? Number(inPayments[1]) : 1, installment: null };
 }
 
 function parseSheet(rows: Cell[][]): ParsedCreditRow[] {
@@ -136,6 +140,8 @@ function parseSheet(rows: Cell[][]): ParsedCreditRow[] {
 
     const chargeDate =
       header.columns.charge !== undefined ? parseCellDate(row[header.columns.charge]) : null;
+    const payments = header.columns.payments !== undefined ? parseCellPayments(row[header.columns.payments])
+      : header.columns.notes !== undefined ? paymentsFromNote(row[header.columns.notes]) : { count: 1, installment: null };
     const typeText = header.columns.type !== undefined ? String(row[header.columns.type] ?? "") : "";
 
     parsed.push({
@@ -144,9 +150,8 @@ function parseSheet(rows: Cell[][]): ParsedCreditRow[] {
       businessName,
       // Sign is kept: negative = זיכוי/refund, so totals come out right
       amount,
-      paymentCount:
-        header.columns.payments !== undefined ? parseCellPayments(row[header.columns.payments])
-          : header.columns.notes !== undefined ? paymentsFromNote(row[header.columns.notes]) : 1,
+      paymentCount: payments.count,
+      installmentNumber: payments.installment,
       transactionType: normalizeType(typeText, amount, businessName),
       raw: Object.fromEntries(row.map((cell, i) => [String(i), cell instanceof Date ? cell.toISOString() : cell])),
     });

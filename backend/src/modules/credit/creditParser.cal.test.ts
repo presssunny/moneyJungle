@@ -36,6 +36,7 @@ describe("Cal statement dates and payments", () => {
       [local(2026, 6, 13), "רהיטים", 500, local(2026, 7, 10), "תשלומים", "תשלום 3 מתוך 12"],
     ]));
     expect(rows.map((r) => r.paymentCount)).toEqual([2, 1, 1, 12]);
+    expect(rows.map((r) => r.installmentNumber)).toEqual([null, null, null, 3]);
   });
 });
 

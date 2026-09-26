@@ -330,6 +330,8 @@ model CreditTransaction {
   amount          Decimal   @db.Decimal(12, 2)
   categoryId      Int?      @map("category_id")
   paymentCount    Int       @default(1) @map("payment_count")
+  /// Which payment this row is, when the statement says; tells installment 4/12 apart from 3/12.
+  installmentNumber Int?    @map("installment_number")
   // "regular" | "standing_order" | "credit" | "refund" — from סוג עסקה
   transactionType String    @default("regular") @map("transaction_type") @db.VarChar(30)
   rawData         Json?     @map("raw_data")
