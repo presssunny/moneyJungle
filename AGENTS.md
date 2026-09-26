@@ -74,7 +74,7 @@ cd frontend && npm run dev         # port 5173
 
 ## 6. Open items / known issues
 
-1. **Billing-date contradiction (needs a domain decision).** `credit.service` `attributionDateOf` writes the transaction date into `billingDate`, while CLAUDE.md §5 says monthly attribution is by billing date; `frontend/src/components/common/financeTerms.ts` ("מועד חיוב") may describe the opposite of the code. Do not change without a banker ruling.
+1. **Cal statements (resolved 2026-09-26).** Dates were a day early (the credit parser had its own Excel date decoder); both parsers now share `utils/sheetDates.parseCellDate`. Monthly attribution is by purchase date, stored in `billingDate` (historical name) — CLAUDE.md §5 now says so; `chargeDate` is cash flow only. Payment count and installment number are read from Cal's note; `installment_number` keeps 4/12 apart from 3/12. Golden `credit/cal` reconciles to Cal's printed sheet total. Remaining: rows noted "עסקה ב-N תשלומים" carry no index — check two consecutive statements before trusting them.
 2. **No "cash" paying account.** With several bank accounts, an obligation paid in cash stays unassigned and blocks the daily allowance (banker-approved for now).
 3. **AI provider not configured.** Free-form question routing via the model and the step planner are tested only with injected providers; set `ANTHROPIC_API_KEY` to verify live.
 4. **No real data in the DB** (wiped 2026-09-19). Cal credit import is fixed in code (multiset dedup since 2026-09-18; parser on the real file: 442 rows, net ₪21,189.16, non-financing ₪20,683.00) but not yet re-verified by an import. Bank files available end 2026-08-01.

@@ -137,3 +137,10 @@ Open, not fixed in this batch:
 - There is no "cash" paying-account option. With several accounts, a cash-paid obligation stays unassigned and blocks the allowance.
 - Model routing for free-form questions is tested only with an injected provider. No `ANTHROPIC_API_KEY` is configured locally.
 - The DB still holds no real data (wiped 2026-09-19). Real-data verification of the new flows is through the fixtures and disposable accounts only.
+
+## Cal correctness and product language (2026-09-26)
+
+- `d3aa1a2`: Cal dates kept as printed (shared sheet date decoder); payment count read from the note; CLAUDE.md §5 states purchase-date attribution; golden `credit/cal` (parsed total minus rows in processing = Cal's printed ₪20,803.07). banker approved.
+- `6f9c3c4`: `credit_transactions.installment_number`; both dedup paths require it to agree. banker approved.
+- `b0686e9`: login redesigned on the design system — brand panel, focused form, disabled/busy/error/Caps Lock states, mobile layout, neutral copy.
+- `a3422fd`: upload screen explains what to upload, where to get it, and what exists or is missing; Israeli financial terms across the product (עו״ש, פירוט עסקאות בכרטיס אשראי, לוח סילוקין; no "קליטה"; "אשראי" only where it means credit); one shared loan-type label list. No calculation changed.
