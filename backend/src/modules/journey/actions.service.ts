@@ -2,6 +2,7 @@ import { prisma } from "../../config/database";
 import { collectAttentionCandidates, mergeAttention } from "../dashboard/attention.service";
 import type { financialStatus } from "./coverage.service";
 import { nextDate } from "./journey.utils";
+import { goalProgress, withLoan } from "../savings/savings.service";
 
 export interface JourneyAction {
   id: string;
@@ -30,7 +31,7 @@ export async function journeyActions(userId: number, state: Awaited<ReturnType<t
   const [year,month] = state.today.split("-").map(Number);
   const [attention,goals] = await Promise.all([
     collectAttentionCandidates(userId,year,month),
-    prisma.savingsGoal.findMany({where:{userId},orderBy:[{targetDate:"asc"},{id:"asc"}]}),
+    prisma.savingsGoal.findMany({where:{userId},include:withLoan,orderBy:[{targetDate:"asc"},{id:"asc"}]}),
   ]);
   const candidates: JourneyAction[] = state.issues.map(issue => ({
     id:issue.key, topic:issue.topic ?? issue.key, title:issue.title, to:issue.to,
@@ -48,7 +49,7 @@ export async function journeyActions(userId: number, state: Awaited<ReturnType<t
     if ((detailedBank && ["bank-unresolved","bank-review","bank-coarse"].includes(candidate.topic)) || (detailedCredit && candidate.topic==="credit-pending") || ["reminder","upcoming"].includes(candidate.source)) continue;
     candidates.push({id:item.id,topic:candidate.topic,title:item.text,reason:"לפי התנועות והתקציב הרשומים בחודש הנוכחי",to:item.to,priority:item.tone==="critical" ? 25 : 40});
   }
-  const goal = goals.filter(g=>Number(g.currentAmount)<Number(g.targetAmount)).sort((a,b)=>(a.targetDate?.getTime()??Infinity)-(b.targetDate?.getTime()??Infinity)||Number(b.monthlyTarget??0)-Number(a.monthlyTarget??0))[0];
+  const goal = goals.filter(g=>{const progress=goalProgress(g);return !progress.complete&&progress.source!=="unavailable";}).sort((a,b)=>(a.targetDate?.getTime()??Infinity)-(b.targetDate?.getTime()??Infinity)||Number(b.monthlyTarget??0)-Number(a.monthlyTarget??0))[0];
   if(goal) candidates.push({id:`goal:${goal.id}`,topic:`goal:${goal.id}`,title:`בדיקת ההתקדמות ביעד: ${goal.goalName}`,reason:goal.targetDate?`זהו היעד הפתוח הקרוב ביותר, לתאריך ${goal.targetDate.toISOString().slice(0,10)}`:"יעד פתוח עם סכום שנותר להשלמה",to:"/accounts?tab=savings",priority:60});
   return rankActions(candidates);
 }

@@ -5,6 +5,7 @@ import { computeLoan } from "../loans/loanCalculator.service";
 import { loansRepository } from "../loans/loans.repository";
 import { dashboardRepository } from "./dashboard.repository";
 import { spentByCategory } from "./dashboard.service";
+import { setAsideGoals } from "../savings/savings.service";
 
 export interface Insight {
   icon: string;
@@ -203,7 +204,7 @@ export async function buildInsights(userId: number, year: number, month: number)
   previousScore=score;
 
   // Savings habit — up to 15 pts
-  const goals = await prisma.savingsGoal.findMany({ where: { userId } });
+  const goals = await prisma.savingsGoal.findMany({ where: { userId, ...setAsideGoals } });
   const savedTotal = goals.reduce((sum, g) => sum + decimalToNumber(g.currentAmount), 0);
   if (savedTotal > 0) score += 15;
   else if (goals.length > 0) score += 8;

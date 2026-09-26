@@ -346,13 +346,34 @@ export interface SubscriptionCandidate {
   reason: string;
 }
 
+export type GoalType = "savings" | "purchase" | "debt_payoff";
+
+export interface GoalProgress {
+  current: number;
+  target: number;
+  remaining: number;
+  percent: number;
+  complete: boolean;
+  source: "manual" | "loan" | "unavailable";
+}
+
 export interface SavingsGoal {
   id: number;
   goalName: string;
+  goalType: GoalType;
+  loanId: number | null;
+  loan: { id: number; loanName: string } | null;
   targetAmount: Money;
   currentAmount: Money;
   monthlyTarget: Money | null;
   targetDate: string | null;
+  progress: GoalProgress;
+}
+
+export interface SavingsGoalList {
+  goals: SavingsGoal[];
+  /** Savings and purchase goals only — a loan payoff is not money set aside. */
+  summary: { savedTotal: number; targetTotal: number; setAsideCount: number; completion: number | null };
 }
 
 export type AssetType = "investment" | "pension" | "real_estate" | "other";

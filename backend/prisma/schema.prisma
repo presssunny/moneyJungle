@@ -563,6 +563,7 @@ model Loan {
 
   user     User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   schedule LoanScheduleEntry[]
+  goals    SavingsGoal[]
 
   @@index([userId, status])
   @@index([userId, loanNumber, trackNumber])
@@ -645,6 +646,13 @@ model LoanScheduleEntry {
 
 // ---------- Savings goals ----------
 
+/// savings and purchase hold money set aside; debt_payoff tracks a loan down to zero.
+enum GoalType {
+  savings
+  purchase
+  debt_payoff
+}
+
 model SavingsGoal {
   id            Int       @id @default(autoincrement())
   userId        Int       @map("user_id")
@@ -653,12 +661,17 @@ model SavingsGoal {
   currentAmount Decimal   @default(0) @map("current_amount") @db.Decimal(12, 2)
   monthlyTarget Decimal?  @map("monthly_target") @db.Decimal(12, 2)
   targetDate    DateTime? @map("target_date") @db.Date
+  goalType      GoalType  @default(savings) @map("goal_type")
+  /// debt_payoff only: progress is read from this loan's balance, never entered by hand.
+  loanId        Int?      @map("loan_id")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  loan Loan? @relation(fields: [loanId], references: [id], onDelete: SetNull)
 
   @@index([userId])
+  @@index([loanId])
   @@map("savings_goals")
 }
 

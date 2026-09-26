@@ -56,8 +56,7 @@ export default function AccountsPage() {
 
   const bankTotal =
     banksRes.data === null ? null : banksRes.data.reduce((sum, a) => sum + Number(a.currentBalance), 0);
-  const savingsTotal =
-    savingsRes.data === null ? null : savingsRes.data.reduce((sum, g) => sum + Number(g.currentAmount), 0);
+  const savingsTotal = savingsRes.data?.summary.savedTotal ?? null;
   const debts = loansRes.data === null ? null : loansRes.data.totals.totalBalance;
 
   const assets = bankTotal; // Goal progress may already be included in bank cash.

@@ -16,7 +16,9 @@ import type {
   FamilyRelation,
   PaymentMethod,
   RecurringPayment,
+  GoalType,
   SavingsGoal,
+  SavingsGoalList,
   Settings,
   Subscription,
   SubscriptionCandidate,
@@ -409,13 +411,15 @@ export async function getSubscriptionCandidates(): Promise<SubscriptionCandidate
 
 export interface SavingsGoalInput {
   goalName: string;
-  targetAmount: number;
+  goalType?: GoalType;
+  loanId?: number;
+  targetAmount?: number;
   currentAmount?: number;
   monthlyTarget?: number | null;
   targetDate?: string | null;
 }
 
-export async function listSavingsGoals(): Promise<SavingsGoal[]> {
+export async function listSavingsGoals(): Promise<SavingsGoalList> {
   const { data } = await api.get("/savings");
   return data;
 }

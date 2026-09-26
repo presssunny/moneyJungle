@@ -3,6 +3,7 @@ import { monthRange } from "../../utils/date.utils";
 import { decimalToNumber, round2 } from "../../utils/money.utils";
 import { dashboardRepository } from "./dashboard.repository";
 import { spentByCategory } from "./dashboard.service";
+import { setAsideGoals } from "../savings/savings.service";
 
 /**
  * Light gamification — computed on the fly (no persistence, no migration).
@@ -122,7 +123,7 @@ export async function buildAchievements(
   }
 
   // ---- Savings total ----
-  const goals = await prisma.savingsGoal.findMany({ where: { userId } });
+  const goals = await prisma.savingsGoal.findMany({ where: { userId, ...setAsideGoals } });
   const savedTotal = goals.reduce((sum, g) => sum + decimalToNumber(g.currentAmount), 0);
 
   // ---- Budget discipline this month ----

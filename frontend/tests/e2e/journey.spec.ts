@@ -272,3 +272,20 @@ test('A reminder can be created from the calendar and appears on its day',async(
  await expect(page.locator('.calendar-event').filter({hasText:'מתנה לסבתא'})).toBeVisible();
  expect(mocked.reminders).toMatchObject([{title:'מתנה לסבתא',eventDate:date,estimatedAmount:150}]);
 });
+test('A loan payoff goal takes its target from the loan and offers no deposit',async({page})=>{
+ await mockApi(page);const goals:any[]=[];let posted:any=null;
+ const loan={id:9,loanName:'הלוואת רכב',loanType:'car',status:'active',currentBalance:20000,monthlyPayment:1000,annualInterestRate:5,originalAmount:50000};
+ await page.route('**/api/loans',route=>route.fulfill({json:{loans:[loan],summary:{},groups:[],events:[],fromStatement:null,totals:{totalBalance:20000}}}));
+ await page.route('**/api/savings',async route=>{
+  if(route.request().method()==='POST'){posted=route.request().postDataJSON();goals.push({id:1,goalName:posted.goalName,goalType:'debt_payoff',loanId:9,loan:{id:9,loanName:'הלוואת רכב'},targetAmount:'20000.00',currentAmount:'0.00',monthlyTarget:null,targetDate:null,progress:{current:5000,target:20000,remaining:15000,percent:25,complete:false,source:'loan'}});return route.fulfill({status:201,json:goals[0]});}
+  await route.fulfill({json:{goals,summary:{savedTotal:0,targetTotal:0,setAsideCount:0,completion:null}}});
+ });
+ await page.goto('/accounts?tab=savings');
+ await page.getByRole('button',{name:'+ יעד',exact:true}).first().click();
+ await page.getByLabel('שם היעד').fill('לסגור את הרכב');await page.getByLabel('סוג היעד').selectOption('debt_payoff');
+ await expect(page.getByLabel('סכום יעד (₪)')).toHaveCount(0);
+ await page.getByLabel('הלוואה לסילוק').selectOption('9');await page.getByRole('button',{name:'הוספה',exact:true}).click();
+ expect(posted).toMatchObject({goalName:'לסגור את הרכב',goalType:'debt_payoff',loanId:9});expect(posted.targetAmount).toBeUndefined();
+ await expect(page.getByText(/נותרו\s\S*15,000\s\S*₪ לפי יתרת הלוואת רכב/)).toBeVisible();
+ await expect(page.getByRole('button',{name:'+ הפקדה'})).toHaveCount(0);
+});
