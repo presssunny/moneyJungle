@@ -5,6 +5,7 @@ import { validate } from "../../middlewares/validation.middleware";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { IdParam, idParamSchema, validatedParams } from "../../utils/validation.utils";
 import { documentsService } from "./documents.service";
+import { documentBreakdown } from "./documentBreakdown.service";
 
 export const documentsRoutes = Router();
 
@@ -42,6 +43,15 @@ documentsRoutes.get(
  * What was recognized from the file, row by row — so a preview can show it
  * alongside (or instead of) the raw bytes, before the numbers are trusted.
  */
+documentsRoutes.get(
+  "/:id/breakdown",
+  validate({ params: idParamSchema }),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = validatedParams<IdParam>(req);
+    res.json(await documentBreakdown(req.userId!, id));
+  })
+);
+
 documentsRoutes.get(
   "/:id/rows",
   validate({ params: idParamSchema }),

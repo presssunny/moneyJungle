@@ -1,5 +1,5 @@
 import { api } from "./api";
-import type { AssistantPlan, HouseholdSnapshot, DuplicateCandidate, DuplicateReviewInput, DuplicateReviewResult, DuplicateReviewView } from "../types/models";
+import type { AssistantPlan, HouseholdSnapshot, DuplicateCandidate, DuplicateReviewInput, DuplicateReviewResult, DuplicateReviewView, QuestionAnswer } from "../types/models";
 
 export async function getHouseholdSnapshot(): Promise<HouseholdSnapshot> {
   return (await api.get<HouseholdSnapshot>("/household-assistant")).data;
@@ -7,6 +7,10 @@ export async function getHouseholdSnapshot(): Promise<HouseholdSnapshot> {
 
 export async function requestHouseholdPlan(version: string): Promise<AssistantPlan> {
   return (await api.post<AssistantPlan>("/household-assistant/plan", { version, consent: true })).data;
+}
+
+export async function askHouseholdQuestion(question: string, consent: boolean, documentId?: number): Promise<QuestionAnswer> {
+  return (await api.post<QuestionAnswer>("/household-assistant/ask", { question, consent, ...(documentId ? { documentId } : {}) })).data;
 }
 
 export async function getDuplicate(id: string): Promise<DuplicateCandidate> {

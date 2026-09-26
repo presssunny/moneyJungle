@@ -163,3 +163,29 @@ test('Duplicate review rejects changed evidence in an open dialog and supports a
     await expect(page.locator('#duplicate-history')).toContainText('עסקאות נפרדות');
   } finally { fixture('remove', String(identity.userId)); }
 });
+
+test('A question is answered from recorded money, and an unknown one offers examples without sending anything', async ({ page, context }) => {
+  test.setTimeout(120000);
+  const identity = JSON.parse(fixture('create', 'empty')) as { userId: number; token: string };
+  try {
+    seed(Number(identity.userId));
+    await context.addCookies([{ name: 'mj_session', value: identity.token, url: 'http://127.0.0.1:5185', httpOnly: true, sameSite: 'Lax' }]);
+    await page.goto('/assistant');
+    const box = page.getByLabel('שאלה על הכסף שלכם');
+    await box.fill('כמה הוצאתי החודש?');
+    await page.getByRole('button', { name: 'שאלה', exact: true }).click();
+    const answer = page.locator('.ask-answer');
+    await expect(answer).toContainText('ויצאו');
+    await expect(answer).toContainText('246.90');
+    await expect(answer).toContainText('נענה מתוך המידע הרשום, בלי שליחה החוצה.');
+    // No provider is configured in this suite: an unknown question must not pretend to be answered.
+    await expect(page.getByText('אם השאלה לא תזוהה כאן', { exact: false })).toHaveCount(0);
+    await box.fill('מה מזג האוויר מחר?');
+    await page.getByRole('button', { name: 'שאלה', exact: true }).click();
+    await expect(answer).toContainText('לא זיהיתי את השאלה');
+    await answer.getByRole('button', { name: 'כמה מותר להוציא היום?' }).click();
+    await expect(answer).toContainText('מותר להוציא היום');
+    expect((await new AxeBuilder({ page }).include('.ask-box').withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze()).violations).toEqual([]);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  } finally { fixture('remove', String(identity.userId)); }
+});

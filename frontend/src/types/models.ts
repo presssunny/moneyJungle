@@ -633,3 +633,19 @@ export interface ActivityPage {
   items: ActivityEvent[];
   nextCursor: number | null;
 }
+
+export interface QuestionFact {
+  label: string;
+  value: number | null;
+  display: string;
+}
+
+export interface QuestionAnswer {
+  mode: "rules" | "ai" | "unanswered";
+  intent: string | null;
+  answer: string;
+  facts: QuestionFact[];
+  links: Array<{ label: string; to: string }>;
+  limitations: string[];
+  examples: string[];
+}

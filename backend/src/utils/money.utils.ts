@@ -17,8 +17,10 @@ export function sumDecimals(values: Array<Prisma.Decimal | number | null | undef
 }
 
 /** Shekels inside a sentence — whole numbers, because agorot only add noise there. */
-export function formatILS(amount: number): string {
-  return `₪${amount.toLocaleString("he-IL", { maximumFractionDigits: 0 })}`;
+/** Whole shekels by default; `exact` keeps agorot when there are any, for answers the household may check against a statement. */
+export function formatILS(amount: number, { exact = false } = {}): string {
+  const digits = exact && !Number.isInteger(Math.round(amount * 100) / 100) ? 2 : 0;
+  return `₪${amount.toLocaleString("he-IL", { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
 }
 
 export function percent(used: number, total: number): number {

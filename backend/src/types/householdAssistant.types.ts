@@ -85,3 +85,26 @@ export interface AssistantPlan {
   mode: "ai" | "rules" | "stale";
   actionIds: string[];
 }
+
+export type QuestionIntent =
+  | "month_totals" | "category_spend" | "allowance" | "upcoming" | "loans" | "goals" | "net_worth"
+  | "document_summary" | "document_interest";
+
+export interface QuestionFact {
+  label: string;
+  value: number | null;
+  /** Hebrew rendering of value, or why it is missing. */
+  display: string;
+}
+
+export interface QuestionAnswer {
+  /** rules: matched locally; ai: the model chose the intent; unanswered: nothing matched. */
+  mode: "rules" | "ai" | "unanswered";
+  intent: QuestionIntent | null;
+  answer: string;
+  facts: QuestionFact[];
+  links: Array<{ label: string; to: string }>;
+  limitations: string[];
+  /** Questions the assistant can answer, offered when it could not. */
+  examples: string[];
+}

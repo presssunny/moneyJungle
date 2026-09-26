@@ -31,7 +31,7 @@ const METHOD_ACTIONS: Record<string, [string, string]> = {
 
 // Reading an alert, a check-in step or an unanswered import question changes nothing the household would look for later.
 const IGNORED = [
-  /^\/gate\//, /^\/household-assistant\/plan$/, /^\/alerts\/(read-all|\d+\/read)$/,
+  /^\/gate\//, /^\/household-assistant\/(plan|ask)$/, /^\/alerts\/(read-all|\d+\/read)$/,
   /^\/journey\/check-in\/[^/]+$/, /^\/imports\/sessions\/[^/]+\/answers$/, /^\/activity/,
 ];
 const APPEARANCE_KEYS = new Set(["theme", "currency", "dateFormat"]);

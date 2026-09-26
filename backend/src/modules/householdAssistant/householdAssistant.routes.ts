@@ -4,9 +4,10 @@ import { gateAuth } from "../../middlewares/gateAuth.middleware";
 import { rateLimit } from "../../middlewares/rateLimit.middleware";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { ApiError } from "../../utils/ApiError";
-import { getAiProvider } from "../ai/ai.service";
 import { householdSnapshot } from "./householdAssistant.service";
 import { prioritizePlan } from "./plan.service";
+import { askQuestion } from "./ask.service";
+import { aiAvailable, getAiProvider } from "../ai/ai.service";
 import { decideDuplicate, duplicateDetail, duplicateHistory, duplicateReviewInput, undoDuplicate } from "./duplicateReview.service";
 
 export const householdAssistantRoutes = Router();
@@ -52,4 +53,13 @@ householdAssistantRoutes.post("/plan", rateLimit({ windowMs: 60000, max: 5, key:
   }
   res.setHeader("Cache-Control", "no-store");
   res.json(plan);
+}));
+// Read-only: a question never writes, so it is left out of the activity log and mutation refresh.
+householdAssistantRoutes.post("/ask", rateLimit({ windowMs: 60000, max: 10, key: req => `user:${req.userId!}` }), asyncHandler(async (req, res) => {
+  const parsed = z.object({
+    question: z.string().trim().min(2).max(300), consent: z.boolean(), documentId: z.number().int().positive().optional(),
+  }).strict().safeParse(req.body);
+  if (!parsed.success) throw ApiError.badRequest("יש להקליד שאלה קצרה.");
+  res.setHeader("Cache-Control", "no-store");
+  res.json(await askQuestion(req.userId!, parsed.data, aiAvailable() ? getAiProvider() : null));
 }));

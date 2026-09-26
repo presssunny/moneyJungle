@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { AskBox } from "../assistant/AskBox";
 import { AsyncSection } from "../common/AsyncSection";
 import { Button } from "../common/Button";
 import { Modal } from "../common/Modal";
@@ -107,6 +108,11 @@ function DocumentPreviewBody({ doc }: { doc: DocumentRecord }) {
           <p>הקובץ עצמו לא נשמר — המסמך הועלה לפני שהמערכת התחילה לשמור קבצים.</p>
         </div>
       )}
+
+      <div>
+        <h3 className="modal-section-title">לשאול על הקובץ</h3>
+        <AskBox documentId={doc.id} />
+      </div>
 
       <div>
         <h3 className="modal-section-title">מה המערכת זיהתה מהקובץ</h3>

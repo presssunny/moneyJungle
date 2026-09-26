@@ -1,3 +1,4 @@
+import { AskBox } from "../components/assistant/AskBox";
 import { DuplicateReview } from "../components/assistant/DuplicateReview";
 import { useState } from "react";
 import { Link } from "react-router-dom";
@@ -51,6 +52,9 @@ export default function HouseholdAssistantPage() {
               {error && <p role="alert">{error}</p>}
               <p role="status">{plan?.mode === "stale" || plan && plan.version !== data.version ? "המידע השתנה. יש לרענן ולבחור צעדים מחדש." : currentPlan?.mode === "ai" ? "הצעדים נבחרו בעזרת AI. בדיקות דחופות נשארו בראש הרשימה." : currentPlan?.mode === "rules" ? "ה־AI לא היה זמין או שלא התקבלה בחירה תקינה. מוצג סדר הבדיקה הרגיל." : "לא נשלח מידע ל־AI ללא הפעלה מפורשת."}</p>
             </details>
+          </Card>
+          <Card title="לשאול על הכסף">
+            <AskBox aiAvailable={data.aiAvailable} />
           </Card>
           <DuplicateReview scan={data.duplicates} disabled={resource.loading || Boolean(resource.error)} />
           <Card title="חיובים קרובים וחובות פתוחים">

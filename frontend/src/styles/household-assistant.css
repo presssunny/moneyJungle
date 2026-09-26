@@ -16,8 +16,6 @@
 .household-duplicates span, .household-upcoming span { display: block; font-size: .875rem; }
 .household-duplicates a { display: inline-flex; align-items: center; min-height: 44px; }
 .household-assistant bdi { font-variant-numeric: tabular-nums; white-space: nowrap; }
-.household-consent { display: flex; align-items: flex-start; gap: var(--space-3); padding-block: var(--space-4); }
-.household-consent input { flex-shrink: 0; width: 22px; height: 22px; margin-block-start: 2px; }
 .household-assistant #duplicates { scroll-margin-block-start: 100px; }
 @media (max-width: 600px) {
   .household-numbers { grid-template-columns: repeat(2, minmax(0, 1fr)); }

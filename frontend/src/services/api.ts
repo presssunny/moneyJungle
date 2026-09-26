@@ -15,7 +15,7 @@ api.interceptors.request.use((config) => {
 
 api.interceptors.response.use(
   (response) => {
-    if (["post", "patch", "put", "delete"].includes(response.config.method ?? "") && !response.config.url?.includes("/gate/") && response.config.url !== "/household-assistant/plan") {
+    if (["post", "patch", "put", "delete"].includes(response.config.method ?? "") && !response.config.url?.includes("/gate/") && !["/household-assistant/plan", "/household-assistant/ask"].includes(response.config.url ?? "")) {
       let domain=response.config.url?.split("/").filter(Boolean)[0]??"financial";
       if (domain === "household-assistant" && ["expenses", "incomes"].includes(response.data?.financialDomain)) domain = response.data.financialDomain;
       if(domain==="settings") {

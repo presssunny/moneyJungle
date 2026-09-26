@@ -323,3 +323,17 @@ input[type=checkbox], input[type=radio] { accent-color: var(--primary); width: 1
 .activity-list { list-style: none; margin: var(--space-4) 0; padding: 0; display: flex; flex-direction: column; }
 .activity-item { display: grid; grid-template-columns: minmax(0, 9.5rem) minmax(0, 1fr); gap: var(--space-3); padding-block: var(--space-3); border-bottom: 1px solid var(--divider); overflow-wrap: anywhere; }
 @media(max-width:480px){ .activity-item { grid-template-columns: 1fr; gap: var(--space-1); } }
+.ask-box { display: flex; flex-direction: column; gap: var(--space-3); }
+.ask-form { display: flex; flex-direction: column; gap: var(--space-2); }
+.ask-row { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.ask-row .field-input { flex: 1 1 14rem; min-width: 0; }
+.ask-answer { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4); border-radius: var(--radius-control); background: var(--surface-inset); overflow-wrap: anywhere; }
+.ask-answer-text { font-weight: 600; margin: 0; }
+.ask-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr)); gap: var(--space-3); margin: 0; }
+.ask-facts dt { color: var(--text-muted); font-size: 13px; }
+.ask-facts dd { margin: 0; font-weight: 650; font-variant-numeric: tabular-nums; }
+.ask-limitations { margin: 0; padding-inline-start: 1.2em; font-size: 13px; }
+.ask-examples { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+.ask-mode { font-size: 13px; margin: 0; }
+.household-consent { display: flex; align-items: flex-start; gap: var(--space-3); padding-block: var(--space-4); }
+.household-consent input { flex-shrink: 0; width: 22px; height: 22px; margin-block-start: 2px; }
