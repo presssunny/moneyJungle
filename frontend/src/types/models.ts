@@ -52,6 +52,7 @@ export interface Income {
   description: string | null;
   incomeDate: string;
   isRecurring: boolean;
+  source: "manual" | "bank_import";
 }
 
 export interface BudgetItem {

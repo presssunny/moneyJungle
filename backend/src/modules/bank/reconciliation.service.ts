@@ -707,6 +707,7 @@ export const reconciliationService = {
         type: body.type,
         description: body.description ?? tx.description ?? null,
         incomeDate: tx.transactionDate,
+        source: "bank_import",
       },
     });
     await prisma.bankTransaction.update({
@@ -1058,6 +1059,7 @@ async function applyTarget(userId: number, row: ResolverRow, target: ResolutionT
         type: guessIncomeType(row.description ?? ""),
         description: row.description ?? null,
         incomeDate: row.transactionDate,
+        source: "bank_import",
       },
     });
     row.linkedIncomeId = income.id;

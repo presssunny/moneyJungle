@@ -10,6 +10,7 @@ import { csrfForSession, sessionCookieName } from "../gate/sessionCookie";
 import { expensesService } from "../expenses/expenses.service";
 import { scanForAlerts } from "../alerts/alertsScanner.service";
 import { financialStatus } from "../journey/coverage.service";
+import { reconciliationService } from "../bank/reconciliation.service";
 import { decideDuplicate, duplicateDetail, duplicateHistory, scanDuplicates, undoDuplicate } from "./duplicateReview.service";
 
 let userId: number;
@@ -119,6 +120,14 @@ describe("persisted duplicate review", () => {
     await expect(decideDuplicate(userId, input(c, "remove_manual"))).rejects.toMatchObject({ statusCode: 409 });
     expect(await prisma.income.count({ where: { userId } })).toBe(2);
     expect(await prisma.duplicateReview.count({ where: { userId } })).toBe(0);
+  });
+  it("never offers statement incomes as duplicates, even after their bank link is lost", async () => {
+    await prisma.income.createMany({ data: [1, 2].map(() => ({ userId, amount: 500, description: "משכורת", type: "salary", incomeDate: new Date(today), source: "bank_import" as const })) });
+    expect((await scanDuplicates(userId)).candidateCount).toBe(0);
+    const account = await prisma.bankAccount.create({ data: { userId, bankName: "test", accountName: "test" } });
+    const deposit = await prisma.bankTransaction.create({ data: { userId, bankAccountId: account.id, amount: 700, type: "deposit", transactionDate: new Date(today) } });
+    const linked = await reconciliationService.linkIncome(userId, deposit.id, { type: "extra" });
+    expect(linked.source).toBe("bank_import");
   });
   it("removes exactly the selected manual row once, invalidates coverage, and restores all original fields", async () => {
     const c = await expenses();

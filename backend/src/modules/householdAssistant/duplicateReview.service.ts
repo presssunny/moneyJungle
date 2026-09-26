@@ -115,11 +115,12 @@ async function changedMoney(userId: number) {
   await prisma.financialProfile.upsert({ where: { userId }, create: { userId, revision: 1 }, update: { revision: { increment: 1 } } });
 }
 
-// Income carries no source column, unlike Expense: a bank row resolved as income
-// whose link was lost is the only remaining trace that this row came from a
-// statement. Deleting it would break the rolling balance with nothing left to show.
+// A statement income is never "entered twice": removing it breaks the rolling balance.
+// Incomes created before `source` existed carry no provenance when their bank link
+// was lost, so an unlinked bank income at the same amount and date still blocks removal.
 async function requireUnbankedIncome(userId: number, income: unknown) {
-  const row = z.object({ amount: z.unknown(), incomeDate: z.date() }).parse(income);
+  const row = z.object({ amount: z.unknown(), incomeDate: z.date(), source: z.string() }).parse(income);
+  if (row.source === "bank_import") throw ApiError.conflict("ההכנסה הזאת נקלטה מדף הבנק ואינה רישום כפול. תיקון נעשה במסך הבנק.");
   const orphan = await prisma.bankTransaction.findFirst({
     where: { userId, resolution: "income", linkedIncomeId: null, amount: row.amount as never, transactionDate: row.incomeDate },
     select: { id: true },

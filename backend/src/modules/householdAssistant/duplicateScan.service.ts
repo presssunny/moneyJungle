@@ -14,7 +14,7 @@ export async function scanDuplicateEvidence(userId: number, today = businessDate
   const [expenses, credit, incomes, linked] = await Promise.all([
     prisma.expense.findMany({ where: { userId, expenseDate: dates, source: "manual", importRowId: null }, include: { paymentMethod: true }, orderBy: [{ expenseDate: "desc" }, { id: "asc" }], take: SCAN_LIMIT + 1 }),
     prisma.creditTransaction.findMany({ where: { userId, transactionDate: dates, creditImport: { status: "confirmed" }, paymentCount: 1, transactionType: { in: ["regular", "standing_order"] } }, include: { card: true, creditImport: true }, orderBy: [{ transactionDate: "desc" }, { id: "asc" }], take: SCAN_LIMIT + 1 }),
-    prisma.income.findMany({ where: { userId, incomeDate: dates }, orderBy: [{ incomeDate: "desc" }, { id: "asc" }], take: SCAN_LIMIT + 1 }),
+    prisma.income.findMany({ where: { userId, incomeDate: dates, source: "manual" }, orderBy: [{ incomeDate: "desc" }, { id: "asc" }], take: SCAN_LIMIT + 1 }),
     prisma.bankTransaction.findMany({ where: { userId, OR: [{ linkedExpenseId: { not: null } }, { linkedIncomeId: { not: null } }] }, select: { linkedExpenseId: true, linkedIncomeId: true } }),
   ]);
   const linkedExpenses = new Set(linked.map(r => r.linkedExpenseId));

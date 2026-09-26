@@ -44,6 +44,11 @@ enum ExpenseSource {
   recurring
 }
 
+enum IncomeSource {
+  manual
+  bank_import
+}
+
 enum AlertSeverity {
   info
   warning
@@ -183,6 +188,8 @@ model Income {
   description String?  @db.VarChar(255)
   incomeDate  DateTime @map("income_date") @db.Date
   isRecurring Boolean  @default(false) @map("is_recurring")
+  /// bank_import: created from a statement row. Stays true even if that row's link is later lost.
+  source      IncomeSource @default(manual)
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
