@@ -356,6 +356,8 @@ export interface GoalProgress {
   percent: number;
   complete: boolean;
   source: "manual" | "loan" | "unavailable";
+  /** Loan goals: when the loan balance was last written — not updated by each monthly debit. */
+  asOf: string | null;
 }
 
 export interface SavingsGoal {

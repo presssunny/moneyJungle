@@ -146,7 +146,7 @@ export default function SavingsPage() {
         >
           {({ summary, goals }) => (
             <>
-              <MetricExplanation title="איך נמדדת ההתקדמות?"><p>ביעדי חיסכון ורכישה: ההתקדמות שנרשמה ידנית, חלקי סכום היעדים. זו אינה יתרת נכס מאומתת; הכסף עשוי כבר להיות כלול בחשבון הבנק. יעד סילוק הלוואה אינו חיסכון ולכן אינו נספר כאן — ההתקדמות בו נקראת מיתרת ההלוואה.</p></MetricExplanation>
+              <MetricExplanation title="איך נמדדת ההתקדמות?"><p>ביעדי חיסכון ורכישה: ההתקדמות שנרשמה ידנית, חלקי סכום היעדים. זו אינה יתרת נכס מאומתת; הכסף עשוי כבר להיות כלול בחשבון הבנק. יעד סילוק הלוואה אינו חיסכון ולכן אינו נספר כאן — ההתקדמות בו נקראת מיתרת ההלוואה הרשומה, שמתעדכנת בייבוא לוח סילוקין, בעריכה או בסגירת ההלוואה, ולא בכל חיוב חודשי.</p></MetricExplanation>
               <SummaryCard label="התקדמות רשומה" value={formatCurrency(summary.savedTotal)} tone="success" />
               <SummaryCard label="יעד כולל" value={formatCurrency(summary.targetTotal)} />
               <SummaryCard
@@ -204,7 +204,7 @@ export default function SavingsPage() {
                   <span className="budget-percent text-success">{percent}%</span>
                 </div>
                 <div className="budget-card-remaining">
-                  {debt && source === "loan" && <span className="text-muted">נותרו {formatCurrency(remaining)} לפי יתרת {goal.loan?.loanName} · </span>}
+                  {debt && source === "loan" && <span className="text-muted">נותרו {formatCurrency(remaining)} לפי יתרת {goal.loan?.loanName}, נכון ל־{formatDate(goal.progress.asOf)} · </span>}
                   {source === "unavailable" && <span className="text-warning">ההלוואה המקושרת נמחקה — אין ממה למדוד התקדמות · </span>}
                   {goal.monthlyTarget !== null && <span className="text-muted">יעד חודשי {formatCurrency(Number(goal.monthlyTarget))} · </span>}
                   {goal.targetDate && <span className="text-muted">עד {formatDate(goal.targetDate)}</span>}

@@ -38,6 +38,7 @@ describe("goals", () => {
     const created = await request(app).post("/api/savings").set(headers()).send({ goalName: "לסגור את הרכב", goalType: "debt_payoff", loanId: car.id, targetAmount: 1 });
     expect(created.status).toBe(201);
     expect(created.body.progress).toMatchObject({ target: 20000, current: 0, remaining: 20000, source: "loan" });
+    expect(created.body.progress.asOf).toBe(car.updatedAt.toISOString());
 
     await prisma.loan.update({ where: { id: car.id }, data: { currentBalance: 15000 } });
     let goal = (await savingsService.list(userId)).goals[0];
@@ -45,7 +46,7 @@ describe("goals", () => {
 
     // Interest or indexation can push the balance above where it started: no progress, never negative.
     await prisma.loan.update({ where: { id: car.id }, data: { currentBalance: 21000 } });
-    expect((await savingsService.list(userId)).goals[0].progress).toMatchObject({ current: 0, remaining: 20000 });
+    expect((await savingsService.list(userId)).goals[0].progress).toMatchObject({ current: 0, percent: 0, remaining: 21000 });
 
     expect((await request(app).post(`/api/savings/${created.body.id}/deposit`).set(headers()).send({ amount: 500 })).status).toBe(400);
     expect((await request(app).patch(`/api/savings/${created.body.id}`).set(headers()).send({ currentAmount: 500 })).status).toBe(400);

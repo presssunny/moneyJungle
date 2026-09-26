@@ -4,10 +4,7 @@ import { ApiError } from "../../utils/ApiError";
 import { decimalToNumber, round2 } from "../../utils/money.utils";
 import { CreateSavingsGoalBody, UpdateSavingsGoalBody } from "./savings.validation";
 
-/** Goals that hold money set aside. Paying a loan down is not saving, so debt goals never count here. */
-export const setAsideGoals = { goalType: { not: "debt_payoff" } } satisfies Prisma.SavingsGoalWhereInput;
-
-export const withLoan = { loan: { select: { id: true, loanName: true, currentBalance: true, status: true } } } as const;
+export const withLoan = { loan: { select: { id: true, loanName: true, currentBalance: true, status: true, updatedAt: true } } } as const;
 type GoalRecord = Prisma.SavingsGoalGetPayload<{ include: typeof withLoan }>;
 
 export interface GoalProgress {
@@ -18,31 +15,31 @@ export interface GoalProgress {
   complete: boolean;
   /** manual: entered deposits; loan: the linked loan's balance; unavailable: the loan is gone. */
   source: "manual" | "loan" | "unavailable";
+  /** Loan goals: when that balance was last written. It moves on a schedule import, an edit or a closure — not on each monthly debit. */
+  asOf: string | null;
 }
 
 /**
  * A debt goal's target is the loan balance when the goal was set; what is left is
- * the loan's balance now, which statement imports and schedules keep current.
- * A balance that grew (interest charged, indexation) shows as no progress, not as negative.
+ * the loan's recorded balance now. A balance that grew above the target shows the
+ * real amount owed, with progress held at zero rather than negative.
  */
 export function goalProgress(goal: GoalRecord): GoalProgress {
   const target = decimalToNumber(goal.targetAmount);
-  let current: number;
-  let source: GoalProgress["source"] = "manual";
-  if (goal.goalType === "debt_payoff") {
-    if (!goal.loan) return { current: 0, target, remaining: target, percent: 0, complete: false, source: "unavailable" };
-    const owed = goal.loan.status === "finished" ? 0 : decimalToNumber(goal.loan.currentBalance);
-    current = Math.max(0, target - owed);
-    source = "loan";
-  } else {
-    current = decimalToNumber(goal.currentAmount);
+  if (goal.goalType !== "debt_payoff") {
+    const saved = decimalToNumber(goal.currentAmount);
+    return { ...progressOf(saved, target), remaining: round2(Math.max(0, target - saved)), complete: saved >= target, source: "manual", asOf: null };
   }
-  const remaining = round2(Math.max(0, target - current));
+  if (!goal.loan) return { current: 0, target, remaining: target, percent: 0, complete: false, source: "unavailable", asOf: null };
+  const owed = goal.loan.status === "finished" ? 0 : decimalToNumber(goal.loan.currentBalance);
   return {
-    current: round2(current), target, remaining,
-    percent: target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 0,
-    complete: remaining === 0, source,
+    ...progressOf(Math.max(0, target - owed), target), remaining: round2(owed), complete: owed <= 0,
+    source: "loan", asOf: goal.loan.updatedAt.toISOString(),
   };
+}
+
+function progressOf(current: number, target: number) {
+  return { current: round2(current), target, percent: target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 0 };
 }
 
 async function requireGoal(userId: number, id: number) {
@@ -58,6 +55,7 @@ function present(goal: GoalRecord) {
 export const savingsService = {
   async list(userId: number) {
     const goals = (await prisma.savingsGoal.findMany({ where: { userId }, include: withLoan, orderBy: { id: "asc" } })).map(present);
+    // Paying a loan down is not saving: debt goals never count toward money set aside.
     const setAside = goals.filter((goal) => goal.goalType !== "debt_payoff");
     const savedTotal = round2(setAside.reduce((sum, goal) => sum + goal.progress.current, 0));
     const targetTotal = round2(setAside.reduce((sum, goal) => sum + goal.progress.target, 0));
