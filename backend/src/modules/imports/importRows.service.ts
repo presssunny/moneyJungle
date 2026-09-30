@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isDeepStrictEqual } from "node:util";
 import { prisma } from "../../config/database";
 import { ApiError } from "../../utils/ApiError";
 import { fingerprint, json } from "../journey/journey.utils";
@@ -31,6 +32,9 @@ async function candidatesFor(userId:number,kind:string,answers:{accountId?:numbe
 // Two installments of one purchase share date, name and amount; only their number tells them apart.
 const matches=(r:PreviewRow,c:Candidate)=>r.date===c.date&&r.name.trim()===c.name.trim()&&Math.round(r.amount*100)===Math.round(c.amount*100)
   &&!(r.installment!=null&&c.installment!=null&&r.installment!==c.installment);
+// A bank row equal in date, description and signed amount on the same account is the
+// same bank transaction. Expense and credit rows only suggest a match, so they ask.
+const initialResolution=(kind:string,hasCandidate:boolean)=>!hasCandidate?"include":kind==="bank"?"duplicate":"review";
 
 export const importRows = {
   async replace(userId:number,sessionId:string,kind:string,answers:{accountId?:number;cardId?:number;month?:string},rows:PreviewRow[]) {
@@ -44,14 +48,30 @@ export const importRows = {
       // One existing occurrence suggests one duplicate; repeated source rows remain distinct.
       const selected=found.slice(0,1);
       for(const c of selected) consumed.add(`${c.kind}:${c.id}`);
-      await prisma.importRow.create({data:{sessionId,rowNumber:i+1,original:json(original),normalized:json(normalized),candidates:json(selected),resolution:selected.length?"review":"include"}});
+      const resolution=initialResolution(kind,selected.length>0);
+      await prisma.importRow.create({data:{sessionId,rowNumber:i+1,original:json(original),normalized:json(normalized),candidates:json(selected),resolution,matchRef:resolution==="duplicate"?json(selected[0]):undefined}});
     }
     return fingerprint(candidates);
   },
-  async list(userId:number,sessionId:string,page=1) {
-    if(!await prisma.importSession.findFirst({where:{id:sessionId,userId}})) throw ApiError.notFound("הייבוא לא נמצא");
-    const [items,total]=await Promise.all([prisma.importRow.findMany({where:{sessionId},orderBy:{rowNumber:"asc"},skip:(page-1)*50,take:50}),prisma.importRow.count({where:{sessionId}})]);
-    return {items,total,page,pageSize:50,pendingCount:await prisma.importRow.count({where:{sessionId,resolution:"review"}})};
+  async list(userId:number,sessionId:string,page=1,filter?:"review") {
+    const session=await prisma.importSession.findFirst({where:{id:sessionId,userId}});
+    if(!session) throw ApiError.notFound("הייבוא לא נמצא");
+    const [items,decisions]=await Promise.all([
+      prisma.importRow.findMany({where:{sessionId,...(filter?{resolution:filter}:{})},orderBy:{rowNumber:"asc"},skip:(page-1)*50,take:50}),
+      prisma.importRow.findMany({where:{sessionId},select:{original:true,normalized:true,resolution:true,candidates:true}}),
+    ]);
+    const counts={included:0,duplicate:0,pending:0};
+    let editedCount=0;
+    const answers=session.answers as {month?:string};
+    for(const row of decisions) {
+      if(row.resolution==="include") counts.included++;
+      else if(row.resolution==="duplicate") counts.duplicate++;
+      else counts.pending++;
+      const original=row.original as unknown as PreviewRow;
+      const initial={...original,date:original.date??(answers.month?`${answers.month}-01`:null)};
+      if(row.resolution!==initialResolution(session.kind,Array.isArray(row.candidates)&&row.candidates.length>0)||!isDeepStrictEqual(initial,row.normalized)) editedCount++;
+    }
+    return {items,total:filter?counts.pending:decisions.length,page,pageSize:50,pendingCount:counts.pending,counts,editedCount};
   },
   async edit(userId:number,sessionId:string,rowNumber:number,input:unknown) {
     const body=rowEditSchema.parse(input);

@@ -14,6 +14,8 @@ export const FIXTURES = {
   bankStatementJuly: "bank-statement.xlsx",
   bankStatementH1: "bank-statement-h1.xlsx",
   bankStatementPdf: "bank-statement.pdf",
+  bankStatementDailyPdf: "bank-statement-daily.pdf",
+  bankStatementDailyStartPdf: "bank-statement-daily-start.pdf",
   loanSchedule432: "loan-schedule-1.xlsx",
   loanSchedule562: "loan-schedule-2.xlsx",
   creditStatement: "credit-statement.xlsx",

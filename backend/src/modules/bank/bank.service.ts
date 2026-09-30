@@ -7,6 +7,7 @@ import { hashFile } from "../imports/statementDetector.service";
 import { accountBalanceService } from "./accountBalance.service";
 import {
   classifyBankLine,
+  describeIngestionIssues,
   describeIngestionReport,
   describeMonthlyConditions,
   parseBankStatement,
@@ -133,18 +134,7 @@ export const bankService = {
     // Ingestion log (Hebrew): which parser ran, what it found and what it could
     // not read. Rows we are unsure about are listed — never silently dropped.
     console.log(`[קליטת דוח בנק] ${describeIngestionReport(report)}`);
-    for (const issue of report.rejected) {
-      console.warn(`[קליטת דוח בנק] נדחתה שורה (עמ' ${issue.page ?? "-"}): ${issue.line} — ${issue.reason}`);
-    }
-    for (const issue of report.review) {
-      console.warn(`[קליטת דוח בנק] לבדיקה ידנית (עמ' ${issue.page ?? "-"}): ${issue.line} — ${issue.reason}`);
-    }
-    for (const mismatch of report.balanceMismatches) {
-      console.warn(
-        `[קליטת דוח בנק] אי-התאמת יתרה בשורה ${mismatch.index + 1} (${mismatch.date} ${mismatch.description}): ` +
-          `צפוי ${mismatch.expected}, מודפס ${mismatch.printed}, פער ${mismatch.diff}`
-      );
-    }
+    for (const line of describeIngestionIssues(report)) console.warn(`[קליטת דוח בנק] ${line}`);
     for (const pair of report.roundTrips) {
       console.warn(
         `[קליטת דוח בנק] סבב כספים אפשרי: ${pair.amount} יצא ב-${pair.withdrawalDate} (${pair.withdrawalDescription}) ` +

@@ -22,5 +22,5 @@ importSessionRoutes.post("/:id/commit",asyncHandler(async(req,res)=>{res.json(aw
 importSessionRoutes.post("/:id/complete",asyncHandler(async(req,res)=>{res.json(await importSessions.finish(req.userId!,id(req.params.id)));}));
 importSessionRoutes.post("/:id/cancel",asyncHandler(async(req,res)=>{res.json(await importSessions.cancel(req.userId!,id(req.params.id)));}));
 
-importSessionRoutes.get("/:id/rows",asyncHandler(async(req,res)=>{res.json(await importRows.list(req.userId!,id(req.params.id),z.coerce.number().int().min(1).default(1).parse(req.query.page)));}));
+importSessionRoutes.get("/:id/rows",asyncHandler(async(req,res)=>{res.json(await importRows.list(req.userId!,id(req.params.id),z.coerce.number().int().min(1).default(1).parse(req.query.page),z.enum(["review"]).optional().parse(req.query.filter)));}));
 importSessionRoutes.patch("/:id/rows/:row",asyncHandler(async(req,res)=>{res.json(await importRows.edit(req.userId!,id(req.params.id),z.coerce.number().int().positive().parse(req.params.row),req.body));}));

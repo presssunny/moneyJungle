@@ -67,14 +67,14 @@ test('Quick Add shows interpreted date and supports editing and immediate undo',
  await expect(page.getByRole('status').filter({hasText:'נשמרה הוצאה'})).toContainText('20');
  await page.getByRole('button',{name:'ביטול ההוספה'}).click();await expect(page.getByText('ההוספה בוטלה')).toBeVisible();expect(mocked.isRemoved()).toBe(true);
 });
-test('Upload questions survive reload, and completion follows review',async({page})=>{
+test('Upload questions survive reload, and one approval completes the import',async({page})=>{
  await mockApi(page,{pending:true});await page.goto('/onboarding');
  await page.getByRole('navigation',{name:'שלבי ההיכרות'}).getByRole('link',{name:/מוסיפים ובודקים/}).click();
  await page.locator('input[type=file]').setInputFiles({name:'expenses.csv',mimeType:'text/csv',buffer:Buffer.from('שם,סכום\nקפה,18')});
  await expect(page).toHaveURL(/session=/);await page.reload();await expect(page.getByText('נדרש חודש',{exact:true})).toBeVisible();
  await page.getByLabel('לאיזה חודש לשייך שורות בלי תאריך?').fill('2026-09');await page.getByRole('button',{name:'המשך לבדיקת התנועות'}).click();
- await page.getByRole('checkbox',{name:/בדקתי את התנועות/}).check();await page.getByRole('button',{name:'הוספת התנועות',exact:true}).click();
- await page.getByRole('button',{name:'בדקתי — סיום'}).click();await expect(page.getByText('הייבוא הושלם.')).toBeVisible();
+ await page.getByRole('button',{name:'הוספת התנועות',exact:true}).click();
+ await expect(page.getByText('הייבוא הושלם.')).toBeVisible();
  await page.getByRole('link',{name:'להמשך ההיכרות'}).click();await page.getByRole('checkbox',{name:/בדקתי את הנתונים/}).check();await page.getByRole('button',{name:'סיום ההיכרות'}).click();await expect(page).toHaveURL(/\/$/);
 });
 test('Onboarding directs users to coverage review before offering completion',async({page})=>{
@@ -93,10 +93,12 @@ test('A staged row can be corrected before commit and survives reload',async({pa
  await mockApi(page);await page.goto('/imports');
  await page.locator('input[type=file]').setInputFiles({name:'expenses.csv',mimeType:'text/csv',buffer:Buffer.from('שם,סכום\nקפה,18')});
  await page.getByLabel('לאיזה חודש לשייך שורות בלי תאריך?').fill('2026-09');await page.getByRole('button',{name:'המשך לבדיקת התנועות',exact:true}).click();
- await page.getByRole('button',{name:'בדיקת שורה 1'}).click();
+ await page.getByRole('button',{name:'צפייה בכל 1 התנועות'}).click();
+ await page.getByRole('button',{name:'פרטי שורה 1'}).click();
  const dialog=page.getByRole('dialog');await dialog.getByLabel('תיאור',{exact:true}).fill('קפה מתוקן');await dialog.getByLabel('סכום (₪)',{exact:true}).fill('20');
- await dialog.getByRole('button',{name:'זו תנועה נפרדת — להוסיף אותה'}).click();
+ await dialog.getByRole('button',{name:'שמירת השינויים'}).click();
  await expect(page.getByRole('dialog')).toHaveCount(0);await page.reload();
+ await page.getByRole('button',{name:'צפייה בכל 1 התנועות'}).click();
  await expect(page.getByText('קפה מתוקן',{exact:true})).toBeVisible();
 });
 

@@ -5,7 +5,7 @@ import { ApiError } from "../../utils/ApiError";
 import { documentStorage } from "../documents/documentStorage.service";
 import { documentsService } from "../documents/documents.service";
 import { bankService } from "../bank/bank.service";
-import { parseBankStatement, parseBankStatementPdf } from "../bank/bankParser.service";
+import { describeIngestionIssues, describeIngestionReport, parseBankStatement, parseBankStatementPdf, type ParsedBankStatement } from "../bank/bankParser.service";
 import { creditService } from "../credit/credit.service";
 import { parseCreditFile } from "../credit/creditParser.service";
 import { loanScheduleService } from "../loans/loanSchedule.service";
@@ -22,7 +22,12 @@ export const answersSchema = z.object({
   loanId: z.number().int().positive().optional(), month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional(),
 }).strict();
 type Answers = z.infer<typeof answersSchema>;
-export interface ImportPreview { rows: PreviewRow[]; total: number; count: number; warnings: string[]; questions: string[]; previousImportId?: number }
+export interface ImportPreview {
+  rows: PreviewRow[]; total: number; count: number; warnings: string[]; questions: string[];
+  blockingIssues?: string[]; details?: string[];
+  validation?: { balanceChecked: boolean; balanceMismatchCount: number; rejectedRowCount: number; reviewRowCount: number; balanceMode?: "per_transaction" | "daily" };
+  previousImportId?: number;
+}
 async function owned(userId: number, id: string) {
   const session = await prisma.importSession.findFirst({ where: { id, userId } });
   if (!session) throw ApiError.notFound("הייבוא לא נמצא");
@@ -35,21 +40,40 @@ async function bytes(storagePath: string) {
 }
 async function prepare(userId: number, buffer: Buffer, fileName: string, answers: Answers) {
   const detected = detectStatement(buffer, fileName);
-  // A PDF extension alone is not evidence of its financial meaning.
-  let kind: string = answers.kind ?? (/\.pdf$/i.test(fileName) ? "unknown" : detected.kind);
-  if (kind === "unknown" && !/\.pdf$/i.test(fileName)) {
+  const isPdf = /\.pdf$/i.test(fileName) || buffer.subarray(0,5).toString() === "%PDF-";
+  let kind: string = answers.kind ?? (isPdf ? "unknown" : detected.kind);
+  let detectedBank: ParsedBankStatement | undefined;
+  if (kind === "unknown" && isPdf) {
+    // Physical table headers and dated rows establish the kind; an extension cannot.
+    try { detectedBank = await parseBankStatementPdf(buffer, { requireColumns: true }); kind = "bank"; }
+    catch { /* An unrecognized document still needs a type selection. */ }
+  }
+  if (kind === "unknown" && !isPdf) {
     try { if (parseExpensesFile(buffer).length) kind = "expense_sheet"; } catch { /* Ask, do not import. */ }
   }
-  const preview: ImportPreview = { rows: [], total: 0, count: 0, warnings: [], questions: [] };
+  const preview: ImportPreview = { rows: [], total: 0, count: 0, warnings: [], questions: [], blockingIssues: [] };
   if (kind === "unknown") { preview.questions.push("יש לבחור את סוג הדוח. קובץ PDF נתמך כאן רק כדף חשבון עו״ש."); return { kind, preview }; }
   if (kind === "bank") {
-    const parsed = /\.pdf$/i.test(fileName) || buffer.subarray(0,5).toString() === "%PDF-" ? await parseBankStatementPdf(buffer) : parseBankStatement(buffer);
+    const parsed = detectedBank ?? (isPdf ? await parseBankStatementPdf(buffer) : parseBankStatement(buffer));
     preview.rows = parsed.rows.map(r=>({ date: r.date.toISOString().slice(0,10), name:r.description, amount:r.type === "deposit" ? r.amount : -r.amount }));
     if (!answers.accountId || !await prisma.bankAccount.findFirst({where:{id:answers.accountId,userId}})) preview.questions.push("יש לבחור את חשבון הבנק שאליו שייך הדף, או להוסיף אותו");
-    if (parsed.report.rejected.length || parsed.report.balanceMismatches.length) preview.questions.push("בחלק מהשורות היתרה לא מתיישבת או שלא הצלחנו לקרוא אותן. כדאי להוריד את הדף מחדש מאתר הבנק ולהעלות שוב.");
-    for (const issue of [...parsed.report.rejected, ...parsed.report.review]) preview.warnings.push(`${issue.line}: ${issue.reason}`);
-    for (const mismatch of parsed.report.balanceMismatches) preview.warnings.push(`אי־התאמת יתרה בתאריך ${mismatch.date}: פער ${mismatch.diff}`);
-    preview.warnings.push("היתרה בחשבון תחושב מהדף. תנועות שכבר קיימות לא יתווספו שוב, גם אם הדף חופף לדף קודם.");
+    const { rejected, balanceMismatches, review } = parsed.report;
+    const readingIssues = review.filter(issue => issue.kind === "reading");
+    const classificationIssues = review.filter(issue => issue.kind === "classification");
+    if (rejected.length) preview.blockingIssues!.push(`לא הצלחנו לקרוא ${rejected.length} שורות בדוח. לא נוסף דבר. אפשר לנסות עיבוד מחדש או להעלות את הדוח בפורמט Excel.`);
+    if (balanceMismatches.length) preview.blockingIssues!.push(`בדיקת היתרות מצאה ${balanceMismatches.length} אי־התאמות בדוח. לא נוסף דבר. אפשר לנסות עיבוד מחדש או להעלות את הדוח בפורמט Excel.`);
+    if (readingIssues.length && !balanceMismatches.length) preview.blockingIssues!.push(`לא הצלחנו לאמת את הקריאה של ${readingIssues.length} שורות בדוח. לא נוסף דבר. אפשר להעלות את הדוח בפורמט Excel.`);
+    // Each mismatch already names the row, so its paired reading issue would repeat it.
+    preview.details = describeIngestionIssues({ rejected, balanceMismatches, review: balanceMismatches.length ? [] : readingIssues });
+    console.log(`[תצוגת ייבוא בנק] ${describeIngestionReport(parsed.report)}`);
+    for (const line of preview.details) console.warn(`[תצוגת ייבוא בנק] ${line}`);
+    if (classificationIssues.length) preview.warnings.push(`נמצאו ${classificationIssues.length} זיכויים המתוארים כתשלומי קרן או הלוואה. הם לא ייספרו כהחזרי הלוואה.`);
+    preview.validation = {
+      balanceChecked: parsed.rows.length > 0 && !rejected.length && !readingIssues.length && parsed.rows.every(row => row.balanceCheck === "printed" || row.balanceCheck === "chain"),
+      balanceMismatchCount: balanceMismatches.length, rejectedRowCount: rejected.length,
+      reviewRowCount: review.length, balanceMode: parsed.report.balanceMode,
+    };
+    preview.warnings.push("היתרה בחשבון תחושב מהדף. אם יימצאו תנועות דומות לאלו שכבר קיימות, נבקש החלטה רק לגביהן.");
   } else if (kind === "credit") {
     const rows = parseCreditFile(buffer);
     preview.rows = rows.map(r=>({ date:r.transactionDate.toISOString().slice(0,10), name:r.businessName, amount:r.amount, chargeDate:r.chargeDate?.toISOString().slice(0,10)??null, installment:r.installmentNumber }));
@@ -73,7 +97,7 @@ async function prepare(userId: number, buffer: Buffer, fileName: string, answers
   }
   preview.count=preview.rows.length;
   preview.total=Math.round(preview.rows.reduce((sum,r)=>sum+r.amount,0)*100)/100;
-  if (!preview.count) preview.questions.push("לא מצאנו תנועות בקובץ — כדאי לבדוק שזה הקובץ הנכון");
+  if (!preview.count) preview.blockingIssues!.push("לא מצאנו תנועות בקובץ — כדאי לבדוק שזה הקובץ הנכון");
   if (preview.count > 10000) throw ApiError.badRequest("בקובץ יותר מ־10,000 שורות. יש לפצל אותו לכמה קבצים.");
   return {kind,preview};
 }
@@ -83,7 +107,7 @@ async function processSession(userId:number,id:string,answers:Answers) {
   try {
     const prepared=await prepare(userId,await bytes(session.storagePath),session.fileName,answers);
     const sourceVersion=await importRows.replace(userId,id,prepared.kind,answers,prepared.preview.rows);
-    return prisma.importSession.update({where:{id},data:{kind:prepared.kind,preview:json({...prepared.preview,sourceVersion,rows:prepared.preview.rows.slice(0,50)}),status:prepared.preview.questions.length?"needs_input":"ready_for_review",version:{increment:1}}});
+    return prisma.importSession.update({where:{id},data:{kind:prepared.kind,preview:json({...prepared.preview,sourceVersion,rows:prepared.preview.rows.slice(0,50)}),status:prepared.preview.blockingIssues?.length?"failed":prepared.preview.questions.length?"needs_input":"ready_for_review",version:{increment:1}}});
   } catch(error) {
     return prisma.importSession.update({where:{id},data:{status:"failed",error:(error instanceof Error?error.message:"עיבוד הקובץ נכשל").slice(0,500),version:{increment:1}}});
   }
@@ -124,7 +148,8 @@ export const importSessions = {
       const buffer=await bytes(session.storagePath);
       const answers=answersSchema.parse(session.answers);
       const check=await prepare(userId,buffer,session.fileName,answers);
-      if(check.preview.questions.length) throw ApiError.conflict(check.preview.questions.join(" · "));
+      const blockers=[...check.preview.questions,...(check.preview.blockingIssues??[])];
+      if(blockers.length) throw ApiError.conflict(blockers.join(" · "));
       if(!await prisma.importRow.count({where:{sessionId:id}})) {
         const sourceVersion=await importRows.replace(userId,id,session.kind,answers,check.preview.rows);
         await prisma.importSession.update({where:{id},data:{preview:json({...check.preview,sourceVersion,rows:check.preview.rows.slice(0,50)})}});

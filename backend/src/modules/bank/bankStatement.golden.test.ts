@@ -237,3 +237,30 @@ describe.skipIf(!hasFixture("bankStatementPdf"))("דף חשבון עו״ש — P
     expect(bankGolden(statement)).toEqual(readGolden("bank/pdf"));
   });
 });
+
+for (const fixture of ["bankStatementDailyPdf", "bankStatementDailyStartPdf"] as const) {
+  describe.skipIf(!hasFixture(fixture))(`PDF daily balances — ${fixture}`, () => {
+    it("reconciles every daily close while retaining source zeros and transaction values", async () => {
+      const { rows, report } = await parseBankStatementPdf(readFixture(fixture), { requireColumns: true });
+      expect(report.balanceMode).toBe("daily");
+      expect(report.balanceMismatches).toHaveLength(0);
+      expect(report.rejected).toHaveLength(0);
+      expect(report.review).toHaveLength(0);
+      expect(rows.some(row => row.raw.balance === 0 && row.balance === null)).toBe(true);
+      expect(rows.every(row => row.amount === row.raw.amount)).toBe(true);
+      expect(round2(report.openingBalance! + report.money.depositsRaw - report.money.withdrawalsRaw)).toBe(report.closingBalance);
+      for (let i = 0; i < rows.length; i += 1) {
+        const row = rows[i]!;
+        const next = rows[i + 1];
+        if (!next || row.date.getTime() !== next.date.getTime()) {
+          expect(row.balance).not.toBeNull();
+          expect(row.balanceCheck).toBe("printed");
+        } else {
+          expect(row.balance).toBeNull();
+          expect(row.raw.balance).toBe(0);
+          expect(row.balanceCheck).toBe("chain");
+        }
+      }
+    });
+  });
+}

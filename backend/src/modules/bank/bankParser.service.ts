@@ -81,6 +81,7 @@ function toRow(core: ParsedBankRowCore): ParsedBankRow {
 
 /** A row we could not turn into a transaction, or one that needs a human look. */
 export interface BankRowIssue {
+  kind?: "reading" | "classification";
   page: number | null;
   line: string;
   reason: string;
@@ -170,6 +171,7 @@ export interface BankMonthlyCondition {
 
 /** Everything the import flow needs to explain what happened, in Hebrew. */
 export interface BankIngestionReport {
+  balanceMode?: "per_transaction" | "daily";
   parser: "excel" | "pdf-columns" | "pdf-text";
   parserLabel: string;
   rowsDetected: number;
@@ -823,6 +825,7 @@ function buildStatement(
     // buckets below only count the debit direction, so surface it for a human.
     if (row.type === "deposit" && (row.lineKind === "loan_principal" || row.lineKind === "loan_mixed")) {
       review.push({
+        kind: "classification",
         page: typeof row.raw.page === "number" ? row.raw.page : null,
         line: `${dayKey(row.date)} ${row.description} ${row.amount}`,
         reason: "שורת קרן/תשלום הלוואה בכיוון זכות — לא נספרה כהחזר, דורשת בדיקה ידנית",
@@ -832,6 +835,7 @@ function buildStatement(
       const page = typeof row.raw.page === "number" ? row.raw.page : null;
       const reasonHint = typeof row.raw.columnHint === "string" ? row.raw.columnHint : null;
       review.push({
+        kind: "reading",
         page,
         line: `${row.date.toISOString().slice(0, 10)} ${row.description} ${row.amount}`,
         reason: [
@@ -1201,7 +1205,7 @@ function distanceConfidence(distance: number): number {
 
 /** Reconstruct the statement table from positioned tokens and classify each
  *  amount by the column (credit/debit) it physically occupies. */
-function parseBankStatementPdfByColumns(items: TextItem[]): ParsedBankStatement | null {
+function parseBankStatementPdfByColumns(items: TextItem[], requireColumns = false): ParsedBankStatement | null {
   // Locate the header row — the one carrying both חובה and זכות labels. It is
   // usually printed on the first page only; its x-positions apply to every page.
   const byRow = new Map<string, TextItem[]>();
@@ -1218,6 +1222,7 @@ function parseBankStatementPdfByColumns(items: TextItem[]): ParsedBankStatement 
     const debit = row.find((i) => i.s === "חובה");
     const credit = row.find((i) => i.s === "זכות");
     if (!debit || !credit) continue;
+    if (requireColumns && (!row.some(i => i.s === "יתרה") || !row.some(i => i.s === "תאריך"))) continue;
     columns.push({ role: "debit", cx: debit.cx, right: debit.right });
     columns.push({ role: "credit", cx: credit.cx, right: credit.right });
     const balance = row.find((i) => i.s === "יתרה");
@@ -1385,7 +1390,38 @@ function parseBankStatementPdfByColumns(items: TextItem[]): ParsedBankStatement 
     });
   });
 
-  return buildStatement("pdf-columns", "קורא PDF עמודתי (מיקום זכות/חובה)", rows, rejected);
+  const knownDailyLayout = items.some(item => item.s.includes("תנועות בחשבון")) &&
+    [...byRow.values()].some(line => /https?:\/\/(?:www\.)?fibi\.co\.il(?:\/|$)/i.test(
+      [...line].sort((a, b) => a.x - b.x).map(item => item.s).join(""),
+    ));
+  const daily = knownDailyLayout && normalizeDailyBalances(rows);
+  const statement = buildStatement("pdf-columns", "קורא PDF עמודתי (מיקום זכות/חובה)", rows, rejected);
+  if (daily) statement.report.balanceMode = "daily";
+  return statement;
+}
+
+function normalizeDailyBalances(rows: ParsedBankRow[]): boolean {
+  // This export uses zero placeholders before the daily close. Other layouts
+  // retain every printed zero, as does any statement that already reconciles.
+  if (!verifyRollingBalance(rows.map(row => ({ ...row }))).mismatches.length) return false;
+
+  const intermediate = new Set<number>();
+  let closes = 0;
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i]!;
+    const next = rows[i + 1];
+    if (row.balance === null || (next && next.date.getTime() < row.date.getTime())) return false;
+    if (next && next.date.getTime() === row.date.getTime()) {
+      if (row.balance !== 0) return false;
+      intermediate.add(i);
+    } else closes += 1;
+  }
+  // Two independently checked day-to-day segments are needed after the seed.
+  if (closes < 3 || intermediate.size === 0) return false;
+  const candidate = rows.map((row, index) => ({ ...row, balance: intermediate.has(index) ? null : row.balance }));
+  if (verifyRollingBalance(candidate).mismatches.length) return false;
+  for (const index of intermediate) rows[index]!.balance = null;
+  return true;
 }
 
 /**
@@ -1393,15 +1429,17 @@ function parseBankStatementPdfByColumns(items: TextItem[]): ParsedBankStatement 
  * debit/credit columns first, a line-by-line heuristic only if that fails.
  * Output matches the Excel parser, so the whole import flow is shared.
  */
-export async function parseBankStatementPdf(buffer: Buffer): Promise<ParsedBankStatement> {
+export async function parseBankStatementPdf(buffer: Buffer, options: { requireColumns?: boolean } = {}): Promise<ParsedBankStatement> {
   let positioned: ParsedBankStatement | null = null;
   try {
     const items = await extractPositionedItems(buffer);
-    positioned = parseBankStatementPdfByColumns(items);
+    positioned = parseBankStatementPdfByColumns(items, options.requireColumns);
   } catch {
     positioned = null;
   }
   if (positioned && positioned.rows.length > 0) return positioned;
+
+  if (options.requireColumns) throw ApiError.badRequest("לא זוהתה טבלת תנועות בנק עם תאריך, חובה, זכות ויתרה");
 
   const byText = await parseBankStatementPdfByText(buffer);
   if (byText.rows.length > 0) return byText;
@@ -1416,6 +1454,14 @@ const CONDITION_LABEL: Record<BankConditionState, string> = {
   not_met: "לא התקיים",
   unknown: "לא ידוע",
 };
+
+export function describeIngestionIssues(report: Pick<BankIngestionReport, "rejected" | "review" | "balanceMismatches">): string[] {
+  return [
+    ...report.rejected.map(issue => `נדחתה שורה (עמ' ${issue.page ?? "-"}): ${issue.line} — ${issue.reason}`),
+    ...report.review.map(issue => `לבדיקה ידנית (עמ' ${issue.page ?? "-"}): ${issue.line} — ${issue.reason}`),
+    ...report.balanceMismatches.map(m => `אי-התאמת יתרה בשורה ${m.index + 1} (${m.date} ${m.description}): צפוי ${m.expected}, מודפס ${m.printed}, פער ${m.diff}`),
+  ];
+}
 
 /** One-line Hebrew summary of an ingestion report, for the server log. */
 export function describeIngestionReport(report: BankIngestionReport): string {

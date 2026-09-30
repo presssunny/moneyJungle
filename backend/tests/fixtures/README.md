@@ -14,6 +14,8 @@
 | `bank-statement.xlsx` | ייצוא עו״ש לחודש בודד (יולי 2026) | `bankStatement.golden.test.ts` |
 | `bank-statement-h1.xlsx` | ייצוא עו״ש רב־חודשי (ינואר–יולי 2026) | `bankStatement.golden.test.ts` |
 | `bank-statement.pdf` | אותו דף חשבון כ־PDF | `bankStatement.golden.test.ts` (מסלול PDF) |
+| `bank-statement-daily.pdf` | דוח בנק דיגיטלי עם יתרות סוף יום ואפסי ביניים | אימות תבנית יומית ומעבר יום בין עמודים |
+| `bank-statement-daily-start.pdf` | דוח מאותה תבנית שמתחיל באפס ביניים | גזירת פתיחה מיתרת סוף היום הראשונה |
 | `loan-schedule-1.xlsx` | לוח סילוקין — הלוואה 108, מסלול 432 | `loanSchedule.golden.test.ts` |
 | `loan-schedule-2.xlsx` | לוח סילוקין — הלוואה 108, מסלול 562 | `loanSchedule.golden.test.ts` |
 | `credit-statement.xlsx` | פירוט עסקאות וזיכויים (כאל) | תאריכים כפי שהודפסו, מספר תשלומים מההערות, סכום = סה"כ הגיליון של כאל, golden `credit/cal` |

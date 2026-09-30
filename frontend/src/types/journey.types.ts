@@ -14,7 +14,7 @@ export interface FinancialStatus {
 export interface ImportSession {
  error?:string|null;
  id:string;fileName:string;kind:string;status:string;version:number;answers:Record<string,string|number>;
- preview:{rows:Array<{date:string|null;name:string;amount:number}>;count:number;total:number;warnings:string[];questions:string[];previousImportId?:number};
+ preview:{rows:Array<{date:string|null;name:string;amount:number}>;count:number;total:number;warnings:string[];questions:string[];previousImportId?:number;blockingIssues?:string[];details?:string[];validation?:{balanceChecked:boolean;balanceMismatchCount:number;rejectedRowCount:number;reviewRowCount:number;balanceMode?:"per_transaction"|"daily"}};
  result:{creditImportId?:number;accountId?:number;statementImportId?:number;details?:{loanId?:number;expenseIds?:number[]}}|null;
 }
 export interface CheckInView {draft:{id:string;step:number}|null;previousCompletedAt:string|null;due:boolean;token:string;action:{title:string;to:string;reason?:string};status:FinancialStatus & {upcoming:Commitment[]};comparison:{baseline:boolean;added:number|null;late:number|null;changed:number|null;removed:number|null;cashChange:number|null;limited:boolean;historyChanged:boolean|null}}
