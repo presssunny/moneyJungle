@@ -124,6 +124,7 @@ function Section({ kind, title, data, onChanged, onRemove }: { kind: ConnectionK
       {items.length ? <ul className="connection-list">{items.map((c) => (
         <ConnectionItem key={c.id} connection={c} provider={data.providers.find((p) => p.id === c.provider)} onChanged={onChanged} onRemove={() => onRemove(c)} />
       ))}</ul> : !adding && <p className="text-muted">אין עדיין חיבור. אפשר להמשיך להעלות קבצים כרגיל.</p>}
+      {kind === "bank" && items.length > 0 && <p className="text-muted">ברענון הראשון כדאי להשוות את התנועות לדף החשבון של אותה תקופה: האתר עשוי לנסח חיובי כרטיס והחזרי הלוואה אחרת מהקובץ, ואז הם עלולים להיספר פעמיים.</p>}
       {adding && <AddConnection kind={kind} providers={data.providers} onAdded={(c) => { onChanged(c); setAdding(false); }} />}
     </Card>
   );
