@@ -45,7 +45,7 @@ function ActionsMenu({ loan, actions }: { loan: Loan; actions: LoanActions }) {
   ];
   if (!closed) {
     items.push(
-      { label: "פירעון מוקדם", icon: "⚡", run: () => actions.onEarlyRepayment(loan) },
+      ...(loan.scheduleSource === "statement" ? [] : [{ label: "פירעון מוקדם", icon: "⚡", run: () => actions.onEarlyRepayment(loan) }]),
       { label: "סגירת הלוואה", icon: "🔒", run: () => actions.onClose(loan) },
       { label: "מחיקה", icon: "🗑️", run: () => actions.onDelete(loan), danger: true }
     );
@@ -99,6 +99,8 @@ function Fact({ label, value, tone }: { label: ReactNode; value: string; tone?: 
  */
 export function LoanCard({ loan, actions }: { loan: Loan; actions: LoanActions }) {
   const closed = loan.status === "finished";
+  // Seen only as a monthly debit on a bank statement — the 0 balance means unknown.
+  const fromStatement = loan.scheduleSource === "statement" && !closed;
   const { progress } = loan;
 
   return (
@@ -107,7 +109,7 @@ export function LoanCard({ loan, actions }: { loan: Loan; actions: LoanActions }
         <div className="loan-card-identity">
           <LoanStatusBadge lifecycle={progress.lifecycle} closedAt={loan.closedAt} />
           <h3 className="loan-card-name">
-            {loan.computed.isExpensive && !closed && <span title="ריבית גבוהה">🔥 </span>}
+            {loan.computed.isExpensive && !closed && !fromStatement && <span title="ריבית גבוהה">🔥 </span>}
             {loan.loanName}
           </h3>
           <p className="loan-card-meta">
@@ -120,14 +122,21 @@ export function LoanCard({ loan, actions }: { loan: Loan; actions: LoanActions }
                 🏦 מלוח הבנק
               </span>
             )}
+            {fromStatement && <span className="loan-card-source">🔎 זוהתה מדף החשבון</span>}
           </p>
         </div>
         <ActionsMenu loan={loan} actions={actions} />
       </header>
 
-      <LoanProgressBar loan={loan} />
+      {!fromStatement && <LoanProgressBar loan={loan} />}
 
-      {closed ? (
+      {fromStatement ? (
+        <div className="loan-card-facts">
+          <Fact label={<>יתרת <Term name="קרן" /></>} value="לא ידועה" tone="text-muted" />
+          <Fact label="החזר חודשי" value={formatCurrency(loan.monthlyPayment)} />
+          <Fact label="החיוב הבא" value={new Date(loan.startDate).toLocaleDateString("he-IL")} />
+        </div>
+      ) : closed ? (
         <div className="loan-card-facts">
           <Fact label="סכום מקורי" value={formatCurrency(loan.originalAmount)} />
           <Fact
@@ -177,14 +186,18 @@ export function LoanCard({ loan, actions }: { loan: Loan; actions: LoanActions }
         </div>
       )}
 
+      {fromStatement && <p className="text-muted">ההחזר נלקח מדף החשבון ונכלל בתזרים. כדי לראות יתרה, ריבית ותאריך סיום, יש להעלות את לוח הסילוקין של ההלוואה.</p>}
+
       {!closed && (
         <footer className="loan-card-foot">
           <Button size="sm" variant="outline" onClick={() => actions.onSchedule(loan)}>
             📋 לוח סילוקין
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => actions.onEarlyRepayment(loan)}>
-            ⚡ פירעון מוקדם
-          </Button>
+          {!fromStatement && (
+            <Button size="sm" variant="ghost" onClick={() => actions.onEarlyRepayment(loan)}>
+              ⚡ פירעון מוקדם
+            </Button>
+          )}
         </footer>
       )}
     </article>

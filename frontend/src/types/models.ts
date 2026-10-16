@@ -119,7 +119,7 @@ export interface Loan {
   closureCost: number | null;
   totalPayments: number | null;
   paymentsMade: number | null;
-  scheduleSource: "bank_file" | "computed";
+  scheduleSource: "bank_file" | "computed" | "statement";
   originalAmountSource: "contract" | "reconstructed" | "manual";
   scheduleImportedAt: string | null;
   computed: LoanComputed;

@@ -7,6 +7,7 @@ import { DropZone } from "../components/common/DropZone";
 import { Input } from "../components/common/Input";
 import { Select } from "../components/common/Select";
 import { ImportRowsReview } from "../components/common/ImportRowsReview";
+import { AddedCommitments, DetectedCommitments } from "../components/common/DetectedCommitments";
 import { AsyncSection } from "../components/common/AsyncSection";
 import { Loading } from "../components/common/Loading";
 import { useAsync } from "../hooks/useAsync";
@@ -75,8 +76,10 @@ function ImportJourney(){
  const [params,setParams]=useSearchParams();const id=params.get('session');
  const [session,setSession]=useState<ImportSession|null>(null);const [busy,setBusy]=useState(Boolean(id));const [error,setError]=useState('');const [pendingCount,setPendingCount]=useState<number|null>(null);const [editedCount,setEditedCount]=useState(0);
  const onRowsSummary=useCallback((pending:number,edited:number)=>{setPendingCount(pending);setEditedCount(edited);},[]);
- const [answers,setAnswers]=useState<Record<string,string|number>>({});const [newName,setNewName]=useState('');const [lastFour,setLastFour]=useState('');
+ const [answers,setAnswers]=useState<Record<string,string|number>>({});const [newName,setNewName]=useState('');const [lastFour,setLastFour]=useState('');const [skippedCommitments,setSkippedCommitments]=useState<Set<string>>(new Set());
+ const toggleCommitment=(key:string)=>setSkippedCommitments(old=>{const next=new Set(old);if(next.has(key))next.delete(key);else next.add(key);return next;});
  const sources=useAsync(getFinancialStatus,[]);const loans=useAsync(async()=> (await api.get('/loans')).data.loans as Array<{id:number;loanName:string}>,[]);
+ useEffect(()=>{setSkippedCommitments(new Set());},[id]);
  useEffect(()=>{let alive=true;if(id){getImportSession(id).then(s=>{if(alive){setSession(s);setAnswers(s.answers??{});}}).catch(e=>{if(alive)setError(apiErrorMessage(e));}).finally(()=>{if(alive)setBusy(false);});}return()=>{alive=false;};},[id]);
  async function run(action:()=>Promise<ImportSession>){setBusy(true);setError('');try{const next=await action();setSession(next);setAnswers(next.answers??{});setPendingCount(null);if(id!==next.id)setParams({session:next.id});}catch(e){setError(apiErrorMessage(e));}finally{setBusy(false);}}
  function inputNumber(key:string,value:string){setAnswers(old=>({...old,[key]:value?Number(value):''}));}
@@ -84,7 +87,7 @@ function ImportJourney(){
  async function commit(){
   if(!session)return;
   await run(async()=>{
-   const committed=await actOnSession(session,'commit');
+   const committed=await actOnSession(session,'commit',{skipCommitments:[...skippedCommitments]});
    setSession(committed);
    if(['bank','expense_sheet','loan_schedule'].includes(committed.kind)&&committed.status==='review'){
     try{return await actOnSession(committed,'complete');}
@@ -147,6 +150,7 @@ function ImportJourney(){
    {session.status==='ready_for_review'&&<Card title="אישור והוספה"><p>אין צורך לעבור על כל שורה. אפשר לפתוח את הפירוט לפי הצורך.</p>
     {pendingCount!==null&&pendingCount>0&&<p role="status">נשאר להחליט על {pendingCount} תנועות שעשויות להיות כפולות.</p>}
     {answersChanged&&<p role="status">פרטי הקובץ השתנו. יש להפעיל בדיקה מחדש לפני ההוספה.</p>}
+    <DetectedCommitments items={session.preview?.commitments??[]} skipped={skippedCommitments} onToggle={toggleCommitment} disabled={busy}/>
     <Button disabled={busy||pendingCount!==0||answersChanged} onClick={commit}>{busy?'מוסיף…':'הוספת התנועות'}</Button>
    </Card>}
    {session.status==='review'&&<Card title={session.kind==='credit'?'אישור עסקאות האשראי':'התנועות נוספו'}><p>{session.kind==='credit'?'נשאר לאשר את עסקאות האשראי במסך הכרטיס, ואז לסיים כאן.':'התנועות נשמרו. אפשר להשלים את הסיום בלי להוסיף אותן שוב.'}</p><div className="row-actions">
@@ -154,7 +158,7 @@ function ImportJourney(){
     <Button disabled={busy} onClick={()=>run(()=>actOnSession(session,'complete'))}>{session.kind==='credit'?'בדקתי — סיום':'השלמת הייבוא'}</Button>
    </div></Card>}
    {editable&&<Button variant="ghost" disabled={busy} onClick={()=>run(()=>actOnSession(session,'cancel'))}>ביטול הייבוא — שום דבר לא יתווסף</Button>}
-   {session.status==='completed'&&<Card title="הדוח נוסף לתמונה"><div className="row-actions"><Link to={destination}>צפייה בתנועות שנוספו</Link><Link to="/data">דוחות ואפשרות ביטול הייבוא</Link><Link to="/">לדף הבית</Link><Link to="/check-in">לבדיקה השבועית</Link><Link to="/onboarding">להמשך ההיכרות</Link><Button variant="outline" onClick={()=>setParams({})}>העלאת דוח נוסף</Button></div></Card>}
+   {session.status==='completed'&&<Card title="הדוח נוסף לתמונה"><AddedCommitments items={session.result?.details?.commitments??[]}/><div className="row-actions"><Link to={destination}>צפייה בתנועות שנוספו</Link><Link to="/data">דוחות ואפשרות ביטול הייבוא</Link><Link to="/">לדף הבית</Link><Link to="/check-in">לבדיקה השבועית</Link><Link to="/onboarding">להמשך ההיכרות</Link><Button variant="outline" onClick={()=>setParams({})}>העלאת דוח נוסף</Button></div></Card>}
    {['cancelled','rolled_back'].includes(session.status)&&<Button onClick={()=>setParams({})}>העלאת דוח אחר</Button>}
   </>}
  </div>;

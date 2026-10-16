@@ -331,6 +331,9 @@ input[type=checkbox], input[type=radio] { accent-color: var(--primary); width: 1
 .ask-mode { font-size: 13px; margin: 0; }
 .household-consent { display: flex; align-items: flex-start; gap: var(--space-3); padding-block: var(--space-4); }
 .household-consent input { flex-shrink: 0; width: 22px; height: 22px; margin-block-start: 2px; }
+.detected-commitments { border: 0; padding: 0; margin-block: var(--space-4); }
+.detected-commitments legend { font-weight: 600; padding: 0; }
+.detected-commitments .household-consent { padding-block: var(--space-2); }
 .palette { display: flex; flex-direction: column; gap: var(--space-3); }
 .palette-list { list-style: none; margin: 0; padding: 0; max-height: min(60vh, 28rem); overflow-y: auto; }
 .palette-group { font-size: 12px; font-weight: 650; color: var(--text-muted); padding: var(--space-3) var(--space-2) var(--space-1); }
