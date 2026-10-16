@@ -51,6 +51,11 @@ const sessionOf = async (connectionId: number, index = 0) => {
   const outcome = (await latestSync(connectionId)).outcome as Array<{ importSessionId: string | null; rows: number; note?: string }>;
   return outcome[index];
 };
+/** A row an earlier sync stored — its import file carries the sync prefix. */
+async function syncedRow(date: string, description: string) {
+  const statementImportId = (await prisma.bankStatementImport.create({ data: { userId, bankAccountId: accountId, fileName: "סנכרון הבנק הבינלאומי", fileHash: crypto.randomUUID(), coverageFrom: new Date(date), coverageTo: new Date(date) } })).id;
+  await prisma.bankTransaction.create({ data: { userId, bankAccountId: accountId, transactionDate: new Date(date), description, amount: 5, type: "withdrawal", statementImportId } });
+}
 const latestSync = (connectionId: number) => prisma.connectionSync.findFirstOrThrow({ where: { connectionId }, orderBy: { id: "desc" } });
 
 beforeAll(async () => {
@@ -172,7 +177,7 @@ describe("bank and card connections", () => {
       txn("תיאור מהאתר", -80, { date: at("2026-09-05") }), txn("ישן", -10, { date: at("2026-09-03") }), txn("חדש", -30, { date: at("2026-09-10") }),
     ] }] });
     await (await connectionSync.start(userId, connection.id, scrape.factory)).done;
-    expect(scrape.calls[0].startDate.toISOString().slice(0, 10)).toBe("2026-09-04");
+    expect(scrape.calls[0].startDate.toISOString().slice(0, 10)).toBe("2026-09-06");
     const first = await sessionOf(connection.id);
     expect(first.rows).toBe(1);
 
@@ -194,17 +199,41 @@ describe("bank and card connections", () => {
     expect((await sessionOf(connection.id)).rows).toBe(2);
   });
 
-  it("brings a row that was pending last time once it settles, even when it is older than the stored rows", async () => {
+  it("looks back a few days past its own synced rows for one that posted late", async () => {
     const connection = await bankConnection();
-    await prisma.bankTransaction.create({ data: { userId, bankAccountId: accountId, transactionDate: new Date("2026-09-20"), description: "קיים", amount: 5, type: "withdrawal" } });
-    const pending = fakeFactory({ success: true, accounts: [{ accountNumber: "1", txns: [txn("חיוב חו״ל", -77, { status: "pending", date: at("2026-09-02") })] }] });
+    await syncedRow("2026-09-20", "מהסנכרון");
+    const scrape = fakeFactory({ success: true, accounts: [{ accountNumber: "1", txns: [
+      txn("מהסנכרון", -5, { date: at("2026-09-20") }), txn("הגיע באיחור", -60, { date: at("2026-09-18") }), txn("ישן מדי", -7, { date: at("2026-09-16") }),
+    ] }] });
+    await (await connectionSync.start(userId, connection.id, scrape.factory)).done;
+    const item = await sessionOf(connection.id);
+    const rows = await prisma.importRow.findMany({ where: { sessionId: item.importSessionId! }, orderBy: { rowNumber: "asc" } });
+    // The re-fetched synced row is the same bank transaction — duplicate review settles it.
+    expect(rows.map((r) => [(r.normalized as { name: string }).name, r.resolution])).toEqual([["מהסנכרון", "duplicate"], ["הגיע באיחור", "include"]]);
+  });
+
+  it("brings a row that was pending last time once it settles, even with another amount and older than the stored rows", async () => {
+    const connection = await bankConnection();
+    await syncedRow("2026-09-20", "קיים");
+    const pending = fakeFactory({ success: true, accounts: [{ accountNumber: "1", txns: [txn("תדלוק", -300, { status: "pending", date: at("2026-09-02") })] }] });
     await (await connectionSync.start(userId, connection.id, pending.factory)).done;
     expect(await sessionOf(connection.id)).toMatchObject({ rows: 0, importSessionId: null });
 
-    const settled = fakeFactory({ success: true, accounts: [{ accountNumber: "1", txns: [txn("חיוב חו״ל", -77, { date: at("2026-09-02") })] }] });
+    const settled = fakeFactory({ success: true, accounts: [{ accountNumber: "1", txns: [txn("תדלוק פז", -212.4, { date: at("2026-09-02") })] }] });
     await (await connectionSync.start(userId, connection.id, settled.factory)).done;
     expect(settled.calls[0].startDate.toISOString().slice(0, 10)).toBe("2026-09-02");
     expect((await sessionOf(connection.id)).rows).toBe(1);
+  });
+
+  it("never reopens a period a file already covered, even for a pending row", async () => {
+    const connection = await bankConnection();
+    const pending = fakeFactory({ success: true, accounts: [{ accountNumber: "1", txns: [txn("תדלוק", -300, { status: "pending", date: at("2026-09-02") })] }] });
+    await (await connectionSync.start(userId, connection.id, pending.factory)).done;
+    // Meanwhile a statement through 10/09 was uploaded; it already holds the settled row in its own words.
+    await prisma.bankTransaction.create({ data: { userId, bankAccountId: accountId, transactionDate: new Date("2026-09-10"), description: "פז תחנת דלק", amount: 212.4, type: "withdrawal" } });
+    const settled = fakeFactory({ success: true, accounts: [{ accountNumber: "1", txns: [txn("תדלוק פז", -212.4, { date: at("2026-09-02") })] }] });
+    await (await connectionSync.start(userId, connection.id, settled.factory)).done;
+    expect(await sessionOf(connection.id)).toMatchObject({ rows: 0, importSessionId: null });
   });
 
   it("takes a card's rows once the card is added, and a late instalment of an old purchase by its charge date", async () => {

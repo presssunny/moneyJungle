@@ -85,16 +85,14 @@ describe("purchaseDay", () => {
 });
 
 describe("freshTransactions", () => {
-  const isNew = (t: ScrapedTransaction) => israelDay(t.date) > "2026-10-05";
-  it("keeps rows after what is stored, pending rows, and a once-pending row that settled late", () => {
+  it("keeps what the target has not stored and passes pending rows through to be carried", () => {
+    const isNew = (t: ScrapedTransaction) => israelDay(t.date) > "2026-10-05";
     const rows = [
       txn({ description: "ישן", date: "2026-09-01T21:00:00.000Z" }),
       txn({ description: "חדש", date: "2026-10-09T21:00:00.000Z" }),
       txn({ description: "עדיין בקליטה", status: "pending", date: "2026-09-20T21:00:00.000Z" }),
-      txn({ description: "נקלט באיחור", chargedAmount: -42, date: "2026-09-20T21:00:00.000Z" }),
     ];
-    const carried = [{ date: "2026-09-21", description: "נקלט באיחור", amount: -42 }];
-    expect(freshTransactions(rows, isNew, carried).map((t) => t.description)).toEqual(["חדש", "עדיין בקליטה", "נקלט באיחור"]);
-    expect(bankWorkbook(freshTransactions(rows, isNew, carried)).pending).toEqual([{ date: "2026-09-21", description: "עדיין בקליטה", amount: -100 }]);
+    expect(freshTransactions(rows, isNew).map((t) => t.description)).toEqual(["חדש", "עדיין בקליטה"]);
+    expect(bankWorkbook(freshTransactions(rows, isNew)).pending).toEqual([{ date: "2026-09-21", description: "עדיין בקליטה", amount: -100 }]);
   });
 });

@@ -48,15 +48,10 @@ export function purchaseDay(txn: ScrapedTransaction): string {
 }
 
 const SHEKEL = ["ILS", "₪", "NIS"];
-const sameRef = (txn: ScrapedTransaction, ref: PendingRef) => txn.description.trim() === ref.description && txn.chargedAmount === ref.amount;
 
-/**
- * Keeps what this target has not stored yet (`isNew`), plus any row that was
- * pending last time and has settled since, however old. Pending rows pass
- * through so the workbook can count and carry them.
- */
-export function freshTransactions(txns: ScrapedTransaction[], isNew: (txn: ScrapedTransaction) => boolean, carried: PendingRef[]): ScrapedTransaction[] {
-  return txns.filter((t) => t.status === "pending" || isNew(t) || carried.some((ref) => sameRef(t, ref)));
+/** Pending rows pass through so the workbook can count and carry them. */
+export function freshTransactions(txns: ScrapedTransaction[], isNew: (txn: ScrapedTransaction) => boolean): ScrapedTransaction[] {
+  return txns.filter((t) => t.status === "pending" || isNew(t));
 }
 
 function toBuffer(header: string[], rows: Array<Array<string | number>>): Buffer {

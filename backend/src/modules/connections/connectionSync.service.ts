@@ -44,36 +44,80 @@ async function finish(syncId: number, status: SyncStatus, message: string | null
   });
 }
 
+/**
+ * Watermarks: rows on or before a day are already stored. A sync's own rows get
+ * an overlap (a card row can post days after its purchase) because the same
+ * wording comes back and duplicate review matches it exactly. Rows imported from
+ * a file get none — the website words them differently, so an overlap would add them twice.
+ */
 interface Target {
   key: string;
   label: string;
   storedThrough: string | null;
-  /** Card only: newest stored charge date — a later instalment of an old purchase is still new. */
+  /** Card only, by charge date — a later instalment of an old purchase is still new. */
   chargedThrough: string | null;
+  /** The file watermarks alone: a pending row never reopens the window below them. */
+  filesThrough: string | null;
+  filesChargedThrough: string | null;
   answers: { kind: "bank"; accountId: number } | { kind: "credit"; cardId: number } | null;
 }
 
+export const SYNC_FILE_PREFIX = "סנכרון ";
+const OVERLAP_DAYS = { bank: 3, card: 14 };
+
 const day = (date: Date | null | undefined) => date?.toISOString().slice(0, 10) ?? null;
 const firstSyncDay = () => addDays(israelDay(new Date().toISOString()), -FIRST_SYNC_DAYS);
+const later = (a: string | null, b: string | null) => (a === null ? b : b === null || a > b ? a : b);
+
+function watermark(fromSync: Date | null, fromFiles: Date | null, overlap: number): string | null {
+  const synced = day(fromSync);
+  return later(synced === null ? null : addDays(synced, -overlap), day(fromFiles));
+}
+
+const syncedFile = { startsWith: SYNC_FILE_PREFIX };
 
 async function bankTarget(accountId: number, label: string): Promise<Target> {
-  const newest = await prisma.bankTransaction.aggregate({ where: { bankAccountId: accountId }, _max: { transactionDate: true } });
-  return { key: `bank:${accountId}`, label, storedThrough: day(newest._max.transactionDate), chargedThrough: null, answers: { kind: "bank", accountId } };
+  const [synced, files] = await Promise.all([
+    prisma.bankTransaction.aggregate({ where: { bankAccountId: accountId, statementImport: { is: { fileName: syncedFile } } }, _max: { transactionDate: true } }),
+    prisma.bankTransaction.aggregate({ where: { bankAccountId: accountId, OR: [{ statementImportId: null }, { statementImport: { is: { fileName: { not: syncedFile } } } }] }, _max: { transactionDate: true } }),
+  ]);
+  return { key: `bank:${accountId}`, label, storedThrough: watermark(synced._max.transactionDate, files._max.transactionDate, OVERLAP_DAYS.bank), chargedThrough: null, filesThrough: day(files._max.transactionDate), filesChargedThrough: null, answers: { kind: "bank", accountId } };
 }
 
 async function cardTarget(cardId: number, label: string): Promise<Target> {
-  const newest = await prisma.creditTransaction.aggregate({ where: { cardId }, _max: { transactionDate: true, chargeDate: true } });
-  return { key: `card:${cardId}`, label, storedThrough: day(newest._max.transactionDate), chargedThrough: day(newest._max.chargeDate), answers: { kind: "credit", cardId } };
+  const [synced, files] = await Promise.all([
+    prisma.creditTransaction.aggregate({ where: { cardId, creditImport: { fileName: syncedFile } }, _max: { transactionDate: true, chargeDate: true } }),
+    prisma.creditTransaction.aggregate({ where: { cardId, creditImport: { fileName: { not: syncedFile } } }, _max: { transactionDate: true, chargeDate: true } }),
+  ]);
+  return {
+    key: `card:${cardId}`, label,
+    storedThrough: watermark(synced._max.transactionDate, files._max.transactionDate, OVERLAP_DAYS.card),
+    chargedThrough: watermark(synced._max.chargeDate, files._max.chargeDate, OVERLAP_DAYS.card),
+    filesThrough: day(files._max.transactionDate), filesChargedThrough: day(files._max.chargeDate),
+    answers: { kind: "credit", cardId },
+  };
 }
 
 /**
- * New = after the target's newest STORED row, so a rejected or deleted import
- * is fetched again and a statement imported by hand is not fetched twice.
+ * Rows still pending last time may settle with another amount or name, so the
+ * window reopens to their day — but never below what a file already covered.
  */
-function isNewFor(target: Target): (txn: ScrapedTransaction) => boolean {
-  const from = target.storedThrough ?? addDays(firstSyncDay(), -1);
-  if (target.answers?.kind !== "credit") return (t) => israelDay(t.date) > from;
-  return (t) => purchaseDay(t) > from || (!!t.installments && t.installments.number > 1 && israelDay(t.processedDate) > (target.chargedThrough ?? from));
+function windowFor(target: Target, carried: PendingRef[]): { after: string; chargeAfter: string } {
+  const pendingFloor = carried.length ? addDays(carried.map((ref) => ref.date).sort()[0], -1) : null;
+  const reopen = (stored: string | null, files: string | null) => {
+    const base = stored ?? addDays(firstSyncDay(), -1);
+    return later(pendingFloor !== null && pendingFloor < base ? pendingFloor : base, files)!;
+  };
+  return {
+    after: reopen(target.storedThrough, target.filesThrough),
+    chargeAfter: reopen(target.chargedThrough ?? target.storedThrough, target.filesChargedThrough ?? target.filesThrough),
+  };
+}
+
+function isNewFor(target: Target, carried: PendingRef[]): (txn: ScrapedTransaction) => boolean {
+  const { after, chargeAfter } = windowFor(target, carried);
+  if (target.answers?.kind !== "credit") return (t) => israelDay(t.date) > after;
+  return (t) => purchaseDay(t) > after || (!!t.installments && t.installments.number > 1 && israelDay(t.processedDate) > chargeAfter);
 }
 
 async function carriedPending(connectionId: number): Promise<Map<string, PendingRef[]>> {
@@ -92,13 +136,13 @@ async function cancelUnapproved(userId: number, connectionId: number, key: strin
 }
 
 async function importTarget(userId: number, connectionId: number, provider: ProviderInfo, target: Target, txns: ScrapedTransaction[], carried: PendingRef[]): Promise<SyncOutcomeItem> {
-  const fresh = freshTransactions(txns, isNewFor(target), carried);
+  const fresh = freshTransactions(txns, isNewFor(target, carried));
   const workbook = target.answers?.kind === "credit" || !target.answers && provider.kind === "card" ? cardWorkbook(fresh) : bankWorkbook(fresh);
   const base = { key: target.key, target: target.label, rows: workbook.rows, skippedPending: workbook.skippedPending, skippedForeign: workbook.skippedForeign, skippedZero: workbook.skippedZero, storedThrough: target.storedThrough, pending: workbook.pending };
   if (!target.answers) return { ...base, importSessionId: null, note: `${target.label} לא מוגדר במערכת. יש להוסיף אותו במסך הכרטיסים ולרענן שוב — התנועות שלו יילקחו אז.` };
   await cancelUnapproved(userId, connectionId, target.key);
   if (!workbook.rows) return { ...base, importSessionId: null, note: "אין תנועות חדשות" };
-  const fileName = `סנכרון ${provider.name} ${target.label} ${israelDay(new Date().toISOString())}.xlsx`;
+  const fileName = `${SYNC_FILE_PREFIX}${provider.name} ${target.label} ${israelDay(new Date().toISOString())}.xlsx`;
   const session = await importSessions.create(userId, fileName, workbook.buffer, target.answers);
   return { ...base, importSessionId: session.id };
 }
@@ -120,12 +164,10 @@ function validAccounts(result: ScrapeResult): ScrapedAccount[] {
 
 /** One scrape window for the whole login: the oldest day any of its targets still needs. */
 function scrapeFrom(targets: Target[], carried: Map<string, PendingRef[]>): Date {
-  const days = [
-    ...targets.map((t) => addDays(t.storedThrough ?? firstSyncDay(), -1)),
-    ...[...carried.values()].flat().map((ref) => ref.date),
-    ...(targets.length ? [] : [firstSyncDay()]),
-  ];
-  return new Date(`${days.sort()[0]}T00:00:00Z`);
+  const days = targets.length
+    ? targets.flatMap((t) => Object.values(windowFor(t, carried.get(t.key) ?? [])))
+    : [addDays(firstSyncDay(), -1), ...[...carried.values()].flat().map((ref) => addDays(ref.date, -1))];
+  return new Date(`${addDays(days.sort()[0], 1)}T00:00:00Z`);
 }
 
 async function run(userId: number, connection: ConnectionRow, syncId: number, factory: ScraperFactory): Promise<void> {
@@ -168,7 +210,7 @@ async function run(userId: number, connection: ConnectionRow, syncId: number, fa
       for (const account of accounts) {
         const digits = lastDigits(account.accountNumber);
         const card = cards.find((c) => c.lastFour === digits);
-        const target = card ? known[cards.indexOf(card)] : { key: `card-digits:${digits}`, label: `כרטיס ${digits}`, storedThrough: null, chargedThrough: null, answers: null };
+        const target = card ? known[cards.indexOf(card)] : { key: `card-digits:${digits}`, label: `כרטיס ${digits}`, storedThrough: null, chargedThrough: null, filesThrough: null, filesChargedThrough: null, answers: null };
         outcome.push(await importTarget(userId, connection.id, provider, target, account.txns, carried.get(target.key) ?? []));
       }
     }
