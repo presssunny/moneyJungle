@@ -9,6 +9,7 @@ import { formatCurrency } from "../utils/format";
 import AssetsPage from "./AssetsPage";
 import BankPage from "./BankPage";
 import BankReconcilePage from "./BankReconcilePage";
+import ConnectionsPage from "./ConnectionsPage";
 import CreditPage from "./CreditPage";
 import LoansPage from "./LoansPage";
 import SavingsPage from "./SavingsPage";
@@ -85,6 +86,7 @@ export default function AccountsPage() {
           { key: "credit", label: "כרטיסי אשראי", icon: "💳", element: <CreditPage /> },
           { key: "bank", label: "בנק", icon: "🏦", element: <BankPage /> },
           { key: "reconcile", label: "התאמת בנק", icon: "🔗", element: <BankReconcilePage /> },
+          { key: "connections", label: "חשבונות מחוברים", icon: "🔌", element: <ConnectionsPage /> },
           { key: "loans", label: "הלוואות וחובות", icon: "📉", element: <LoansPage /> },
           { key: "savings", label: "חיסכון ויעדים", icon: "🐷", element: <SavingsPage /> },
           { key: "assets", label: "נכסים ושווי נטו", icon: "💎", element: <AssetsPage /> },

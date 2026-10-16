@@ -665,3 +665,37 @@ export interface IncomeLedgerPage extends LedgerPage<Income> {
   byType: Array<{ type: string; label: string; amount: number }>;
   recurringCount: number;
 }
+
+/** A bank/card website login synced on demand. Credentials never come back from the API. */
+export type ConnectionKind = "bank" | "card";
+export type SyncStatus = "running" | "awaiting_approval" | "succeeded" | "failed";
+
+export interface ConnectionProviderInfo {
+  id: string;
+  kind: ConnectionKind;
+  name: string;
+  fields: Array<{ key: string; label: string; secret: boolean }>;
+  approvalHint: string | null;
+}
+
+export interface SyncOutcomeItem {
+  importSessionId: string | null;
+  target: string;
+  rows: number;
+  skippedPending: number;
+  skippedForeign: number;
+  note?: string;
+}
+
+export interface FinancialConnection {
+  id: number;
+  provider: string;
+  kind: ConnectionKind;
+  label: string;
+  bankAccountId: number | null;
+  accountHint: string | null;
+  verifiedAt: string | null;
+  lastSyncAt: string | null;
+  createdAt: string;
+  syncs: Array<{ id: number; status: SyncStatus; message: string | null; outcome: SyncOutcomeItem[] | null; startedAt: string; finishedAt: string | null }>;
+}
