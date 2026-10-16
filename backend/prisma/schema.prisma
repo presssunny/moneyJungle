@@ -93,6 +93,7 @@ model User {
   importSessions     ImportSession[]
   financialProfile   FinancialProfile?
   commitmentDecisions CommitmentDecision[]
+  dismissedCommitments DismissedCommitment[]
   checkIns           MoneyCheckIn[]
   duplicateReviews   DuplicateReview[]
   activityEvents     ActivityEvent[]
@@ -493,6 +494,11 @@ model RecurringPayment {
   paymentMethodId Int?     @map("payment_method_id")
   frequency       String   @default("monthly") @db.VarChar(20) // monthly | weekly | yearly
   nextPaymentDate DateTime @map("next_payment_date") @db.Date
+  // Set when the payment was found in a bank statement. Its real expense arrives
+  // with every statement, so `generate` must never materialize it again.
+  detectedKey     String?  @map("detected_key") @db.VarChar(160)
+  // Last statement debit it was read from — only a later one may update it.
+  detectedThrough DateTime? @map("detected_through") @db.Date
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
@@ -500,6 +506,7 @@ model RecurringPayment {
   category      Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   paymentMethod PaymentMethod? @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
 
+  @@unique([userId, detectedKey])
   @@index([userId, nextPaymentDate])
   @@map("recurring_payments")
 }
@@ -566,7 +573,11 @@ model Loan {
   // the two as equally certain (IA §1.2).
   totalPayments        Int?      @map("total_payments")
   paymentsMade         Int?      @map("payments_made")
-  scheduleSource       String    @default("computed") @map("schedule_source") @db.VarChar(20) // bank_file | computed
+  scheduleSource       String    @default("computed") @map("schedule_source") @db.VarChar(20) // bank_file | computed | statement
+  // `statement`: only the monthly debit is known — balance, rate and term await a
+  // schedule file, so currentBalance 0 means "unknown", never "paid off".
+  detectedKey          String?   @map("detected_key") @db.VarChar(160)
+  detectedThrough      DateTime? @map("detected_through") @db.Date
   originalAmountSource String    @default("manual") @map("original_amount_source") @db.VarChar(20) // contract | reconstructed | manual
   scheduleImportedAt   DateTime? @map("schedule_imported_at")
 
@@ -578,6 +589,7 @@ model Loan {
   goals    SavingsGoal[]
 
   @@index([userId, status])
+  @@unique([userId, detectedKey])
   @@index([userId, loanNumber, trackNumber])
   @@map("loans")
 }
@@ -813,6 +825,18 @@ model FinancialProfile {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   spendingAccount BankAccount? @relation("SpendingAccount", fields: [spendingAccountId], references: [id], onDelete: SetNull)
   @@map("financial_profiles")
+}
+
+/// A detected statement commitment the user chose not to track. Without it every
+/// overlapping statement would offer the same line again, pre-checked.
+model DismissedCommitment {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  key       String   @db.VarChar(160)
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([userId, key])
+  @@map("dismissed_commitments")
 }
 
 /// Decisions apply to one version of one dated obligation; editing its source invalidates them.
