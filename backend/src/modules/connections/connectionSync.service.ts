@@ -144,6 +144,8 @@ async function importTarget(userId: number, connectionId: number, provider: Prov
   if (!workbook.rows) return { ...base, importSessionId: null, note: "אין תנועות חדשות" };
   const fileName = `${SYNC_FILE_PREFIX}${provider.name} ${target.label} ${israelDay(new Date().toISOString())}.xlsx`;
   const session = await importSessions.create(userId, fileName, workbook.buffer, target.answers);
+  // An identical file returns its earlier session, which may already be approved.
+  if (["review", "completed"].includes(session.status)) return { ...base, importSessionId: null, note: "התנועות האלה כבר נקלטו" };
   return { ...base, importSessionId: session.id };
 }
 
@@ -167,7 +169,8 @@ function scrapeFrom(targets: Target[], carried: Map<string, PendingRef[]>): Date
   const days = targets.length
     ? targets.flatMap((t) => Object.values(windowFor(t, carried.get(t.key) ?? [])))
     : [addDays(firstSyncDay(), -1), ...[...carried.values()].flat().map((ref) => addDays(ref.date, -1))];
-  return new Date(`${addDays(days.sort()[0], 1)}T00:00:00Z`);
+  // The library dates rows at Israeli midnight (21:00Z the day before); a day's margin keeps the first day, isNew trims the extra.
+  return new Date(`${days.sort()[0]}T00:00:00Z`);
 }
 
 async function run(userId: number, connection: ConnectionRow, syncId: number, factory: ScraperFactory): Promise<void> {

@@ -177,7 +177,7 @@ describe("bank and card connections", () => {
       txn("תיאור מהאתר", -80, { date: at("2026-09-05") }), txn("ישן", -10, { date: at("2026-09-03") }), txn("חדש", -30, { date: at("2026-09-10") }),
     ] }] });
     await (await connectionSync.start(userId, connection.id, scrape.factory)).done;
-    expect(scrape.calls[0].startDate.toISOString().slice(0, 10)).toBe("2026-09-06");
+    expect(scrape.calls[0].startDate.toISOString().slice(0, 10)).toBe("2026-09-05");
     const first = await sessionOf(connection.id);
     expect(first.rows).toBe(1);
 
@@ -221,8 +221,18 @@ describe("bank and card connections", () => {
 
     const settled = fakeFactory({ success: true, accounts: [{ accountNumber: "1", txns: [txn("תדלוק פז", -212.4, { date: at("2026-09-02") })] }] });
     await (await connectionSync.start(userId, connection.id, settled.factory)).done;
-    expect(settled.calls[0].startDate.toISOString().slice(0, 10)).toBe("2026-09-02");
+    expect(settled.calls[0].startDate.toISOString().slice(0, 10)).toBe("2026-09-01");
     expect((await sessionOf(connection.id)).rows).toBe(1);
+  });
+
+  it("does not call an already approved import 'waiting' when the same rows come back", async () => {
+    const connection = await bankConnection();
+    const scrape = fakeFactory({ success: true, accounts: [{ accountNumber: "1", txns: [txn("חדש", -30)] }] });
+    await (await connectionSync.start(userId, connection.id, scrape.factory)).done;
+    await prisma.importSession.update({ where: { id: (await sessionOf(connection.id)).importSessionId! }, data: { status: "completed" } });
+    await (await connectionSync.start(userId, connection.id, scrape.factory)).done;
+    expect(await sessionOf(connection.id)).toMatchObject({ importSessionId: null, note: "התנועות האלה כבר נקלטו" });
+    expect((await latestSync(connection.id)).message).toBe("לא נמצאו תנועות חדשות לאישור");
   });
 
   it("never reopens a period a file already covered, even for a pending row", async () => {
