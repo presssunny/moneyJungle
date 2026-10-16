@@ -679,11 +679,15 @@ export interface ConnectionProviderInfo {
 }
 
 export interface SyncOutcomeItem {
+  key: string;
   importSessionId: string | null;
   target: string;
   rows: number;
   skippedPending: number;
   skippedForeign: number;
+  skippedZero: number;
+  storedThrough: string | null;
+  pending: Array<{ date: string; description: string; amount: number }>;
   note?: string;
 }
 

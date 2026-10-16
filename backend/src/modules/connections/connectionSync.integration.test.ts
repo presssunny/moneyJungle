@@ -18,7 +18,7 @@ const originalKey = env.BANK_CREDENTIALS_KEY;
 
 const txn = (description: string, chargedAmount: number, overrides: Partial<ScrapedTransaction> = {}): ScrapedTransaction => ({
   type: "normal", date: "2026-09-09T21:00:00.000Z", processedDate: "2026-10-01T21:00:00.000Z", originalAmount: chargedAmount,
-  originalCurrency: "ILS", chargedAmount, description, status: "completed", ...overrides,
+  originalCurrency: "ILS", chargedAmount, chargedCurrency: "ILS", description, status: "completed", ...overrides,
 });
 
 /** Emits the library's progress events, then returns `result` once `gate` opens. */
@@ -46,6 +46,11 @@ async function bankConnection() {
 async function calConnection() {
   return connectionsService.create(userId, { provider: "visaCal", credentials: { username: "cal-user", password: "cal-secret-456" } });
 }
+const at = (day: string) => `${new Date(new Date(`${day}T00:00:00Z`).getTime() - 3 * 3600_000).toISOString()}`;
+const sessionOf = async (connectionId: number, index = 0) => {
+  const outcome = (await latestSync(connectionId)).outcome as Array<{ importSessionId: string | null; rows: number; note?: string }>;
+  return outcome[index];
+};
 const latestSync = (connectionId: number) => prisma.connectionSync.findFirstOrThrow({ where: { connectionId }, orderBy: { id: "desc" } });
 
 beforeAll(async () => {
@@ -157,5 +162,64 @@ describe("bank and card connections", () => {
     await prisma.connectionSync.create({ data: { connectionId: connection.id, userId, status: "awaiting_approval" } });
     await connectionSync.failInterrupted();
     expect(await latestSync(connection.id)).toMatchObject({ status: "failed" });
+  });
+
+  it("takes only what the account has not stored, and fetches a rejected import again", async () => {
+    const connection = await bankConnection();
+    // A statement imported by hand runs through 05/09; the website names its rows differently.
+    await prisma.bankTransaction.create({ data: { userId, bankAccountId: accountId, transactionDate: new Date("2026-09-05"), description: "תיאור מהאקסל", amount: 80, type: "withdrawal" } });
+    const scrape = fakeFactory({ success: true, accounts: [{ accountNumber: "1", txns: [
+      txn("תיאור מהאתר", -80, { date: at("2026-09-05") }), txn("ישן", -10, { date: at("2026-09-03") }), txn("חדש", -30, { date: at("2026-09-10") }),
+    ] }] });
+    await (await connectionSync.start(userId, connection.id, scrape.factory)).done;
+    expect(scrape.calls[0].startDate.toISOString().slice(0, 10)).toBe("2026-09-04");
+    const first = await sessionOf(connection.id);
+    expect(first.rows).toBe(1);
+
+    await prisma.importSession.update({ where: { id: first.importSessionId! }, data: { status: "cancelled" } });
+    await (await connectionSync.start(userId, connection.id, scrape.factory)).done;
+    const again = await sessionOf(connection.id);
+    expect(again.rows).toBe(1);
+    expect(again.importSessionId).not.toBe(first.importSessionId);
+  });
+
+  it("replaces an import the user has not approved yet instead of offering the same rows twice", async () => {
+    const connection = await bankConnection();
+    const first = fakeFactory({ success: true, accounts: [{ accountNumber: "1", txns: [txn("חדש", -30)] }] });
+    await (await connectionSync.start(userId, connection.id, first.factory)).done;
+    const earlier = (await sessionOf(connection.id)).importSessionId!;
+    const second = fakeFactory({ success: true, accounts: [{ accountNumber: "1", txns: [txn("חדש", -30), txn("עוד", -5, { date: at("2026-09-12") })] }] });
+    await (await connectionSync.start(userId, connection.id, second.factory)).done;
+    expect((await prisma.importSession.findUniqueOrThrow({ where: { id: earlier } })).status).toBe("cancelled");
+    expect((await sessionOf(connection.id)).rows).toBe(2);
+  });
+
+  it("brings a row that was pending last time once it settles, even when it is older than the stored rows", async () => {
+    const connection = await bankConnection();
+    await prisma.bankTransaction.create({ data: { userId, bankAccountId: accountId, transactionDate: new Date("2026-09-20"), description: "קיים", amount: 5, type: "withdrawal" } });
+    const pending = fakeFactory({ success: true, accounts: [{ accountNumber: "1", txns: [txn("חיוב חו״ל", -77, { status: "pending", date: at("2026-09-02") })] }] });
+    await (await connectionSync.start(userId, connection.id, pending.factory)).done;
+    expect(await sessionOf(connection.id)).toMatchObject({ rows: 0, importSessionId: null });
+
+    const settled = fakeFactory({ success: true, accounts: [{ accountNumber: "1", txns: [txn("חיוב חו״ל", -77, { date: at("2026-09-02") })] }] });
+    await (await connectionSync.start(userId, connection.id, settled.factory)).done;
+    expect(settled.calls[0].startDate.toISOString().slice(0, 10)).toBe("2026-09-02");
+    expect((await sessionOf(connection.id)).rows).toBe(1);
+  });
+
+  it("takes a card's rows once the card is added, and a late instalment of an old purchase by its charge date", async () => {
+    const connection = await calConnection();
+    const instalment = (n: number, charge: string) => txn("ספה", -500, { type: "installments", installments: { number: n, total: 6 }, date: at(["2026-07-15", "2026-08-15", "2026-09-15", "2026-10-15"][n - 1]), processedDate: at(charge) });
+    const scrape = fakeFactory({ success: true, accounts: [{ accountNumber: "5555", txns: [instalment(3, "2026-10-02"), instalment(4, "2026-11-02"), txn("קפה", -12, { date: at("2026-09-26"), processedDate: at("2026-11-02") })] }] });
+    await (await connectionSync.start(userId, connection.id, scrape.factory)).done;
+    expect((await sessionOf(connection.id)).note).toMatch(/לא מוגדר במערכת/);
+
+    const cardId = (await prisma.creditCard.create({ data: { userId, name: "כאל", issuer: "כאל", lastFour: "5555" } })).id;
+    const creditImportId = (await prisma.creditImport.create({ data: { userId, fileName: "cal.xlsx", importYear: 2026, importMonth: 10 } })).id;
+    await prisma.creditTransaction.create({ data: { userId, creditImportId, cardId, transactionDate: new Date("2026-09-25"), billingDate: new Date("2026-09-25"), chargeDate: new Date("2026-10-02"), businessName: "סופר", amount: 40 } });
+    await (await connectionSync.start(userId, connection.id, scrape.factory)).done;
+    const item = await sessionOf(connection.id);
+    const rows = await prisma.importRow.findMany({ where: { sessionId: item.importSessionId! }, orderBy: { rowNumber: "asc" } });
+    expect(rows.map((r) => (r.normalized as { name: string; date: string }).date + " " + (r.normalized as { name: string }).name)).toEqual(["2026-07-15 ספה", "2026-09-26 קפה"]);
   });
 });

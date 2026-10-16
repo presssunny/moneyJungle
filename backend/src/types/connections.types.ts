@@ -30,12 +30,24 @@ export interface ScrapeResult {
   errorMessage?: string;
 }
 
+export interface PendingRef {
+  date: string;
+  description: string;
+  amount: number;
+}
+
 /** One import session a sync produced — approved on the regular import screen. */
 export interface SyncOutcomeItem {
+  /** bank:<accountId> | card:<cardId> | card-digits:<last four> — matches carried pending rows to their target. */
+  key: string;
   importSessionId: string | null;
   target: string;
   rows: number;
   skippedPending: number;
   skippedForeign: number;
+  skippedZero: number;
+  /** Rows after this day were new; null when nothing was stored yet (then 90 days back). */
+  storedThrough: string | null;
+  pending: PendingRef[];
   note?: string;
 }

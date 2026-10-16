@@ -34,8 +34,8 @@ function SyncState({ connection, provider }: { connection: FinancialConnection; 
     <div className="connection-state">
       <p>{sync.message} · {when(sync.finishedAt ?? sync.startedAt)}</p>
       <ul className="journey-list">{(sync.outcome ?? []).map((o) => (
-        <li key={o.target}>
-          {o.importSessionId ? <Link to={`/imports?session=${o.importSessionId}`}>{o.target}: {o.rows} תנועות לאישור</Link> : <span>{o.target}: {o.note ?? "לא נוסף דוח"}</span>}
+        <li key={o.key}>
+          {o.importSessionId ? <Link to={`/imports?session=${o.importSessionId}`}>{o.target}: {o.rows} תנועות חדשות לאישור</Link> : <span>{o.target}: {o.note ?? "לא נוסף דוח"}</span>}
           {(o.skippedPending > 0 || o.skippedForeign > 0) && <span className="text-muted">{[o.skippedPending && `${o.skippedPending} עדיין בקליטה — ייכנסו ברענון הבא`, o.skippedForeign && `${o.skippedForeign} חויבו במטבע זר ולא נכללו`].filter(Boolean).join(" · ")}</span>}
         </li>
       ))}</ul>
