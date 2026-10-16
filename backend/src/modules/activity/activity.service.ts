@@ -11,7 +11,7 @@ export interface ActivityDescription {
 }
 
 const DOMAIN_LABELS: Record<string, string> = {
-  expenses: "הוצאה", incomes: "הכנסה", loans: "הלוואה", bank: "חשבון בנק", credit: "כרטיס אשראי",
+  expenses: "הוצאה", incomes: "הכנסה", loans: "הלוואה", bank: "חשבון בנק", credit: "כרטיס אשראי", connections: "חיבור לבנק או לאשראי",
   imports: "דוח", documents: "מסמך", reminders: "תזכורת", recurring: "תשלום קבוע",
   subscriptions: "מנוי", savings: "יעד", assets: "נכס", budgets: "תקציב", categories: "קטגוריה",
   "payment-methods": "אמצעי תשלום", family: "בן משפחה", settings: "הגדרות", alerts: "התראה",
