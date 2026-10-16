@@ -120,7 +120,8 @@ export async function scanForAlerts(userId: number): Promise<void> {
         severity: "warning",
       });
     }
-    if (computed.remainingMonths === null) {
+    // Statement-detected: balance unknown, so "never pays off" would be invented.
+    if (computed.remainingMonths === null && loan.scheduleSource !== "statement") {
       detected.push({
         type: "expensive_loan",
         title: `ההחזר על ${loan.loanName} לא מכסה את הריבית`,

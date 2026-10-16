@@ -1,6 +1,7 @@
 import { prisma } from "../../config/database";
 import { ApiError } from "../../utils/ApiError";
 import { decimalToNumber, round2 } from "../../utils/money.utils";
+import { isTrackLeftover } from "./loanCalculator.service";
 import crypto from "crypto";
 import type { AssistantStep } from "../assistant/assistant.types";
 import { documentsService } from "../documents/documents.service";
@@ -75,6 +76,17 @@ export const loanScheduleService = {
 
     if (loanId && !loan) throw ApiError.notFound("ההלוואה לא נמצאה");
 
+    // A loan first seen on a bank statement holds the debit of every track paid
+    // that day. Each schedule carves its own track out of it, so the forecast
+    // neither double-counts nor drops a track whose file hasn't arrived yet.
+    const placeholder =
+      loan?.scheduleSource === "statement"
+        ? loan
+        : loan === null && parsed.loanNumber
+          ? await prisma.loan.findFirst({ where: { userId, loanNumber: parsed.loanNumber, scheduleSource: "statement" }, orderBy: { id: "asc" } })
+          : null;
+    if (placeholder) loan = null;
+
     const created = loan === null;
     const label = loanLabel(parsed);
     const name = parsed.trackName ?? label;
@@ -119,6 +131,16 @@ export const loanScheduleService = {
           ...shared,
         },
       });
+      if (placeholder) {
+        const before = decimalToNumber(placeholder.monthlyPayment);
+        const carvedEarlier = await prisma.loan.aggregate({
+          where: { userId, loanNumber: placeholder.loanNumber, scheduleSource: "bank_file", status: { not: "finished" }, id: { not: loan.id } },
+          _sum: { monthlyPayment: true },
+        });
+        const remaining = round2(before - parsed.monthlyPayment);
+        if (isTrackLeftover(remaining, before + decimalToNumber(carvedEarlier._sum.monthlyPayment))) await prisma.loan.delete({ where: { id: placeholder.id } });
+        else await prisma.loan.update({ where: { id: placeholder.id }, data: { monthlyPayment: remaining } });
+      }
     } else {
       // A closed loan keeps its closure. An older export of a loan that has since
       // been paid off must not resurrect it as active (CLAUDE.md §2 — reality wins).

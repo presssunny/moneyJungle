@@ -179,7 +179,7 @@ export async function buildInsights(userId: number, year: number, month: number)
       monthlyPayment: decimalToNumber(loan.monthlyPayment),
     }),
   }));
-  const neverEnding = loanComputed.filter((l) => l.computed.remainingMonths === null);
+  const neverEnding = loanComputed.filter((l) => l.computed.remainingMonths === null && l.loan.scheduleSource !== "statement");
   const expensive = loanComputed.filter((l) => l.computed.isExpensive);
   if (neverEnding.length > 0) score += 0;
   else if (expensive.length > 0) score += 7;

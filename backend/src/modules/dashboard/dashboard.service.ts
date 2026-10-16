@@ -223,8 +223,9 @@ export const dashboardService = {
       .filter((c) => c.value > 0)
       .sort((a, b) => b.value - a.value);
 
-    // Loans: interest vs principal per loan
-    const loans = await loansRepository.findActive(userId);
+    // Loans: interest vs principal per loan. A statement-detected loan has no
+    // known split (CLAUDE.md §5) — showing it all as principal would invent one.
+    const loans = (await loansRepository.findActive(userId)).filter((loan) => loan.scheduleSource !== "statement");
     const loanSplit = loans.map((loan) => {
       const computed = computeLoan({
         currentBalance: decimalToNumber(loan.currentBalance),

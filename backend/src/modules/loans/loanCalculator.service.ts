@@ -71,6 +71,15 @@ export function computeLoan(input: LoanInput): LoanComputed {
  */
 export type LoanLifecycle = "active" | "ending_soon" | "closed" | "overdue";
 
+/**
+ * What remains of a statement-detected loan after its tracks' schedules are
+ * carved out. Measured against the statement's full debit, not the shrinking
+ * remainder, so schedule-vs-statement rounding never leaves a ghost loan.
+ */
+export function isTrackLeftover(remaining: number, statementTotal: number): boolean {
+  return remaining < Math.max(10, statementTotal * 0.01);
+}
+
 /** Payments left at or below which a loan is "לקראת סיום". */
 export const ENDING_SOON_PAYMENTS = 3;
 
@@ -116,7 +125,7 @@ export function loanProgress(loan: LoanProgressInput): LoanProgress {
   let remaining: number | null = null;
   if (loan.totalPayments !== null && loan.paymentsMade !== null) {
     remaining = Math.max(loan.totalPayments - loan.paymentsMade, 0);
-  } else if (loan.currentBalance > 0) {
+  } else if (loan.currentBalance > 0 && loan.scheduleSource !== "statement") {
     remaining = computeLoan({
       currentBalance: loan.currentBalance,
       annualInterestRate: loan.annualInterestRate,
@@ -125,7 +134,8 @@ export function loanProgress(loan: LoanProgressInput): LoanProgress {
   }
 
   const simulatedRemaining = loan.totalPayments === null || loan.paymentsMade === null;
-  const closed = loan.status === "finished" || loan.currentBalance <= 0.005;
+  // A statement-detected loan carries 0 for "balance unknown", not "paid off".
+  const closed = loan.status === "finished" || (loan.currentBalance <= 0.005 && loan.scheduleSource !== "statement");
   const lifecycle: LoanLifecycle = closed
     ? "closed"
     : loan.status === "overdue"

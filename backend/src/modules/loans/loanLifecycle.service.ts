@@ -1,6 +1,7 @@
 import { prisma } from "../../config/database";
 import { Prisma } from "../../../generated/prisma/client";
 import { decimalToNumber, round2 } from "../../utils/money.utils";
+import { ApiError } from "../../utils/ApiError";
 
 const PAYOFF_TOLERANCE = 1.0;
 
@@ -369,6 +370,8 @@ export const loanLifecycleService = {
   async earlyRepaymentQuote(userId: number, loanId: number) {
     const loan = await prisma.loan.findFirst({ where: { id: loanId, userId } });
     if (!loan) return null;
+    // Its 0 balance means "unknown" — a payoff of 0 ₪ would be a made-up figure.
+    if (loan.scheduleSource === "statement") throw ApiError.badRequest("יתרת ההלוואה לא ידועה. אפשר לחשב פירעון מוקדם אחרי העלאת לוח הסילוקין שלה.");
 
     const today = new Date();
     const remaining = await prisma.loanScheduleEntry.aggregate({

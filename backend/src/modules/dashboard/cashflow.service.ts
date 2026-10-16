@@ -155,8 +155,9 @@ export async function buildUpcoming(userId: number, windowDays: number, anchor =
     }
     const amount = decimalToNumber(loan.monthlyPayment);
     if (amount <= 0) continue;
+    // A statement-detected loan has no known balance; its monthly debit is still real.
     const balance = decimalToNumber(loan.currentBalance);
-    if (balance <= 0) continue;
+    if (balance <= 0 && loan.scheduleSource !== "statement") continue;
     const endDate = loan.endDate ? new Date(loan.endDate) : null;
     const start = new Date(loan.startDate);
     const dates = monthlyOccurrences(start, includeOverdue ? laterOf(start, historicalFloor(from)) : from, to);
