@@ -15,6 +15,8 @@ import { parseExpensesFile } from "./importsParser.service";
 import { detectStatement, hashFile } from "./statementDetector.service";
 import { importRows, type PreviewRow, type SourceRef } from "./importRows.service";
 import { json } from "../journey/journey.utils";
+import { statementCommitmentsService } from "../bank/statementCommitments.service";
+import type { DetectedCommitment } from "../../types/commitments.types";
 
 export const answersSchema = z.object({
   kind: z.enum(["bank", "credit", "loan_schedule", "expense_sheet"]).optional(),
@@ -27,6 +29,8 @@ export interface ImportPreview {
   blockingIssues?: string[]; details?: string[];
   validation?: { balanceChecked: boolean; balanceMismatchCount: number; rejectedRowCount: number; reviewRowCount: number; balanceMode?: "per_transaction" | "daily" };
   previousImportId?: number;
+  /** Fixed debits the statement proves that nothing tracks yet — offered pre-checked. */
+  commitments?: DetectedCommitment[];
 }
 async function owned(userId: number, id: string) {
   const session = await prisma.importSession.findFirst({ where: { id, userId } });
@@ -57,6 +61,7 @@ async function prepare(userId: number, buffer: Buffer, fileName: string, answers
     const parsed = detectedBank ?? (isPdf ? await parseBankStatementPdf(buffer) : parseBankStatement(buffer));
     preview.rows = parsed.rows.map(r=>({ date: r.date.toISOString().slice(0,10), name:r.description, amount:r.type === "deposit" ? r.amount : -r.amount }));
     if (!answers.accountId || !await prisma.bankAccount.findFirst({where:{id:answers.accountId,userId}})) preview.questions.push("יש לבחור את חשבון הבנק שאליו שייך הדף, או להוסיף אותו");
+    else preview.commitments = await statementCommitmentsService.detect(userId, answers.accountId, parsed.rows);
     const { rejected, balanceMismatches, review } = parsed.report;
     const readingIssues = review.filter(issue => issue.kind === "reading");
     const classificationIssues = review.filter(issue => issue.kind === "classification");
@@ -136,7 +141,7 @@ export const importSessions = {
       return processSession(userId,id,answers);
     });
   },
-  async commit(userId:number,id:string,version:number) {
+  async commit(userId:number,id:string,version:number,skipCommitments:string[]=[]) {
     return withFinancialTransaction(userId,async()=>{
       const session=await owned(userId,id);
       if(["completed","review"].includes(session.status)) {
@@ -164,7 +169,9 @@ export const importSessions = {
       let expenseIds:number[]=[];
       if(session.kind==="bank") {
         const imported=await bankService.importStatement(userId,answers.accountId!,buffer,session.fileName,included.map(r=>r.rowNumber));
-        result=imported; statementImportId=imported.statementImportId;
+        const offered=((session.preview as ImportPreview|null)?.commitments??[]).map(c=>c.key);
+        const commitments=await statementCommitmentsService.apply(userId,answers.accountId!,skipCommitments,offered);
+        result={...imported,commitments}; statementImportId=imported.statementImportId;
       } else if(session.kind==="credit") {
         const parsed=parseCreditFile(buffer);
         const imported=await creditService.createImport(userId,session.fileName,buffer,{cardId:answers.cardId,staged:included.map(row=>{

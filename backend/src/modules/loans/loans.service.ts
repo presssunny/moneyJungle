@@ -9,6 +9,7 @@ import {
   reopenedLoanFields,
 } from "./loanLifecycle.service";
 import { loansRepository } from "./loans.repository";
+import { statementCommitmentsService } from "../bank/statementCommitments.service";
 import { CreateLoanBody, UpdateLoanBody } from "./loans.validation";
 
 type LoanRecord = NonNullable<Awaited<ReturnType<typeof loansRepository.findById>>>;
@@ -198,6 +199,7 @@ export const loansService = {
       );
     }
     await loansRepository.delete(id);
+    await statementCommitmentsService.dismiss(userId, existing.detectedKey);
   },
 
   /** Close a loan by hand and report what it freed up. */

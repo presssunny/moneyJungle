@@ -1,6 +1,7 @@
 import { prisma } from "../../config/database";
 import { ApiError } from "../../utils/ApiError";
 import { monthRange } from "../../utils/date.utils";
+import { statementCommitmentsService } from "../bank/statementCommitments.service";
 import { CreateRecurringBody, UpdateRecurringBody } from "./recurring.validation";
 
 async function requireRecurring(userId: number, id: number) {
@@ -59,8 +60,9 @@ export const recurringService = {
   },
 
   async remove(userId: number, id: number) {
-    await requireRecurring(userId, id);
+    const recurring = await requireRecurring(userId, id);
     await prisma.recurringPayment.delete({ where: { id } });
+    await statementCommitmentsService.dismiss(userId, recurring.detectedKey);
   },
 
   /**
@@ -72,8 +74,10 @@ export const recurringService = {
   async generate(userId: number, year: number, month: number) {
     const all = await prisma.recurringPayment.findMany({ where: { userId } });
     // Yearly payments materialize only in the month they're anchored to.
+    // A payment found on a statement gets its real expense from every statement;
+    // materializing it too would count it twice (CLAUDE.md §4).
     const recurrings = all.filter(
-      (r) => r.frequency === "monthly" || r.nextPaymentDate.getUTCMonth() + 1 === month
+      (r) => r.detectedKey === null && (r.frequency === "monthly" || r.nextPaymentDate.getUTCMonth() + 1 === month)
     );
     const { start, end } = monthRange(year, month);
     const existing = await prisma.expense.findMany({
