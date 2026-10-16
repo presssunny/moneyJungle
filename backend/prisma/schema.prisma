@@ -94,6 +94,7 @@ model User {
   financialProfile   FinancialProfile?
   commitmentDecisions CommitmentDecision[]
   dismissedCommitments DismissedCommitment[]
+  financialConnections FinancialConnection[]
   checkIns           MoneyCheckIn[]
   duplicateReviews   DuplicateReview[]
   activityEvents     ActivityEvent[]
@@ -391,6 +392,7 @@ model BankAccount {
   statements   BankStatementImport[]
   fundedSources FundingAssignment[]
   spendingFor  FinancialProfile[] @relation("SpendingAccount")
+  connections  FinancialConnection[]
 
   @@index([userId])
   @@map("bank_accounts")
@@ -945,4 +947,49 @@ model FundingAssignment {
   @@unique([userId, sourceKey])
   @@index([bankAccountId])
   @@map("funding_assignments")
+}
+
+/// A login to a bank or card website, synced on demand via israeli-bank-scrapers
+/// (CLAUDE.md §7). Credentials are an AES-256-GCM blob — never returned by the API.
+model FinancialConnection {
+  id            Int       @id @default(autoincrement())
+  userId        Int       @map("user_id")
+  provider      String    @db.VarChar(30) // beinleumi | visaCal | max | isracard
+  kind          String    @db.VarChar(10) // bank | card
+  label         String    @db.VarChar(80)
+  /// Bank connections only: the account its statement lands in.
+  bankAccountId Int?      @map("bank_account_id")
+  /// Last digits of the account to take when the login sees more than one.
+  accountHint   String?   @map("account_hint") @db.VarChar(20)
+  credentials   String    @db.Text
+  /// First successful login. Until then the connection is shown as unverified.
+  verifiedAt    DateTime? @map("verified_at")
+  lastSyncAt    DateTime? @map("last_sync_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bankAccount BankAccount?       @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
+  syncs       ConnectionSync[]
+
+  @@index([userId])
+  @@map("financial_connections")
+}
+
+model ConnectionSync {
+  id           Int       @id @default(autoincrement())
+  connectionId Int       @map("connection_id")
+  userId       Int       @map("user_id")
+  status       String    @db.VarChar(20) // running | awaiting_approval | succeeded | failed
+  errorType    String?   @map("error_type") @db.VarChar(40)
+  message      String?   @db.VarChar(500)
+  /// [{ importSessionId, target, rows }] — each lands in the regular import approval.
+  outcome      Json?
+  startedAt    DateTime  @default(now()) @map("started_at")
+  finishedAt   DateTime? @map("finished_at")
+
+  connection FinancialConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@index([connectionId, startedAt])
+  @@map("connection_syncs")
 }

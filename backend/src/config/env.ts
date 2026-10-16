@@ -32,6 +32,9 @@ const envSchema = z.object({
   // Read only by modules/documents/documentStorage.service.ts. Relative paths
   // resolve under backend/ so the value stays portable across machines.
   DOCUMENT_STORAGE_DIR: z.string().default("storage/documents"),
+  // Read only by modules/connections/credentialsCipher.ts: 32 bytes, base64.
+  // Optional so the app boots without it; adding a bank connection then fails.
+  BANK_CREDENTIALS_KEY: z.string().optional(),
 }).superRefine((value, ctx) => {
   if (value.NODE_ENV === "production") {
     try {
