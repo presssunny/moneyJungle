@@ -5,7 +5,11 @@ Read this first, then `CLAUDE.md` (the project constitution, in Hebrew) — its 
 
 ## 1. What the app is
 
-A personal household-finance app for one Israeli household. Data enters **only** by uploading files (bank statements XLSX/PDF, credit-card statements XLSX, loan amortization schedules XLSX). **Never add Open Banking / direct bank connections — product decision, permanent.**
+A personal household-finance app for one Israeli household. Data enters by uploading files (bank statements XLSX/PDF, credit-card statements XLSX, loan amortization schedules XLSX), or by a local on-demand sync through `israeli-bank-scrapers` (`backend/src/modules/connections/`). The sync follows CLAUDE.md §7 (product decision 2026-10-16, replacing the old "never"):
+- No credentials are typed into our UI (decision 2026-10-20): a new connection opens the provider's official window, and the API rejects a credentials field. A provider without such a window (the card companies, for now) is shown as "not available yet", never as an official window. Connections saved earlier with credentials keep them encrypted (AES-256-GCM), never returned by the API, logs or import screens.
+- Never bypass 2FA, app approval, CAPTCHA or WAF; no forks that advertise it; no auto-retry; no scheduled sync.
+- Never copy a bank's QR, cookies or session tokens into our frontend, and never imitate a bank's login screen. Authentication happens only on the bank's own page, headless or in a visible official Chrome window with a temporary profile. In that window the login is hers alone: our code fills no field and clicks nothing on the login page; after she is in, the library's own transaction fetch runs as in password mode.
+- Synced data enters only through the existing import sessions (same approval, same dedupe). Licensed Open Banking APIs remain out of scope.
 
 | Layer | Stack | Port |
 | --- | --- | --- |
