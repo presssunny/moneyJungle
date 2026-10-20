@@ -793,6 +793,8 @@ model ImportSession {
   fileHash    String   @map("file_hash") @db.VarChar(64)
   storagePath String   @map("storage_path") @db.VarChar(500)
   kind        String   @default("unknown") @db.VarChar(30)
+  /// file | sync — set by the server, never by the client. Only sync sessions flag near-duplicates.
+  origin      String   @default("file") @db.VarChar(10)
   status      String   @default("needs_input") @db.VarChar(30)
   version     Int      @default(0)
   answers     Json?

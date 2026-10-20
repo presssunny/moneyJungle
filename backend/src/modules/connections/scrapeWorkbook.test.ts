@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { parseBankStatement } from "../bank/bankParser.service";
 import { parseCreditFile } from "../credit/creditParser.service";
 import type { ScrapedTransaction } from "../../types/connections.types";
-import { bankWorkbook, cardWorkbook, freshTransactions, israelDay, purchaseDay } from "./scrapeWorkbook";
+import { bankWorkbook, cardWorkbook, FOREIGN_LIST_CAP, freshTransactions, israelDay, purchaseDay } from "./scrapeWorkbook";
 
 const txn = (overrides: Partial<ScrapedTransaction>): ScrapedTransaction => ({
   type: "normal", date: "2026-09-30T21:00:00.000Z", processedDate: "2026-11-01T22:00:00.000Z",
@@ -72,7 +72,28 @@ describe("cardWorkbook → credit parser", () => {
       txn({ originalCurrency: "GBP", originalAmount: -20, chargedAmount: -20, chargedCurrency: undefined, description: "UNSTATED" }),
     ]);
     expect(result).toMatchObject({ rows: 1, skippedForeign: 2 });
+    expect(result.foreign).toEqual([
+      { date: "2026-10-01", description: "DOLLAR CARD", originalAmount: -20, originalCurrency: "USD", chargedAmount: -20, chargedCurrency: "USD" },
+      { date: "2026-10-01", description: "UNSTATED", originalAmount: -20, originalCurrency: "GBP", chargedAmount: null, chargedCurrency: null },
+    ]);
     expect(parseCreditFile(result.buffer).map((r) => [r.businessName, r.amount])).toEqual([["AMAZON", 74.3]]);
+  });
+});
+
+describe("unstated billing currency (Max)", () => {
+  it("imports a shekel purchase the card did not label, and keeps a foreign one out, listed", () => {
+    const result = cardWorkbook([
+      txn({ chargedCurrency: undefined, originalCurrency: "ILS", description: "סופר שקלי" }),
+      txn({ chargedCurrency: undefined, originalCurrency: "EUR", originalAmount: -15, description: "PARIS" }),
+    ]);
+    expect(parseCreditFile(result.buffer).map((r) => r.businessName)).toEqual(["סופר שקלי"]);
+    expect(result.foreign.map((f) => f.description)).toEqual(["PARIS"]);
+  });
+
+  it("lists at most FOREIGN_LIST_CAP foreign rows but counts them all", () => {
+    const result = cardWorkbook(Array.from({ length: FOREIGN_LIST_CAP + 5 }, (_, i) => txn({ chargedCurrency: "USD", description: `F${i}` })));
+    expect(result.skippedForeign).toBe(FOREIGN_LIST_CAP + 5);
+    expect(result.foreign).toHaveLength(FOREIGN_LIST_CAP);
   });
 });
 

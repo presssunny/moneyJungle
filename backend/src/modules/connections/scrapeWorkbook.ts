@@ -1,5 +1,5 @@
 import * as XLSX from "xlsx";
-import type { PendingRef, ScrapedTransaction } from "../../types/connections.types";
+import type { ForeignRef, PendingRef, ScrapedTransaction } from "../../types/connections.types";
 
 /**
  * A sync becomes an ordinary statement file, read by the same parsers as an
@@ -14,7 +14,10 @@ export interface ScrapeWorkbook {
   skippedZero: number;
   /** Still in process at the bank — carried so the next sync takes them even if older than its window. */
   pending: PendingRef[];
+  foreign: ForeignRef[];
 }
+
+export const FOREIGN_LIST_CAP = 20;
 
 const ISRAEL_DAY = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jerusalem", year: "numeric", month: "2-digit", day: "2-digit" });
 
@@ -60,26 +63,41 @@ function toBuffer(header: string[], rows: Array<Array<string | number>>): Buffer
   return XLSX.write(book, { type: "buffer", bookType: "xlsx" }) as Buffer;
 }
 
+/**
+ * A card that leaves the billing currency unstated (Max) billed in shekels only when the purchase
+ * itself was in shekels; otherwise it stays out and is listed (banker 2026-10-17). A bank account
+ * has one currency, so there an unstated one is shekels.
+ */
+function chargedInShekels(txn: ScrapedTransaction, isBank: boolean): boolean {
+  if (txn.chargedCurrency !== undefined) return SHEKEL.includes(txn.chargedCurrency);
+  return isBank || SHEKEL.includes(txn.originalCurrency);
+}
+
 // Pending rows can still change or vanish before they post; they are carried, not imported.
-function settled(txns: ScrapedTransaction[], shekelWhenUnstated: boolean) {
+function settled(txns: ScrapedTransaction[], isBank: boolean) {
   const kept: ScrapedTransaction[] = [];
   const pending: PendingRef[] = [];
+  const foreign: ForeignRef[] = [];
   let skippedForeign = 0;
   let skippedZero = 0;
   for (const txn of txns) {
-    const shekel = txn.chargedCurrency === undefined ? shekelWhenUnstated : SHEKEL.includes(txn.chargedCurrency);
     if (txn.status === "pending") pending.push({ date: israelDay(txn.date), description: txn.description.trim(), amount: txn.chargedAmount });
-    else if (!shekel) skippedForeign += 1;
-    else if (txn.chargedAmount === 0) skippedZero += 1;
+    else if (!chargedInShekels(txn, isBank)) {
+      skippedForeign += 1;
+      if (foreign.length < FOREIGN_LIST_CAP) {
+        foreign.push({
+          date: isBank ? israelDay(txn.date) : purchaseDay(txn), description: txn.description.trim(),
+          originalAmount: txn.originalAmount, originalCurrency: txn.originalCurrency,
+          chargedAmount: txn.chargedCurrency === undefined ? null : txn.chargedAmount, chargedCurrency: txn.chargedCurrency ?? null,
+        });
+      }
+    } else if (txn.chargedAmount === 0) skippedZero += 1;
     else kept.push(txn);
   }
-  return { kept, pending, skippedPending: pending.length, skippedForeign, skippedZero };
+  return { kept, pending, foreign, skippedPending: pending.length, skippedForeign, skippedZero };
 }
 
-/**
- * Debit/credit comes from the sign the bank charged (its own column), never
- * from the text (§5). A bank account has one currency, so an unstated one is shekels.
- */
+/** Debit/credit comes from the sign the bank charged (its own column), never from the text (§5). */
 export function bankWorkbook(txns: ScrapedTransaction[]): ScrapeWorkbook {
   const { kept, ...counts } = settled(txns, true);
   const rows = kept.map((t) => [
@@ -95,7 +113,6 @@ export function bankWorkbook(txns: ScrapedTransaction[]): ScrapeWorkbook {
  * Card files carry a charge as a positive amount and a refund as negative, the
  * reverse of the scraper's sign. The purchase date drives the month and the
  * processed date is the charge date (§5); instalments keep "n מתוך N".
- * Max leaves an unknown billing currency unstated — that is not shekels.
  */
 export function cardWorkbook(txns: ScrapedTransaction[]): ScrapeWorkbook {
   const { kept, ...counts } = settled(txns, false);

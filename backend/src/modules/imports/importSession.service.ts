@@ -13,7 +13,7 @@ import { parseLoanSchedule } from "../loans/loanSchedule.parser";
 import { importsService } from "./imports.service";
 import { parseExpensesFile } from "./importsParser.service";
 import { detectStatement, hashFile } from "./statementDetector.service";
-import { importRows, type PreviewRow, type SourceRef } from "./importRows.service";
+import { importRows, type ImportOrigin, type PreviewRow, type SourceRef } from "./importRows.service";
 import { json } from "../journey/journey.utils";
 import { statementCommitmentsService } from "../bank/statementCommitments.service";
 import type { DetectedCommitment } from "../../types/commitments.types";
@@ -111,7 +111,7 @@ async function processSession(userId:number,id:string,answers:Answers) {
   await prisma.importSession.update({where:{id},data:{status:"processing",answers:json(answers),error:null}});
   try {
     const prepared=await prepare(userId,await bytes(session.storagePath),session.fileName,answers);
-    const sourceVersion=await importRows.replace(userId,id,prepared.kind,answers,prepared.preview.rows);
+    const sourceVersion=await importRows.replace(userId,id,prepared.kind,answers,prepared.preview.rows,session.origin);
     return prisma.importSession.update({where:{id},data:{kind:prepared.kind,preview:json({...prepared.preview,sourceVersion,rows:prepared.preview.rows.slice(0,50)}),status:prepared.preview.blockingIssues?.length?"failed":prepared.preview.questions.length?"needs_input":"ready_for_review",version:{increment:1}}});
   } catch(error) {
     return prisma.importSession.update({where:{id},data:{status:"failed",error:(error instanceof Error?error.message:"עיבוד הקובץ נכשל").slice(0,500),version:{increment:1}}});
@@ -121,7 +121,8 @@ async function processSession(userId:number,id:string,answers:Answers) {
 export const importSessions = {
   async list(userId:number) { return prisma.importSession.findMany({where:{userId},orderBy:{createdAt:"desc"},take:50,select:{id:true,fileName:true,kind:true,status:true,updatedAt:true}}); },
   get: owned,
-  async create(userId:number,fileName:string,buffer:Buffer,input:unknown) {
+  /** `origin` is the server's word, never the client's: only the bank sync passes "sync". */
+  async create(userId:number,fileName:string,buffer:Buffer,input:unknown,origin:ImportOrigin="file") {
     const answers=answersSchema.parse(input);
     const fileHash=hashFile(buffer);
     const session=await withFinancialTransaction(userId,async()=>{
@@ -129,7 +130,7 @@ export const importSessions = {
       if(previous) return previous;
       const storagePath=await documentStorage.save(userId,fileHash,fileName,buffer);
       if(!storagePath) throw ApiError.internal("לא הצלחנו לשמור את הקובץ. לא נוסף דבר; אפשר לנסות שוב.");
-      return prisma.importSession.create({data:{userId,fileName,fileHash,storagePath,answers:json(answers),status:"uploaded"}});
+      return prisma.importSession.create({data:{userId,fileName,fileHash,storagePath,origin,answers:json(answers),status:"uploaded"}});
     });
     return session.status==="uploaded"?withFinancialTransaction(userId,async()=>{const current=await owned(userId,session.id);return current.status==="uploaded"?processSession(userId,session.id,answers):current;}):session;
   },
@@ -156,10 +157,10 @@ export const importSessions = {
       const blockers=[...check.preview.questions,...(check.preview.blockingIssues??[])];
       if(blockers.length) throw ApiError.conflict(blockers.join(" · "));
       if(!await prisma.importRow.count({where:{sessionId:id}})) {
-        const sourceVersion=await importRows.replace(userId,id,session.kind,answers,check.preview.rows);
+        const sourceVersion=await importRows.replace(userId,id,session.kind,answers,check.preview.rows,session.origin);
         await prisma.importSession.update({where:{id},data:{preview:json({...check.preview,sourceVersion,rows:check.preview.rows.slice(0,50)})}});
       }
-      const staged=await importRows.validate(userId,id,session.kind,answers);
+      const staged=await importRows.validate(userId,id,session.kind,answers,session.origin);
       const included=staged.filter(r=>r.resolution==="include");
       await prisma.importSession.update({where:{id},data:{status:"committing"}});
       let result: unknown;
