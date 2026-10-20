@@ -668,27 +668,71 @@ export interface IncomeLedgerPage extends LedgerPage<Income> {
 
 /** A bank/card website login synced on demand. Credentials never come back from the API. */
 export type ConnectionKind = "bank" | "card";
-export type SyncStatus = "running" | "awaiting_approval" | "succeeded" | "failed";
+export type SyncStatus = "running" | "succeeded" | "failed" | "cancelled";
+/** Set by the server from real login/fetch events only — the UI never infers a phase. */
+export type SyncPhase = "queued" | "launching" | "awaiting_user" | "awaiting_bank" | "fetching" | "building_import";
+export type LoginMethod = "password" | "official_window";
+
+export interface LoginMethodInfo {
+  id: LoginMethod;
+  label: string;
+  description: string;
+  /** experimental: built, not yet tried against the real bank. */
+  status: "supported" | "experimental";
+}
 
 export interface ConnectionProviderInfo {
   id: string;
   kind: ConnectionKind;
   name: string;
-  fields: Array<{ key: string; label: string; secret: boolean }>;
+  /** Offered for new connections; empty when no window of its own can be opened yet. */
+  loginMethods: LoginMethodInfo[];
+  /** The provider's own address the official window opens — shown so she can check the window. */
+  officialLoginUrl: string | null;
+  unavailableReason: string | null;
   approvalHint: string | null;
+}
+
+export interface ForeignRef {
+  date: string;
+  description: string;
+  originalAmount: number;
+  originalCurrency: string;
+  chargedAmount: number | null;
+  chargedCurrency: string | null;
 }
 
 export interface SyncOutcomeItem {
   key: string;
   importSessionId: string | null;
   target: string;
+  /** Includes the overlap with stored rows — never shown; `review.counts` is what the import holds. */
   rows: number;
   skippedPending: number;
   skippedForeign: number;
   skippedZero: number;
   storedThrough: string | null;
   pending: Array<{ date: string; description: string; amount: number }>;
+  foreign?: ForeignRef[];
+  siteBalance?: number | null;
+  /** Our balance for the account, given only once this import is approved — to check nothing is missing. */
+  ourBalance?: number | null;
   note?: string;
+  review: { status: string; counts: { included: number; duplicate: number; pending: number } } | null;
+}
+
+export interface ConnectionSync {
+  id: number;
+  status: SyncStatus;
+  phase: SyncPhase | null;
+  method: LoginMethod;
+  errorType: string | null;
+  message: string | null;
+  outcome: SyncOutcomeItem[] | null;
+  /** End of the wait we allow for the login — not a deadline the bank announced. */
+  deadlineAt: string | null;
+  startedAt: string;
+  finishedAt: string | null;
 }
 
 export interface FinancialConnection {
@@ -698,8 +742,14 @@ export interface FinancialConnection {
   label: string;
   bankAccountId: number | null;
   accountHint: string | null;
+  loginMethod: LoginMethod;
+  blockedReason: string | null;
   verifiedAt: string | null;
   lastSyncAt: string | null;
   createdAt: string;
-  syncs: Array<{ id: number; status: SyncStatus; message: string | null; outcome: SyncOutcomeItem[] | null; startedAt: string; finishedAt: string | null }>;
+  syncs: ConnectionSync[];
+  /** The server's own retry rule: credentials = blocked until new details; cooldown = wait until retryAvailableAt. */
+  retryBlockedReason: "credentials" | "cooldown" | null;
+  retryMessage: string | null;
+  retryAvailableAt: string | null;
 }
