@@ -5,8 +5,12 @@ import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "../../config/database";
 import { env } from "../../config/env";
-import type { ScrapeResult, ScrapedTransaction } from "../../types/connections.types";
+import type { ScrapeResult, ScrapedTransaction, SyncOutcomeItem } from "../../types/connections.types";
+import { importRows } from "../imports/importRows.service";
+import { importSessions } from "../imports/importSession.service";
 import { connectionsService } from "./connections.service";
+import { sealCredentials } from "./credentialsCipher";
+import { bankWorkbook, cardWorkbook } from "./scrapeWorkbook";
 import { connectionSync } from "./connectionSync.service";
 import type { ScraperFactory, ScraperOptions } from "./scraperAdapter";
 
@@ -21,31 +25,40 @@ const txn = (description: string, chargedAmount: number, overrides: Partial<Scra
   originalCurrency: "ILS", chargedAmount, chargedCurrency: "ILS", description, status: "completed", ...overrides,
 });
 
-/** Emits the library's progress events, then returns `result` once `gate` opens. */
+/** Emits the library's progress events, then returns `result` once `gate` opens — or CANCELLED if cancelled first. */
 function fakeFactory(result: ScrapeResult, gate: Promise<void> = Promise.resolve()) {
   const calls: ScraperOptions[] = [];
+  const credentialsSeen: Array<Record<string, string>> = [];
   const factory: ScraperFactory = async (options) => {
     calls.push(options);
     let listener: (type: string) => void = () => {};
+    let cancel!: () => void;
+    const cancelled = new Promise<"cancelled">((resolve) => { cancel = () => resolve("cancelled"); });
     return {
       onProgress(next) { listener = next; },
-      async scrape() {
+      cancel() { cancel(); },
+      async scrape(credentials) {
+        credentialsSeen.push(credentials);
         listener("LOGGING_IN");
-        await gate;
+        if (await Promise.race([gate, cancelled]) === "cancelled") return { success: false, errorType: "CANCELLED" };
         listener(result.success ? "LOGIN_SUCCESS" : "LOGIN_FAILED");
         return result;
       },
     };
   };
-  return { factory, calls };
+  return { factory, calls, credentialsSeen };
 }
 
-async function bankConnection() {
-  return connectionsService.create(userId, { provider: "beinleumi", bankAccountId: accountId, credentials: { username: "user-x", password: "secret-pass-123" } });
+/** A connection made before 2026-10-20 with stored credentials — the API no longer creates these, but they still sync. */
+async function legacyConnection(provider: "beinleumi" | "visaCal", credentials: Record<string, string>) {
+  const kind = provider === "beinleumi" ? "bank" : "card";
+  const row = await prisma.financialConnection.create({ data: {
+    userId, provider, kind, label: provider, loginMethod: "password", bankAccountId: kind === "bank" ? accountId : null, credentials: sealCredentials(userId, credentials),
+  } });
+  return connectionsService.get(userId, row.id);
 }
-async function calConnection() {
-  return connectionsService.create(userId, { provider: "visaCal", credentials: { username: "cal-user", password: "cal-secret-456" } });
-}
+const bankConnection = () => legacyConnection("beinleumi", { username: "user-x", password: "secret-pass-123" });
+const calConnection = () => legacyConnection("visaCal", { username: "cal-user", password: "cal-secret-456" });
 const at = (day: string) => `${new Date(new Date(`${day}T00:00:00Z`).getTime() - 3 * 3600_000).toISOString()}`;
 const sessionOf = async (connectionId: number, index = 0) => {
   const outcome = (await latestSync(connectionId)).outcome as Array<{ importSessionId: string | null; rows: number; note?: string }>;
@@ -76,7 +89,7 @@ afterAll(async () => {
 });
 
 describe("bank and card connections", () => {
-  it("stores credentials sealed and never returns them", async () => {
+  it("keeps a legacy connection's credentials sealed and never returns them", async () => {
     const created = await bankConnection();
     const stored = await prisma.financialConnection.findFirstOrThrow({ where: { id: created.id } });
     expect(stored.credentials).not.toContain("secret-pass-123");
@@ -87,12 +100,15 @@ describe("bank and card connections", () => {
     expect(created.verifiedAt).toBeNull();
   });
 
-  it("refuses a connection missing a required field, and a bank connection without an account", async () => {
-    await expect(connectionsService.create(userId, { provider: "isracard", credentials: { id: "1", password: "x" } })).rejects.toThrow(/6 ספרות/);
-    await expect(connectionsService.create(userId, { provider: "beinleumi", credentials: { username: "u", password: "p" } })).rejects.toThrow(/חשבון בנק/);
+  it("creates only official-window connections: no card provider yet, no bank without an account, and nothing stored", async () => {
+    for (const provider of ["visaCal", "max", "isracard"]) await expect(connectionsService.create(userId, { provider })).rejects.toThrow(/עוד לא נתמכת/);
+    await expect(connectionsService.create(userId, { provider: "beinleumi" })).rejects.toThrow(/חשבון בנק/);
+    const created = await connectionsService.create(userId, { provider: "beinleumi", bankAccountId: accountId });
+    expect(created.loginMethod).toBe("official_window");
+    expect((await prisma.financialConnection.findUniqueOrThrow({ where: { id: created.id } })).credentials).toBeNull();
   });
 
-  it("shows 'awaiting approval' while the bank login waits, then lands the statement in the import approval", async () => {
+  it("says it waits for the bank's answer — not that an approval was asked — then lands the statement in the import approval", async () => {
     const connection = await bankConnection();
     let approve!: () => void;
     const gate = new Promise<void>((resolve) => { approve = resolve; });
@@ -101,7 +117,10 @@ describe("bank and card connections", () => {
     ] }] }, gate);
 
     const { done } = await connectionSync.start(userId, connection.id, factory);
-    await expect.poll(async () => (await latestSync(connection.id)).status).toBe("awaiting_approval");
+    await expect.poll(async () => (await latestSync(connection.id)).phase).toBe("awaiting_bank");
+    expect(await latestSync(connection.id)).toMatchObject({ status: "running", method: "password", ownerPid: process.pid });
+    expect((await latestSync(connection.id)).deadlineAt).not.toBeNull();
+    expect(calls[0]).toMatchObject({ loginMethod: "password" });
     expect(calls[0].defaultTimeout).toBeGreaterThanOrEqual(120_000);
     await expect(connectionSync.start(userId, connection.id, factory)).rejects.toThrow(/כבר רץ/);
 
@@ -162,29 +181,280 @@ describe("bank and card connections", () => {
     expect(sync.message).toMatch(/0001, 0002/);
   });
 
-  it("marks a sync cut off by a server restart as failed", async () => {
-    const connection = await calConnection();
-    await prisma.connectionSync.create({ data: { connectionId: connection.id, userId, status: "awaiting_approval" } });
+  it("marks a sync cut off by a server restart as failed, but leaves one a live server still runs", async () => {
+    const orphan = await calConnection();
+    const live = await bankConnection();
+    await prisma.connectionSync.create({ data: { connectionId: orphan.id, userId, status: "running", phase: "awaiting_bank" } });
+    await prisma.connectionSync.create({ data: { connectionId: live.id, userId, status: "running", phase: "fetching", ownerPid: process.ppid } });
     await connectionSync.failInterrupted();
-    expect(await latestSync(connection.id)).toMatchObject({ status: "failed" });
+    expect(await latestSync(orphan.id)).toMatchObject({ status: "failed", errorType: "INTERRUPTED" });
+    expect(await latestSync(live.id)).toMatchObject({ status: "running" });
+  });
+
+  it("releases the lock of a sync a quick restart cut off, so she can start again", async () => {
+    const connection = await bankConnection();
+    await prisma.financialConnection.update({ where: { id: connection.id }, data: { syncLockedAt: new Date() } });
+    await prisma.connectionSync.create({ data: { connectionId: connection.id, userId, status: "running", phase: "awaiting_bank", ownerPid: 999_999_999 } });
+    await connectionSync.failInterrupted();
+    expect((await prisma.financialConnection.findUniqueOrThrow({ where: { id: connection.id } })).syncLockedAt).toBeNull();
+    await (await connectionSync.start(userId, connection.id, fakeFactory({ success: true, accounts: [{ accountNumber: "1", txns: [] }] }).factory)).done;
+    expect((await latestSync(connection.id)).status).toBe("succeeded");
+  });
+
+  it("fails a sync far past every time limit even if its owner pid is alive again (reused)", async () => {
+    const connection = await bankConnection();
+    await prisma.connectionSync.create({ data: { connectionId: connection.id, userId, status: "running", ownerPid: process.ppid, startedAt: new Date(Date.now() - 30 * 60_000) } });
+    await connectionSync.failInterrupted();
+    expect(await latestSync(connection.id)).toMatchObject({ status: "failed", errorType: "INTERRUPTED" });
+  });
+
+  it("honours a cancel that arrives while the fetch is finishing: nothing is offered for import", async () => {
+    const connection = await bankConnection();
+    let finishFetch!: () => void;
+    const fetchDone = new Promise<void>((resolve) => { finishFetch = resolve; });
+    const factory: ScraperFactory = async () => {
+      let listener: (type: string) => void = () => {};
+      return {
+        onProgress(next) { listener = next; },
+        cancel() { /* the fetch is past the point of stopping */ },
+        async scrape() {
+          listener("LOGGING_IN");
+          listener("LOGIN_SUCCESS");
+          await fetchDone;
+          return { success: true, accounts: [{ accountNumber: "1", txns: [txn("חדש", -30)] }] };
+        },
+      };
+    };
+    const { done } = await connectionSync.start(userId, connection.id, factory);
+    await expect.poll(async () => (await latestSync(connection.id)).phase).toBe("fetching");
+    await connectionSync.cancel(userId, connection.id);
+    finishFetch();
+    await done;
+    expect(await latestSync(connection.id)).toMatchObject({ status: "cancelled" });
+    expect(await prisma.importSession.count({ where: { userId } })).toBe(0);
+  });
+
+  it("cancels a login on request, imports nothing, and lets her start again at once", async () => {
+    const connection = await bankConnection();
+    const { factory } = fakeFactory({ success: true, accounts: [{ accountNumber: "1", txns: [txn("חדש", -30)] }] }, new Promise(() => {}));
+    const { done } = await connectionSync.start(userId, connection.id, factory);
+    await expect.poll(async () => (await latestSync(connection.id)).phase).toBe("awaiting_bank");
+    await connectionSync.cancel(userId, connection.id);
+    await done;
+    const sync = await latestSync(connection.id);
+    expect(sync).toMatchObject({ status: "cancelled", errorType: "CANCELLED" });
+    expect(sync.cancelRequestedAt).not.toBeNull();
+    expect(await prisma.importSession.count({ where: { userId } })).toBe(0);
+    expect((await prisma.financialConnection.findUniqueOrThrow({ where: { id: connection.id } })).syncLockedAt).toBeNull();
+    const again = fakeFactory({ success: true, accounts: [{ accountNumber: "1", txns: [] }] });
+    await (await connectionSync.start(userId, connection.id, again.factory)).done;
+    expect((await latestSync(connection.id)).status).toBe("succeeded");
+  });
+
+  it("never lets a run's late result overwrite a status already final", async () => {
+    const connection = await bankConnection();
+    let release!: () => void;
+    const { factory } = fakeFactory({ success: true, accounts: [{ accountNumber: "1", txns: [txn("חדש", -30)] }] }, new Promise((resolve) => { release = resolve; }));
+    const { done } = await connectionSync.start(userId, connection.id, factory);
+    await expect.poll(async () => (await latestSync(connection.id)).phase).toBe("awaiting_bank");
+    await prisma.connectionSync.updateMany({ where: { connectionId: connection.id }, data: { status: "failed", errorType: "INTERRUPTED" } });
+    release();
+    await done;
+    expect(await latestSync(connection.id)).toMatchObject({ status: "failed", errorType: "INTERRUPTED" });
+  });
+
+  it("refuses a second login while another process holds the connection's lock", async () => {
+    const connection = await bankConnection();
+    await prisma.financialConnection.update({ where: { id: connection.id }, data: { syncLockedAt: new Date() } });
+    const { factory, calls } = fakeFactory({ success: true, accounts: [] });
+    await expect(connectionSync.start(userId, connection.id, factory)).rejects.toThrow(/כבר רץ/);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("after the bank refuses stored credentials, never tries them again; moving to the official window lifts it", async () => {
+    const connection = await bankConnection();
+    const refused = fakeFactory({ success: false, errorType: "INVALID_PASSWORD" });
+    await (await connectionSync.start(userId, connection.id, refused.factory)).done;
+    expect(await connectionsService.get(userId, connection.id)).toMatchObject({ blockedReason: "INVALID_PASSWORD", retryBlockedReason: "credentials" });
+    await prisma.connectionSync.updateMany({ where: { connectionId: connection.id }, data: { finishedAt: new Date(Date.now() - 3_600_000) } });
+    const retry = fakeFactory({ success: true, accounts: [] });
+    await expect(connectionSync.start(userId, connection.id, retry.factory)).rejects.toThrow(/לא ננסה אותם שוב/);
+    expect(retry.calls).toHaveLength(0);
+    const moved = await connectionsService.update(userId, connection.id, { loginMethod: "official_window" });
+    expect(moved).toMatchObject({ loginMethod: "official_window", blockedReason: null, verifiedAt: null });
+    expect((await prisma.financialConnection.findUniqueOrThrow({ where: { id: connection.id } })).credentials).toBeNull();
+    await (await connectionSync.start(userId, connection.id, retry.factory)).done;
+    expect(retry.calls).toMatchObject([{ loginMethod: "official_window" }]);
+  });
+
+  it("holds a retry right after a failed login, and shows when it opens", async () => {
+    const connection = await bankConnection();
+    await (await connectionSync.start(userId, connection.id, fakeFactory({ success: false, errorType: "TIMEOUT" }).factory)).done;
+    const shown = await connectionsService.get(userId, connection.id);
+    expect(shown.retryBlockedReason).toBe("cooldown");
+    expect(shown.retryAvailableAt).not.toBeNull();
+    await expect(connectionSync.start(userId, connection.id, fakeFactory({ success: true, accounts: [] }).factory)).rejects.toMatchObject({ statusCode: 429 });
+  });
+
+  it("an official-window connection stores no credentials and asks the worker for the bank's own page", async () => {
+    const connection = await connectionsService.create(userId, { provider: "beinleumi", bankAccountId: accountId, loginMethod: "official_window" });
+    expect((await prisma.financialConnection.findUniqueOrThrow({ where: { id: connection.id } })).credentials).toBeNull();
+    let approve!: () => void;
+    const official = fakeFactory({ success: true, accounts: [{ accountNumber: "1", txns: [txn("חדש", -30)] }] }, new Promise((resolve) => { approve = resolve; }));
+    const { done } = await connectionSync.start(userId, connection.id, official.factory);
+    await expect.poll(async () => (await latestSync(connection.id)).phase).toBe("awaiting_user");
+    expect(official.calls[0]).toMatchObject({ loginMethod: "official_window" });
+    expect(official.credentialsSeen[0]).toEqual({});
+    approve();
+    await done;
+    expect(await latestSync(connection.id)).toMatchObject({ status: "succeeded", method: "official_window" });
+  });
+
+  it("never blocks an official-window connection on a 'wrong password' it did not type", async () => {
+    const connection = await connectionsService.create(userId, { provider: "beinleumi", bankAccountId: accountId, loginMethod: "official_window" });
+    await (await connectionSync.start(userId, connection.id, fakeFactory({ success: false, errorType: "INVALID_PASSWORD" }).factory)).done;
+    expect((await prisma.financialConnection.findUniqueOrThrow({ where: { id: connection.id } })).blockedReason).toBeNull();
+  });
+
+  it("shows the import's own counts — not the overlap — beside what stayed at the bank", async () => {
+    const connection = await bankConnection();
+    await syncedRow("2026-09-10", "שופרסל");
+    const scrape = fakeFactory({ success: true, accounts: [{ accountNumber: "1", balance: 1234.5, txns: [
+      txn("שופרסל", -5), txn("חדש", -30), txn("בדרך", -9, { status: "pending" }),
+    ] }] });
+    await (await connectionSync.start(userId, connection.id, scrape.factory)).done;
+    const [item] = (await connectionsService.get(userId, connection.id)).syncs[0].outcome as unknown as Array<SyncOutcomeItem & { review: { status: string; counts: Record<string, number> } }>;
+    expect(item.review).toEqual({ status: "ready_for_review", counts: { included: 1, duplicate: 1, pending: 0 } });
+    expect(item).toMatchObject({ skippedPending: 1, siteBalance: 1234.5 });
+  });
+
+  it("lists foreign-currency rows in the outcome and imports none of them", async () => {
+    const connection = await bankConnection();
+    const scrape = fakeFactory({ success: true, accounts: [{ accountNumber: "1", txns: [txn("חדש", -30), txn("AMAZON", -20, { chargedCurrency: "USD", originalCurrency: "USD" })] }] });
+    await (await connectionSync.start(userId, connection.id, scrape.factory)).done;
+    const item = await sessionOf(connection.id) as unknown as SyncOutcomeItem;
+    expect(item.skippedForeign).toBe(1);
+    expect(item.foreign).toEqual([expect.objectContaining({ description: "AMAZON", originalCurrency: "USD", chargedCurrency: "USD" })]);
+    const names = (await prisma.importRow.findMany({ where: { sessionId: item.importSessionId! } })).map((r) => (r.normalized as { name: string }).name);
+    expect(names).toEqual(["חדש"]);
+  });
+
+  it("lets her mark a reworded synced bank row as the stored one, while a file upload of the same row is untouched", async () => {
+    const connection = await bankConnection();
+    await prisma.bankTransaction.create({ data: { userId, bankAccountId: accountId, transactionDate: new Date("2026-09-10"), description: "העברה לחיסכון", amount: 500, type: "withdrawal" } });
+    const scrape = fakeFactory({ success: true, accounts: [{ accountNumber: "1", txns: [txn("הע. לחסכון", -500, { date: at("2026-09-10") })] }] });
+    await (await connectionSync.start(userId, connection.id, scrape.factory)).done;
+    const sessionId = (await sessionOf(connection.id)).importSessionId!;
+    const [row] = await prisma.importRow.findMany({ where: { sessionId } });
+    expect(row.resolution).toBe("review");
+    const [candidate] = row.candidates as Array<{ id: number; kind: "bank" }>;
+    const session = await prisma.importSession.findUniqueOrThrow({ where: { id: sessionId } });
+    await importRows.edit(userId, sessionId, row.rowNumber, { version: session.version, resolution: "duplicate", candidateId: candidate.id, candidateKind: "bank" });
+    expect((await prisma.importRow.findUniqueOrThrow({ where: { id: row.id } })).resolution).toBe("duplicate");
+    await importRows.validate(userId, sessionId, "bank", { accountId }, "sync");
+
+    const upload = await importSessions.create(userId, "דף חשבון.xlsx", bankWorkbook([txn("הע. לחסכון", -500, { date: at("2026-09-10") }), txn("עוד", -1, { date: at("2026-09-11") })]).buffer, { kind: "bank", accountId });
+    const uploaded = await prisma.importRow.findMany({ where: { sessionId: upload.id }, orderBy: { rowNumber: "asc" } });
+    expect(uploaded.map((r) => r.resolution)).toEqual(["include", "include"]);
+  });
+
+  it("sends a clamped instalment (bought on the 31st) to review against the stored purchase", async () => {
+    const connection = await calConnection();
+    const cardId = (await prisma.creditCard.create({ data: { userId, name: "כאל", issuer: "כאל", lastFour: "5555" } })).id;
+    const creditImportId = (await prisma.creditImport.create({ data: { userId, fileName: "סנכרון כאל", importYear: 2026, importMonth: 6 } })).id;
+    await prisma.creditTransaction.create({ data: { userId, creditImportId, cardId, transactionDate: new Date("2026-05-31"), billingDate: new Date("2026-05-31"), chargeDate: new Date("2026-06-02"), businessName: "מקרר", amount: 1000, paymentCount: 3, installmentNumber: 2 } });
+    // The library moves instalment 2 of a 31/05 purchase to 30/06; undone, that reads 30/05, not 31/05.
+    const clamped = txn("מקרר", -1000, { type: "installments", installments: { number: 2, total: 3 }, date: at("2026-06-30"), processedDate: at("2026-07-02") });
+    await (await connectionSync.start(userId, connection.id, fakeFactory({ success: true, accounts: [{ accountNumber: "5555", txns: [clamped] }] }).factory)).done;
+    const rows = await prisma.importRow.findMany({ where: { sessionId: (await sessionOf(connection.id)).importSessionId! } });
+    expect(rows.map((r) => r.resolution)).toEqual(["review"]);
+  });
+
+  it("takes a purchase from the last file's period that was charged in a later cycle", async () => {
+    const connection = await calConnection();
+    const cardId = (await prisma.creditCard.create({ data: { userId, name: "כאל", issuer: "כאל", lastFour: "5555" } })).id;
+    const creditImportId = (await prisma.creditImport.create({ data: { userId, fileName: "cal-march.xlsx", importYear: 2026, importMonth: 3 } })).id;
+    await prisma.creditTransaction.create({ data: { userId, creditImportId, cardId, transactionDate: new Date("2026-03-05"), billingDate: new Date("2026-03-05"), chargeDate: new Date("2026-03-10"), businessName: "סופר", amount: 40 } });
+    const late = txn("מסעדה", -90, { date: at("2026-03-04"), processedDate: at("2026-04-10") });
+    await (await connectionSync.start(userId, connection.id, fakeFactory({ success: true, accounts: [{ accountNumber: "5555", txns: [late] }] }).factory)).done;
+    const rows = await prisma.importRow.findMany({ where: { sessionId: (await sessionOf(connection.id)).importSessionId! } });
+    expect(rows.map((r) => [(r.normalized as { name: string }).name, r.resolution])).toEqual([["מסעדה", "include"]]);
+  });
+
+  it("lets the exact copy claim its stored row first, so a reworded row earlier in the list cannot hide a duplicate", async () => {
+    const connection = await bankConnection();
+    await prisma.bankTransaction.create({ data: { userId, bankAccountId: accountId, transactionDate: new Date("2026-09-10"), description: "העברה לדני", amount: 100, type: "withdrawal" } });
+    const scrape = fakeFactory({ success: true, accounts: [{ accountNumber: "1", txns: [txn("הוראת קבע ועד", -100, { date: at("2026-09-10") }), txn("העברה לדני", -100, { date: at("2026-09-10") })] }] });
+    await (await connectionSync.start(userId, connection.id, scrape.factory)).done;
+    const rows = await prisma.importRow.findMany({ where: { sessionId: (await sessionOf(connection.id)).importSessionId! }, orderBy: { rowNumber: "asc" } });
+    expect(rows.map((r) => [(r.normalized as { name: string }).name, r.resolution])).toEqual([["הוראת קבע ועד", "include"], ["העברה לדני", "duplicate"]]);
+  });
+
+  it("two card purchases with one day and amount, one stored: the stored one asks, the other is new", async () => {
+    const connection = await calConnection();
+    const cardId = (await prisma.creditCard.create({ data: { userId, name: "כאל", issuer: "כאל", lastFour: "5555" } })).id;
+    const creditImportId = (await prisma.creditImport.create({ data: { userId, fileName: "cal.xlsx", importYear: 2026, importMonth: 9 } })).id;
+    await prisma.creditTransaction.create({ data: { userId, creditImportId, cardId, transactionDate: new Date("2026-09-09"), billingDate: new Date("2026-09-09"), chargeDate: new Date("2026-10-02"), businessName: "סופר", amount: 100 } });
+    const scrape = fakeFactory({ success: true, accounts: [{ accountNumber: "5555", txns: [txn("מאפייה", -100, { date: at("2026-09-09") }), txn("סופר", -100, { date: at("2026-09-09") })] }] });
+    await (await connectionSync.start(userId, connection.id, scrape.factory)).done;
+    const rows = await prisma.importRow.findMany({ where: { sessionId: (await sessionOf(connection.id)).importSessionId! }, orderBy: { rowNumber: "asc" } });
+    expect(rows.map((r) => [(r.normalized as { name: string }).name, r.resolution])).toEqual([["מאפייה", "include"], ["סופר", "review"]]);
+  });
+
+  it("does not hold a synced card row against a manual expense of the same day and amount", async () => {
+    const connection = await calConnection();
+    await prisma.creditCard.create({ data: { userId, name: "כאל", issuer: "כאל", lastFour: "5555" } });
+    await prisma.expense.create({ data: { userId, expenseDate: new Date("2026-09-10"), businessName: "מזומן בשוק", amount: 70 } });
+    const scrape = fakeFactory({ success: true, accounts: [{ accountNumber: "5555", txns: [txn("קפה", -70)] }] });
+    await (await connectionSync.start(userId, connection.id, scrape.factory)).done;
+    const rows = await prisma.importRow.findMany({ where: { sessionId: (await sessionOf(connection.id)).importSessionId! } });
+    expect(rows.map((r) => r.resolution)).toEqual(["include"]);
+  });
+
+  it("leaves a card file upload on exact matching only", async () => {
+    const cardId = (await prisma.creditCard.create({ data: { userId, name: "כאל", issuer: "כאל", lastFour: "5555" } })).id;
+    const creditImportId = (await prisma.creditImport.create({ data: { userId, fileName: "cal.xlsx", importYear: 2026, importMonth: 9 } })).id;
+    await prisma.creditTransaction.create({ data: { userId, creditImportId, cardId, transactionDate: new Date("2026-09-10"), billingDate: new Date("2026-09-10"), chargeDate: new Date("2026-10-02"), businessName: "שופרסל דיל", amount: 55 } });
+    const upload = await importSessions.create(userId, "כאל.xlsx", cardWorkbook([txn("שופרסל", -55)]).buffer, { kind: "credit", cardId });
+    const rows = await prisma.importRow.findMany({ where: { sessionId: upload.id } });
+    expect(rows.map((r) => r.resolution)).toEqual(["include"]);
+  });
+
+  it("after approval, puts our balance next to the bank site's balance from the sync", async () => {
+    const connection = await bankConnection();
+    const scrape = fakeFactory({ success: true, accounts: [{ accountNumber: "1", balance: 970, txns: [txn("חדש", -30)] }] });
+    await (await connectionSync.start(userId, connection.id, scrape.factory)).done;
+    const before = (await connectionsService.get(userId, connection.id)).syncs[0].outcome as unknown as Array<{ ourBalance: number | null }>;
+    expect(before[0].ourBalance).toBeNull();
+    await prisma.importSession.update({ where: { id: (await sessionOf(connection.id)).importSessionId! }, data: { status: "completed" } });
+    const after = (await connectionsService.get(userId, connection.id)).syncs[0].outcome as unknown as Array<{ siteBalance: number; ourBalance: number | null }>;
+    expect(after[0].siteBalance).toBe(970);
+    expect(typeof after[0].ourBalance).toBe("number");
+  });
+
+  it("offers the official window for Beinleumi only", async () => {
+    await expect(connectionsService.create(userId, { provider: "visaCal", loginMethod: "official_window" })).rejects.toThrow(/עוד לא נתמכת/);
   });
 
   it("takes only what the account has not stored, and fetches a rejected import again", async () => {
     const connection = await bankConnection();
     // A statement imported by hand runs through 05/09; the website names its rows differently.
+    // Its last day is reopened (the file may have closed before the day did): the reworded copy goes to review.
     await prisma.bankTransaction.create({ data: { userId, bankAccountId: accountId, transactionDate: new Date("2026-09-05"), description: "תיאור מהאקסל", amount: 80, type: "withdrawal" } });
     const scrape = fakeFactory({ success: true, accounts: [{ accountNumber: "1", txns: [
       txn("תיאור מהאתר", -80, { date: at("2026-09-05") }), txn("ישן", -10, { date: at("2026-09-03") }), txn("חדש", -30, { date: at("2026-09-10") }),
     ] }] });
     await (await connectionSync.start(userId, connection.id, scrape.factory)).done;
-    expect(scrape.calls[0].startDate.toISOString().slice(0, 10)).toBe("2026-09-05");
+    expect(scrape.calls[0].startDate.toISOString().slice(0, 10)).toBe("2026-09-04");
     const first = await sessionOf(connection.id);
-    expect(first.rows).toBe(1);
+    expect(first.rows).toBe(2);
+    const resolutions = await prisma.importRow.findMany({ where: { sessionId: first.importSessionId! }, orderBy: { rowNumber: "asc" }, select: { resolution: true } });
+    expect(resolutions.map((r) => r.resolution)).toEqual(["review", "include"]);
 
     await prisma.importSession.update({ where: { id: first.importSessionId! }, data: { status: "cancelled" } });
     await (await connectionSync.start(userId, connection.id, scrape.factory)).done;
     const again = await sessionOf(connection.id);
-    expect(again.rows).toBe(1);
+    expect(again.rows).toBe(2);
     expect(again.importSessionId).not.toBe(first.importSessionId);
   });
 

@@ -961,7 +961,13 @@ model FinancialConnection {
   bankAccountId Int?      @map("bank_account_id")
   /// Last digits of the account to take when the login sees more than one.
   accountHint   String?   @map("account_hint") @db.VarChar(20)
-  credentials   String    @db.Text
+  /// password: sealed credentials, headless login · official_window: she signs in on the bank's own page, nothing stored.
+  loginMethod   String    @default("password") @map("login_method") @db.VarChar(16)
+  credentials   String?   @db.Text
+  /// INVALID_PASSWORD | CHANGE_PASSWORD | ACCOUNT_BLOCKED — no new login until the credentials change.
+  blockedReason String?   @map("blocked_reason") @db.VarChar(40)
+  /// Set while a sync runs; claimed atomically so two servers or two clicks cannot log in twice.
+  syncLockedAt  DateTime? @map("sync_locked_at")
   /// First successful login. Until then the connection is shown as unverified.
   verifiedAt    DateTime? @map("verified_at")
   lastSyncAt    DateTime? @map("last_sync_at")
@@ -980,7 +986,15 @@ model ConnectionSync {
   id           Int       @id @default(autoincrement())
   connectionId Int       @map("connection_id")
   userId       Int       @map("user_id")
-  status       String    @db.VarChar(20) // running | awaiting_approval | succeeded | failed
+  status       String    @db.VarChar(20) // running | succeeded | failed | cancelled
+  /// queued | launching | awaiting_user | awaiting_bank | fetching | building_import — set only from worker events.
+  phase        String?   @db.VarChar(32)
+  method       String    @default("password") @db.VarChar(16)
+  /// End of the wait we allow for the login, not a deadline the bank announced.
+  deadlineAt   DateTime? @map("deadline_at")
+  cancelRequestedAt DateTime? @map("cancel_requested_at")
+  /// The API process running it: a restart fails only syncs whose process is gone.
+  ownerPid     Int?      @map("owner_pid")
   errorType    String?   @map("error_type") @db.VarChar(40)
   message      String?   @db.VarChar(500)
   /// [{ importSessionId, target, rows }] — each lands in the regular import approval.
