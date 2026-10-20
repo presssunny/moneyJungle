@@ -2,6 +2,13 @@ import axios from "axios";
 import { toast } from "./toast";
 import { clearSession, sessionCsrf } from "./sessionState";
 
+declare module "axios" {
+  interface AxiosRequestConfig {
+    /** Background polling: a dropped tick retries on its own and is not worth a toast every second. */
+    quiet?: boolean;
+  }
+}
+
 export const api = axios.create({
   baseURL: "/api",
   withCredentials: true,
@@ -43,7 +50,7 @@ api.interceptors.response.use(
     // double-reporting. Network drops and server (5xx) faults get a global toast.
     const isGate = url.includes("/gate/");
     const isServerFault = !error.response || (typeof status === "number" && status >= 500);
-    if (isServerFault && !isGate) {
+    if (isServerFault && !isGate && !error.config?.quiet) {
       toast.error(error.response ? "שגיאת שרת — חלק מהנתונים אולי לא נטענו" : "אין חיבור לשרת");
       if (typeof error === "object" && error !== null) reported.add(error);
     }

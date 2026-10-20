@@ -34,6 +34,9 @@ export function Modal({ title, open, onClose, children, footer, size = "default"
     focusTarget?.focus();
 
     function onKey(e: KeyboardEvent) {
+      // A confirm opened over this dialog owns the keyboard; Escape there must not close both.
+      const dialogs = document.querySelectorAll('[role="dialog"][aria-modal="true"]');
+      if (dialogs[dialogs.length - 1] !== dialogRef.current) return;
       if (e.key === "Escape") {
         onCloseRef.current();
         return;
@@ -59,7 +62,7 @@ export function Modal({ title, open, onClose, children, footer, size = "default"
     document.addEventListener("keydown", onKey);
     return () => {
       document.removeEventListener("keydown", onKey);
-      document.body.classList.remove("modal-open");
+      if (!document.querySelector('[role="dialog"][aria-modal="true"]')) document.body.classList.remove("modal-open");
       previouslyFocused.current?.focus?.();
     };
   }, [open]);

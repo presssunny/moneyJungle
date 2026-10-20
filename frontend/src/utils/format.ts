@@ -1,11 +1,12 @@
 /** Formatting helpers — all display formatting lives here. */
 
-export function formatCurrency(amount: number | null | undefined, options?: { sign?: boolean }): string {
+/** `exact` keeps the agorot (₪1,234.50) — for a figure compared against a bank's own. */
+export function formatCurrency(amount: number | null | undefined, options?: { sign?: boolean; exact?: boolean }): string {
   const value = amount ?? 0;
   const formatted = new Intl.NumberFormat("he-IL", {
     style: "currency",
     currency: "ILS",
-    minimumFractionDigits: 0,
+    minimumFractionDigits: options?.exact ? 2 : 0,
     maximumFractionDigits: 2,
   }).format(Math.abs(value));
   if (options?.sign && value !== 0) {
