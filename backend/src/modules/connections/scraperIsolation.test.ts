@@ -187,6 +187,10 @@ describe("isolated sync worker", { timeout: 60_000 }, () => {
     expect((await run("closed-during-fetch")).result).toMatchObject({ success: false, errorType: "BROWSER_CLOSED" });
   });
 
+  it("tells a closed bank tab apart from a closed window", async () => {
+    expect((await run("tab-closed")).result).toMatchObject({ success: false, errorType: "BROWSER_TAB_CLOSED" });
+    expect(runsLeft()).toEqual([]);
+  });
 
   it("cancels on request: CANCELLED, worker gone, run directory removed", async () => {
     const scraper = await isolatedScraperFactory({ library: STUB, runRoot: RUN_ROOT })(options);

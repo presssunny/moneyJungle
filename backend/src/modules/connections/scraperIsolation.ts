@@ -7,7 +7,7 @@ import { ApiError } from "../../utils/ApiError";
 import type { ScrapeResult, WorkerCommand, WorkerEvent } from "../../types/connections.types";
 import type { ScraperFactory, ScraperRun } from "./scraperAdapter";
 import { killProcessesIn, processAlive } from "./runProcesses";
-import { BROWSER_CLOSED, BROWSER_LAUNCH, BROWSER_STARTED } from "./scraperLaunch";
+import { BROWSER_CLOSED, BROWSER_LAUNCH, BROWSER_STARTED, BROWSER_TAB_CLOSED } from "./scraperLaunch";
 
 const LIBRARY = "israeli-bank-scrapers";
 const HARD_LIMIT_MS = 15 * 60_000;
@@ -222,9 +222,11 @@ export function isolatedScraperFactory({ library = LIBRARY, officialLibrary = OF
         // officialLogin throws BROWSER_CLOSED when she closes the bank's window; the library reports it as generic.
         // A close during the fetch surfaces as "Target closed"; the progress event says whose doing it was.
         const closed = parsed.success && !parsed.data.success && (windowClosed || parsed.data.errorMessage === BROWSER_CLOSED);
+        const tabClosed = parsed.success && !closed && parsed.data.errorMessage === BROWSER_TAB_CLOSED;
         if (urlProbe && parsed.success) console.warn(`[סנכרון] probe: ${resultShape(parsed.data)}`);
         settle(!parsed.success ? failed("GENERAL_ERROR", "unexpected scraper result")
-          : closed ? failed(BROWSER_CLOSED, "browser window closed") : parsed.data);
+          : closed ? failed(BROWSER_CLOSED, "browser window closed")
+          : tabClosed ? failed(BROWSER_TAB_CLOSED, "bank tab closed") : parsed.data);
       } else if (event.type === "ready" && !ready) {
         ready = true;
         resolveRun({

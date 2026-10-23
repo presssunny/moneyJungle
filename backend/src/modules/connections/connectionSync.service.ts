@@ -9,7 +9,7 @@ import { addDays, bankWorkbook, cardWorkbook, freshTransactions, israelDay, purc
 import { processAlive } from "./runProcesses";
 import type { ScraperFactory, ScraperRun } from "./scraperAdapter";
 import { createIsolatedScraper, redactLog, sweepStaleRuns } from "./scraperIsolation";
-import { BROWSER_CLOSED, BROWSER_LAUNCH } from "./scraperLaunch";
+import { BROWSER_CLOSED, BROWSER_LAUNCH, BROWSER_TAB_CLOSED } from "./scraperLaunch";
 import { BLOCKING_ERRORS, retryBlock } from "./syncPolicy";
 
 const FIRST_SYNC_DAYS = 90;
@@ -55,6 +55,7 @@ function failureMessage(provider: ProviderInfo, errorType: string | undefined, m
         ? `הכניסה בחלון של ${provider.name} לא הסתיימה תוך ${OFFICIAL_LOGIN_WAIT_MS / 60_000} דקות. אפשר לנסות שוב.`
         : `${site} לא נטען בזמן בחלון. ייתכן שיש בעיית רשת או שהאתר עמוס. לא נוסף דבר.`;
       case BROWSER_CLOSED: return `חלון ${provider.name} נסגר לפני שהכניסה והקריאה הסתיימו. לא נוסף דבר.`;
+      case BROWSER_TAB_CLOSED: return `הלשונית הראשונה בחלון של ${provider.name} נסגרה, ובלעדיה אי אפשר להמשיך, לכן החלון נסגר. לא נוסף דבר. בניסיון הבא אפשר לפתוח לשוניות נוספות, אבל לא לסגור את הראשונה.`;
       default: return reached === "awaiting_user"
         ? `הכניסה בחלון של ${provider.name} לא הושלמה. לא נוסף דבר. אפשר לנסות שוב או להעלות דף חשבון כקובץ.`
         : status

@@ -6,7 +6,7 @@ import { getCurrentUrl } from "israeli-bank-scrapers/lib/helpers/navigation";
 import { TimeoutError } from "israeli-bank-scrapers/lib/helpers/waiting";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createScraper, OFFICIAL_LOGIN_URL, probePath, waitForSignIn } from "./officialLogin";
-import { BROWSER_CLOSED } from "./scraperLaunch";
+import { BROWSER_CLOSED, BROWSER_TAB_CLOSED } from "./scraperLaunch";
 
 // Offline: every request is answered here or aborted, so nothing reaches the bank.
 const PORTAL = "https://online.fibi.co.il/Resources/PortalNG/shell";
@@ -131,6 +131,13 @@ describe("waitForSignIn", () => {
   it("does not take the bank's public home page for a sign-in, and gives up with the library's TimeoutError", async () => {
     await page.goto(MARKETING_HOME);
     await expect(waitForSignIn(page, 2_500)).rejects.toBeInstanceOf(TimeoutError);
+  }, 30_000);
+
+  it("tells the library's tab closing apart from the whole window closing", async () => {
+    await browser.newPage();
+    const waiting = waitForSignIn(page, 15_000);
+    setTimeout(() => void page.close(), 500);
+    await expect(waiting).rejects.toThrow(BROWSER_TAB_CLOSED);
   }, 30_000);
 
   it("reports a window she closed", async () => {

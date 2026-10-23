@@ -81,6 +81,10 @@ export function createScraper(options: StubOptions) {
           listener("stub", { type: "LOGIN_SUCCESS" });
           listener("stub", { type: "BROWSER_CLOSED" });
           return { success: false, errorType: "GENERIC", errorMessage: "Protocol error: Target closed" };
+        case "tab-closed":
+          // officialLogin when the library's own tab closes: the library terminates before any disconnect.
+          listener("stub", { type: "TERMINATING" });
+          return { success: false, errorType: "GENERIC", errorMessage: "BROWSER_TAB_CLOSED" };
         case "crash":
           process.exit(3);
           break;

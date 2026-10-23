@@ -341,6 +341,7 @@ describe("bank and card connections", () => {
       [[], { success: false, errorType: "GENERIC", errorMessage: "Failed to navigate to url https://www.fibi.co.il/private/?t=tok-9f2, status code: 403" }, /החזיר שגיאה \(קוד 403\) ולא הציג את דף הכניסה/, true],
       [[], { success: false, errorType: "GENERIC", errorMessage: "net::ERR_NAME_NOT_RESOLVED" }, /דף הכניסה של הבנק הבינלאומי לא נטען/, true],
       [["LOGGING_IN"], { success: false, errorType: "TIMEOUT", errorMessage: "official login not completed in time" }, /לא הסתיימה תוך 5 דקות/, true],
+      [["LOGGING_IN"], { success: false, errorType: "BROWSER_TAB_CLOSED", errorMessage: "bank tab closed" }, /הלשונית הראשונה .* נסגרה/, true],
       [["LOGGING_IN", "LOGIN_SUCCESS"], { success: false, errorType: "GENERIC", errorMessage: "waiting for selector `div#fibi_dates` failed" }, /הכניסה הצליחה, אבל קריאת התנועות .* נכשלה/, true],
     ];
     try {

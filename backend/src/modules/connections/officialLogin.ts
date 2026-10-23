@@ -6,7 +6,7 @@ import { LoginResults, type LoginOptions } from "israeli-bank-scrapers/lib/scrap
 import { sleep, TimeoutError } from "israeli-bank-scrapers/lib/helpers/waiting";
 import type { Browser, Frame, Page } from "puppeteer";
 import { PROVIDERS } from "./providers";
-import { BROWSER_CLOSED } from "./scraperLaunch";
+import { BROWSER_CLOSED, BROWSER_TAB_CLOSED } from "./scraperLaunch";
 
 /**
  * The bank's public site. She opens its login and picks the method there (password, app, QR):
@@ -24,7 +24,8 @@ const CONTEXT_DESTROYED = "Execution context was destroyed";
 const DOCUMENT = "[location.href, performance.timeOrigin]";
 
 function ensureOpen(page: Page) {
-  if (page.isClosed() || !page.browser().connected) throw new Error(BROWSER_CLOSED);
+  if (!page.browser().connected) throw new Error(BROWSER_CLOSED);
+  if (page.isClosed()) throw new Error(BROWSER_TAB_CLOSED);
 }
 
 const signedIn = (url: string) => (getPossibleLoginResults()[LoginResults.Success] ?? []).some((pattern) => pattern instanceof RegExp && pattern.test(url));
@@ -115,6 +116,7 @@ function probeUrls(browser: Browser) {
       seen.add(key);
       write(key);
     });
+    page.on("close", () => write(`tab ${tabs.get(page)} closed`));
   };
   void browser.pages().then((pages) => pages.forEach(watch)).catch(() => {});
   browser.on("targetcreated", (target) => { void target.page().then(watch).catch(() => {}); });
