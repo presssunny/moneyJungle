@@ -3,6 +3,10 @@ import type { WorkerLaunchOptions } from "../../types/connections.types";
 
 /** What officialLogin throws, and the errorType the parent turns it into, when she closes the bank window. */
 export const BROWSER_CLOSED = "BROWSER_CLOSED";
+/** Progress the worker sends once Chrome is really up — the only proof a failure was not ours. */
+export const BROWSER_STARTED = "BROWSER_STARTED";
+/** The errorType when Chrome never started: nothing reached the bank. */
+export const BROWSER_LAUNCH = "BROWSER_LAUNCH";
 
 /**
  * Exactly what the worker hands createScraper. No `args` beyond the profile — never
@@ -16,6 +20,7 @@ export function libraryOptions(options: WorkerLaunchOptions) {
     defaultTimeout: options.defaultTimeout,
     showBrowser: options.showBrowser,
     loginWaitMs: options.loginWaitMs,
+    urlProbe: options.urlProbe ?? false,
     args: [`--user-data-dir=${options.profileDir}`],
     combineInstallments: false,
     verbose: false,

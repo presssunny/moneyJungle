@@ -4,7 +4,7 @@ import BeinleumiScraper from "israeli-bank-scrapers/lib/scrapers/beinleumi";
 import { getPossibleLoginResults } from "israeli-bank-scrapers/lib/scrapers/base-beinleumi-group";
 import { LoginResults, type LoginOptions } from "israeli-bank-scrapers/lib/scrapers/base-scraper-with-browser";
 import { TimeoutError } from "israeli-bank-scrapers/lib/helpers/waiting";
-import type { Browser, Page } from "puppeteer";
+import type { Browser, Frame, Page } from "puppeteer";
 import { PROVIDERS } from "./providers";
 import { BROWSER_CLOSED } from "./scraperLaunch";
 
@@ -35,8 +35,46 @@ export async function waitForSignIn(page: Page, waitMs: number): Promise<void> {
   throw new TimeoutError("official login not completed in time");
 }
 
+/**
+ * Host and path only: no query or fragment (tokens), nothing after WebSphere's "!" (encoded portal
+ * state), and no long opaque segment. Null for anything that is not a web page.
+ */
+export function probePath(raw: string): string | null {
+  let url: URL;
+  try { url = new URL(raw); } catch { return null; }
+  if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+  const path = url.pathname.split("!")[0].split("/").map((segment) => (segment.length > 40 ? "…" : segment)).join("/");
+  return `${url.hostname}${path}`;
+}
+
+// Off unless the server sets CONNECTION_URL_PROBE for a supervised test. To stderr only, which the
+// parent redacts and logs: never a progress event, the DB or the UI. Reads URLs; touches no page.
+function probeUrls(browser: Browser) {
+  const started = Date.now();
+  const seen = new Set<string>();
+  const tabs = new Map<Page, number>();
+  const write = (line: string) => process.stderr.write(`[probe +${Math.round((Date.now() - started) / 1000)}s] ${line}\n`);
+  const watch = (page: Page | null) => {
+    if (!page || tabs.has(page)) return;
+    tabs.set(page, tabs.size + 1);
+    page.on("framenavigated", (frame: Frame) => {
+      const line = probePath(frame.url());
+      const main = frame === page.mainFrame();
+      if (!line || (!main && !line.split("/")[0].endsWith("fibi.co.il"))) return;
+      const key = `tab ${tabs.get(page)} ${main ? "page" : "frame"} ${line}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      write(key);
+    });
+  };
+  void browser.pages().then((pages) => pages.forEach(watch)).catch(() => {});
+  browser.on("targetcreated", (target) => { void target.page().then(watch).catch(() => {}); });
+}
+
 interface OfficialOptions {
   loginWaitMs: number;
+  urlProbe?: boolean;
+  prepareBrowser?: (browser: Browser) => Promise<unknown>;
   [option: string]: unknown;
 }
 
@@ -47,6 +85,8 @@ export function createScraper(options: OfficialOptions) {
     ...options,
     companyId: "beinleumi",
     prepareBrowser: async (browser: Browser) => {
+      await options.prepareBrowser?.(browser);
+      if (options.urlProbe) probeUrls(browser);
       browser.on("disconnected", () => {
         if (!terminating) (scraper as unknown as { emitProgress(type: string): void }).emitProgress(BROWSER_CLOSED);
       });

@@ -7,13 +7,19 @@ import { ApiError } from "../../utils/ApiError";
 import type { ScrapeResult, WorkerCommand, WorkerEvent } from "../../types/connections.types";
 import type { ScraperFactory, ScraperRun } from "./scraperAdapter";
 import { killProcessesIn, processAlive } from "./runProcesses";
-import { BROWSER_CLOSED } from "./scraperLaunch";
+import { BROWSER_CLOSED, BROWSER_LAUNCH, BROWSER_STARTED } from "./scraperLaunch";
 
 const LIBRARY = "israeli-bank-scrapers";
 const HARD_LIMIT_MS = 15 * 60_000;
 // On ext4, not the 777 /mnt/c mount: a run directory holds a live bank profile until it is removed.
 const RUN_ROOT = path.join(os.homedir(), ".local/state/moneyjungle/scraper-runs");
 const STDERR_CAP = 4_000;
+// Chrome binds $TMPDIR/.org.chromium.Chromium.XXXXXX/SingletonSocket, and a Unix socket path is
+// capped at 107 bytes: under RUN_ROOT it came to 117 and Chrome died before its window opened.
+// So Chrome's TMPDIR is a short private directory of its own, deleted with the run.
+const TMP_PREFIX = "mj-sync-";
+const CHROME_SOCKET = "/.org.chromium.Chromium.XXXXXX/SingletonSocket";
+const MAX_SOCKET_PATH = 107;
 
 // An allowlist, not a denylist: DATABASE_URL, BANK_CREDENTIALS_KEY, API keys, NODE_OPTIONS and
 // every *_PROXY stay behind. The library hands Chrome its own env, so this is also Chrome's env.
@@ -34,12 +40,25 @@ export function redactLog(text: string): string {
   return text.replace(/https?:\/\/\S+/g, "<url>").replace(/\S+@\S+/g, "<email>").replace(/\d[\d-]{2,}\d/g, "<num>").slice(0, STDERR_CAP);
 }
 
-function removeRun(runDir: string) {
-  try {
-    rmSync(runDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
-  } catch (error) {
-    console.warn("[סנכרון] לא הצלחנו למחוק תיקיית ריצה של הדפדפן", error instanceof Error ? error.message : error);
+function removeRun(...dirs: string[]) {
+  for (const dir of dirs) {
+    try {
+      rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    } catch (error) {
+      console.warn("[סנכרון] לא הצלחנו למחוק תיקיית ריצה של הדפדפן", error instanceof Error ? error.message : error);
+    }
   }
+}
+
+/** A directory named for a server (`<prefix><pid>-…`) that is gone, or for this one: no live run owns it. */
+function staleIn(root: string, prefix: string): string[] {
+  let entries: string[];
+  try { entries = readdirSync(root); } catch { return []; }
+  return entries.filter((name) => {
+    if (!name.startsWith(prefix)) return false;
+    const owner = Number(name.slice(prefix.length).split("-")[0]);
+    return !(owner && owner !== process.pid && processAlive(owner));
+  }).map((name) => path.join(root, name));
 }
 
 /**
@@ -47,19 +66,11 @@ function removeRun(runDir: string) {
  * run directories, then deletes them with their profiles. A run whose server (named in the
  * directory) is alive belongs to another instance — a test run or a second dev server — and stays.
  */
-export function sweepStaleRuns(root = RUN_ROOT): number {
-  let entries: string[];
-  try { entries = readdirSync(root); } catch { return 0; }
-  let swept = 0;
-  for (const name of entries) {
-    const owner = /^run-(\d+)-/.exec(name);
-    if (!name.startsWith("run-") || (owner && Number(owner[1]) !== process.pid && processAlive(Number(owner[1])))) continue;
-    const runDir = path.join(root, name);
-    killProcessesIn(runDir);
-    removeRun(runDir);
-    swept += 1;
-  }
-  return swept;
+export function sweepStaleRuns(root = RUN_ROOT, tmpRoot = os.tmpdir()): number {
+  const runs = staleIn(root, "run-");
+  for (const runDir of runs) killProcessesIn(runDir);
+  removeRun(...runs, ...staleIn(tmpRoot, TMP_PREFIX));
+  return runs.length;
 }
 
 // Same extension as this file: the compiled .js in a build, the .ts under ts-node-dev and vitest.
@@ -103,6 +114,15 @@ const resultSchema = z.object({
   errorMessage: z.string().nullish().transform((v) => v?.slice(0, 500)),
 });
 
+/** Which fields came back filled, as counts — never a value, amount or account number. */
+export function resultShape(result: ScrapeResult): string {
+  if (!result.success) return `failed ${result.errorType ?? "?"}`;
+  return `accounts=${result.accounts?.length ?? 0} ` + (result.accounts ?? []).map((account) => {
+    const count = (has: (txn: (typeof account.txns)[number]) => boolean) => account.txns.filter(has).length;
+    return `[txns=${account.txns.length} balance=${account.balance == null ? "no" : "yes"} pending=${count((t) => t.status === "pending")} installments=${count((t) => !!t.installments)} memo=${count((t) => !!t.memo)} processedDiffers=${count((t) => t.processedDate !== t.date)} foreign=${count((t) => t.originalCurrency !== "ILS")}]`;
+  }).join(" ");
+}
+
 function workerEvent(message: unknown): WorkerEvent | null {
   if (typeof message !== "object" || message === null || !("type" in message)) return null;
   return message as WorkerEvent;
@@ -114,15 +134,22 @@ function startupError(event: Extract<WorkerEvent, { type: "error" }>): Error {
   return new Error(`sync worker failed to start: ${event.message}`);
 }
 
+// The library's two names for "something failed": GENERIC from its own catch, GENERAL_ERROR from ours.
+const GENERIC_ERRORS = ["GENERIC", "GENERAL_ERROR"];
 const failed = (errorType: string, errorMessage: string): ScrapeResult => ({ success: false, errorType, errorMessage });
 
 /** Each sync gets a fresh worker process; the parent alone decrypts credentials and touches the DB. */
-export function isolatedScraperFactory({ library = LIBRARY, officialLibrary = OFFICIAL_LOGIN, hardLimitMs = HARD_LIMIT_MS, runRoot = RUN_ROOT } = {}): ScraperFactory {
+export function isolatedScraperFactory({ library = LIBRARY, officialLibrary = OFFICIAL_LOGIN, hardLimitMs = HARD_LIMIT_MS, runRoot = RUN_ROOT, tmpRoot = os.tmpdir(), urlProbe = process.env.CONNECTION_URL_PROBE === "1" } = {}): ScraperFactory {
   return (options) => new Promise<ScraperRun>((resolveRun, rejectRun) => {
     mkdirSync(runRoot, { recursive: true, mode: 0o700 });
     const runDir = mkdtempSync(path.join(runRoot, `run-${process.pid}-`));
-    const tmpDir = path.join(runDir, "tmp");
-    mkdirSync(tmpDir, { mode: 0o700 });
+    // mkdtemp makes it 0700 under a fresh random name, so a shared /tmp is safe.
+    const tmpDir = mkdtempSync(path.join(tmpRoot, `${TMP_PREFIX}${process.pid}-`));
+    if (tmpDir.length + CHROME_SOCKET.length > MAX_SOCKET_PATH) {
+      removeRun(runDir, tmpDir);
+      rejectRun(ApiError.internal("תיקיית הקבצים הזמניים של השרת ארוכה מדי, ולכן הדפדפן לא יכול להיפתח. לא נוצר קשר עם הבנק."));
+      return;
+    }
     const entry = workerEntry();
     const headed = options.loginMethod === "official_window";
     let child: ReturnType<typeof fork>;
@@ -136,7 +163,7 @@ export function isolatedScraperFactory({ library = LIBRARY, officialLibrary = OF
         serialization: "json",
       });
     } catch (error) {
-      removeRun(runDir);
+      removeRun(runDir, tmpDir);
       rejectRun(error);
       return;
     }
@@ -157,6 +184,7 @@ export function isolatedScraperFactory({ library = LIBRARY, officialLibrary = OF
     let ready = false;
     let settled = false;
     let windowClosed = false;
+    let browserStarted = false;
     let progressListener: (type: string) => void = () => {};
     let resolveScrape: (result: ScrapeResult) => void = () => {};
     const scrapeResult = new Promise<ScrapeResult>((resolve) => { resolveScrape = resolve; });
@@ -166,15 +194,17 @@ export function isolatedScraperFactory({ library = LIBRARY, officialLibrary = OF
     const stop = () => {
       try { if (child.pid) process.kill(-child.pid, "SIGKILL"); } catch { /* already gone */ }
       killProcessesIn(runDir);
-      removeRun(runDir);
+      removeRun(runDir, tmpDir);
     };
     const settle = (outcome: ScrapeResult | Error) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
       stop();
-      if (!ready) rejectRun(outcome instanceof Error ? outcome : new Error(outcome.errorMessage ?? "sync worker stopped"));
-      else resolveScrape(outcome instanceof Error ? failed("GENERAL_ERROR", outcome.message) : outcome);
+      if (!ready) { rejectRun(outcome instanceof Error ? outcome : new Error(outcome.errorMessage ?? "sync worker stopped")); return; }
+      const result = outcome instanceof Error ? failed("GENERAL_ERROR", outcome.message) : outcome;
+      // A generic failure before Chrome came up is a launch failure here, never the bank's answer.
+      resolveScrape(!result.success && GENERIC_ERRORS.includes(result.errorType ?? "") && !browserStarted ? failed(BROWSER_LAUNCH, result.errorMessage ?? "") : result);
     };
     const timer = setTimeout(() => settle(failed("TIMEOUT", "sync worker exceeded its time limit")), hardLimitMs);
 
@@ -183,6 +213,7 @@ export function isolatedScraperFactory({ library = LIBRARY, officialLibrary = OF
       if (!event || settled) return;
       if (event.type === "progress" && typeof event.progress === "string") {
         if (event.progress === BROWSER_CLOSED) windowClosed = true;
+        if (event.progress === BROWSER_STARTED) { browserStarted = true; return; }
         progressListener(event.progress.slice(0, 64));
       }
       else if (event.type === "error") settle(ready ? failed("GENERAL_ERROR", String(event.message).slice(0, 500)) : startupError(event));
@@ -191,7 +222,9 @@ export function isolatedScraperFactory({ library = LIBRARY, officialLibrary = OF
         // officialLogin throws BROWSER_CLOSED when she closes the bank's window; the library reports it as generic.
         // A close during the fetch surfaces as "Target closed"; the progress event says whose doing it was.
         const closed = parsed.success && !parsed.data.success && (windowClosed || parsed.data.errorMessage === BROWSER_CLOSED);
-        settle(!parsed.success ? failed("GENERAL_ERROR", "unexpected scraper result") : closed ? failed(BROWSER_CLOSED, "browser window closed") : parsed.data);
+        if (urlProbe && parsed.success) console.warn(`[סנכרון] probe: ${resultShape(parsed.data)}`);
+        settle(!parsed.success ? failed("GENERAL_ERROR", "unexpected scraper result")
+          : closed ? failed(BROWSER_CLOSED, "browser window closed") : parsed.data);
       } else if (event.type === "ready" && !ready) {
         ready = true;
         resolveRun({
@@ -219,7 +252,7 @@ export function isolatedScraperFactory({ library = LIBRARY, officialLibrary = OF
       library: headed ? officialLibrary : library,
       options: {
         companyId: options.companyId, startDate: options.startDate.toISOString(), defaultTimeout: options.defaultTimeout,
-        showBrowser: headed, loginWaitMs: options.loginWaitMs, profileDir: path.join(runDir, "profile"),
+        showBrowser: headed, loginWaitMs: options.loginWaitMs, profileDir: path.join(runDir, "profile"), urlProbe: headed && urlProbe,
       },
     };
     child.send(start);

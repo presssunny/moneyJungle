@@ -82,6 +82,8 @@ export interface WorkerLaunchOptions {
   loginWaitMs: number;
   /** Per-run Chrome profile, deleted with the run directory — never a persistent profile. */
   profileDir: string;
+  /** Diagnostics for a supervised real test: log the host and path of each page the window visits. */
+  urlProbe?: boolean;
 }
 
 /** Parent → sync worker. Credentials travel only inside `scrape`, never in argv or env. */

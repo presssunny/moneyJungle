@@ -2,7 +2,7 @@
 // anything under src/config or the Prisma client: this process never holds the cipher key or DB access.
 import type { WorkerCommand, WorkerEvent } from "../../types/connections.types";
 import { killProcessesIn } from "./runProcesses";
-import { libraryOptions } from "./scraperLaunch";
+import { BROWSER_STARTED, libraryOptions } from "./scraperLaunch";
 
 interface LibraryScraper {
   scrape(credentials: Record<string, string>): Promise<unknown>;
@@ -42,7 +42,8 @@ async function handle(command: WorkerCommand): Promise<void> {
     }
     const createScraper = isRecord(lib) ? lib.createScraper : undefined;
     if (typeof createScraper !== "function") return fail("UNSUPPORTED", "createScraper missing");
-    const created: unknown = createScraper(libraryOptions(command.options));
+    const prepareBrowser = () => send({ type: "progress", progress: BROWSER_STARTED });
+    const created: unknown = createScraper({ ...libraryOptions(command.options), prepareBrowser });
     if (!isRecord(created) || typeof created.scrape !== "function" || typeof created.onProgress !== "function") {
       return fail("UNSUPPORTED", "scraper shape");
     }

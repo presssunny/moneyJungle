@@ -15,6 +15,7 @@ interface StubOptions {
   startDate: unknown;
   showBrowser?: boolean;
   args?: string[];
+  prepareBrowser?: (browser: unknown) => Promise<unknown>;
 }
 
 // The same launch the library performs (base-scraper-with-browser.js), with the worker's args.
@@ -43,6 +44,9 @@ export function createScraper(options: StubOptions) {
     onProgress(next: Listener) { listener = next; },
     async scrape(credentials: Record<string, string>): Promise<unknown> {
       const secret = credentials.password ?? "";
+      // Like the library: Chrome is up (prepareBrowser) before the login page, so before LOGGING_IN.
+      if (credentials.mode === "launch-fails") return { success: false, errorType: "GENERIC", errorMessage: "Failed to launch the browser process: Code: null" };
+      await options.prepareBrowser?.({});
       listener("stub", { type: "LOGGING_IN" });
       switch (credentials.mode) {
         case "probe":

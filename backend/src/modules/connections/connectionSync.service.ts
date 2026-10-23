@@ -8,8 +8,8 @@ import { providerInfo, type ProviderInfo } from "./providers";
 import { addDays, bankWorkbook, cardWorkbook, freshTransactions, israelDay, purchaseDay } from "./scrapeWorkbook";
 import { processAlive } from "./runProcesses";
 import type { ScraperFactory, ScraperRun } from "./scraperAdapter";
-import { createIsolatedScraper, sweepStaleRuns } from "./scraperIsolation";
-import { BROWSER_CLOSED } from "./scraperLaunch";
+import { createIsolatedScraper, redactLog, sweepStaleRuns } from "./scraperIsolation";
+import { BROWSER_CLOSED, BROWSER_LAUNCH } from "./scraperLaunch";
 import { BLOCKING_ERRORS, retryBlock } from "./syncPolicy";
 
 const FIRST_SYNC_DAYS = 90;
@@ -31,13 +31,35 @@ const active = new Map<number, RunControl>();
 
 type ConnectionRow = NonNullable<Awaited<ReturnType<typeof prisma.financialConnection.findFirst>>>;
 
-function failureMessage(provider: ProviderInfo, errorType: string | undefined, method: LoginMethod = "password"): string {
+/** The HTTP status the library names when the bank's page answered with an error. */
+const siteStatus = (errorMessage: string | undefined) => /status code: (\d{3})/.exec(errorMessage ?? "")?.[1] ?? null;
+
+/**
+ * Says where it stopped, from what really happened: Chrome never started (ours, nothing reached
+ * the bank), the bank's page did not load, she did not finish signing in, or reading failed after login.
+ */
+function failureMessage(provider: ProviderInfo, errorType: string | undefined, method: LoginMethod = "password", reached: SyncPhase = "launching", errorMessage?: string): string {
+  const site = `האתר של ${provider.name}`;
+  const signedIn = reached === "fetching" || reached === "building_import";
+  if (errorType === BROWSER_LAUNCH) return `הדפדפן לא נפתח במחשב הזה, ולכן לא נוצר קשר עם ${provider.name}. זו תקלה אצלנו ולא בבנק — אפשר לנסות שוב מיד.`;
+  if (errorType === "CANCELLED") return "הרענון בוטל. לא נוסף דבר.";
+  if (signedIn) {
+    return errorType === "TIMEOUT"
+      ? `הכניסה הצליחה, אבל ${site} לא הגיב בזמן בזמן קריאת התנועות. לא נוסף דבר. אפשר לנסות שוב.`
+      : `הכניסה הצליחה, אבל קריאת התנועות מ${site} נכשלה — ייתכן שהאתר שינה את המבנה שלו. לא נוסף דבר. אפשר להמשיך להעלות דף חשבון כקובץ.`;
+  }
   if (method === "official_window") {
+    const status = siteStatus(errorMessage);
     switch (errorType) {
-      case "TIMEOUT": return `הכניסה בחלון של ${provider.name} לא הסתיימה תוך ${OFFICIAL_LOGIN_WAIT_MS / 60_000} דקות. אפשר לנסות שוב.`;
+      case "TIMEOUT": return reached === "awaiting_user"
+        ? `הכניסה בחלון של ${provider.name} לא הסתיימה תוך ${OFFICIAL_LOGIN_WAIT_MS / 60_000} דקות. אפשר לנסות שוב.`
+        : `${site} לא נטען בזמן בחלון. ייתכן שיש בעיית רשת או שהאתר עמוס. לא נוסף דבר.`;
       case BROWSER_CLOSED: return `חלון ${provider.name} נסגר לפני שהכניסה והקריאה הסתיימו. לא נוסף דבר.`;
-      case "CANCELLED": return "הרענון בוטל. לא נוסף דבר.";
-      default: return `הכניסה בחלון של ${provider.name} או קריאת הנתונים נכשלו — ייתכן שהאתר השתנה. אפשר להמשיך להעלות דף חשבון כקובץ.`;
+      default: return reached === "awaiting_user"
+        ? `הכניסה בחלון של ${provider.name} לא הושלמה. לא נוסף דבר. אפשר לנסות שוב או להעלות דף חשבון כקובץ.`
+        : status
+          ? `החלון נפתח, אבל ${site} החזיר שגיאה (קוד ${status}) ולא הציג את דף הכניסה. לא ננסה לעקוף את זה — אפשר לנסות שוב מאוחר יותר או להעלות דף חשבון כקובץ.`
+          : `החלון נפתח, אבל דף הכניסה של ${provider.name} לא נטען. ייתכן שיש בעיית רשת. לא נוסף דבר.`;
     }
   }
   const approval = provider.approvalHint
@@ -213,6 +235,7 @@ async function run(userId: number, connection: ConnectionRow, syncId: number, fa
   const method = connection.loginMethod as LoginMethod;
   // Chained so a late progress write can never overwrite the final status.
   let progress: Promise<unknown> = Promise.resolve();
+  let reached: SyncPhase = "launching";
   try {
     if (method === "password" && !connection.credentials) throw ApiError.badRequest("חסרים פרטי כניסה לחיבור הזה");
     const credentials = method === "password" ? openCredentials(userId, connection.credentials!) : {};
@@ -233,6 +256,7 @@ async function run(userId: number, connection: ConnectionRow, syncId: number, fa
       const next: [SyncPhase, Date | null] | null = type === "LOGGING_IN"
         ? [method === "official_window" ? "awaiting_user" : "awaiting_bank", new Date(Date.now() + (method === "official_window" ? OFFICIAL_LOGIN_WAIT_MS : defaultTimeout))]
         : type === "LOGIN_SUCCESS" ? ["fetching", null] : null;
+      if (next) reached = next[0];
       if (next) progress = progress.then(() => setPhase(syncId, ...next)).catch((error: unknown) => console.error("[סנכרון] עדכון מצב נכשל", error));
     });
     const result = await scraper.scrape(credentials);
@@ -242,13 +266,14 @@ async function run(userId: number, connection: ConnectionRow, syncId: number, fa
     // A cancel she sent while the fetch was finishing still wins: nothing read after it is offered.
     if (control.cancelled) return finish(syncId, "cancelled", failureMessage(provider, "CANCELLED", method), [], "CANCELLED");
     if (!result.success) {
-      console.warn(`[סנכרון] ${provider.name}: נכשל (${result.errorType ?? "לא ידוע"})`);
+      // The library's own reason, redacted: the stored message is for her, this line is for whoever debugs it.
+      console.warn(`[סנכרון] ${provider.name}: נכשל (${result.errorType ?? "לא ידוע"}) בשלב ${reached}: ${redactLog(result.errorMessage ?? "").replace(/\s+/g, " ").slice(0, 300)}`);
       if (result.errorType === "CANCELLED") return finish(syncId, "cancelled", failureMessage(provider, "CANCELLED", method), [], "CANCELLED");
       // In the official window she types nothing of ours; a "wrong password" there is not a stored-credentials problem.
       if (method === "password" && (BLOCKING_ERRORS as readonly string[]).includes(result.errorType ?? "")) {
         await prisma.financialConnection.update({ where: { id: connection.id }, data: { blockedReason: result.errorType } });
       }
-      return finish(syncId, "failed", failureMessage(provider, result.errorType, method), [], result.errorType ?? "GENERAL_ERROR");
+      return finish(syncId, "failed", failureMessage(provider, result.errorType, method, reached, result.errorMessage), [], result.errorType ?? "GENERAL_ERROR");
     }
     await setPhase(syncId, "building_import");
     await prisma.financialConnection.update({ where: { id: connection.id }, data: { verifiedAt: connection.verifiedAt ?? new Date() } });
@@ -271,7 +296,7 @@ async function run(userId: number, connection: ConnectionRow, syncId: number, fa
     await finish(syncId, "succeeded", ready === 1 ? "דוח אחד מחכה לאישור במסך הייבוא" : ready ? `${ready} דוחות מחכים לאישור במסך הייבוא` : "לא נמצאו תנועות חדשות לאישור", outcome);
   } catch (error) {
     await progress;
-    const message = error instanceof ApiError ? error.message : failureMessage(provider, undefined, method);
+    const message = error instanceof ApiError ? error.message : failureMessage(provider, undefined, method, reached);
     console.error(`[סנכרון] ${provider.name}: שגיאה`, error instanceof Error ? error.message : error);
     await finish(syncId, "failed", message, [], error instanceof ApiError ? "APP" : "GENERAL_ERROR");
   }

@@ -1,9 +1,9 @@
 import { spawn } from "node:child_process";
-import { mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { isolatedScraperFactory, redactLog, sweepStaleRuns, workerEnv } from "./scraperIsolation";
+import { isolatedScraperFactory, redactLog, resultShape, sweepStaleRuns, workerEnv } from "./scraperIsolation";
 import type { ScraperOptions } from "./scraperAdapter";
 
 const STUB = path.resolve(__dirname, "../../testing/scraperStub.ts");
@@ -49,6 +49,15 @@ describe("redactLog", () => {
   });
 });
 
+describe("resultShape", () => {
+  it("logs which fields came back as counts — no amount, description or account number", () => {
+    const txn = { type: "normal" as const, date: "2026-10-01", processedDate: "2026-10-01", originalAmount: -432.1, originalCurrency: "ILS", chargedAmount: -432.1, description: "שופרסל דיל", status: "completed" as const };
+    const line = resultShape({ success: true, accounts: [{ accountNumber: "12-345-678901", balance: 9876.5, txns: [txn, { ...txn, status: "pending" as const, memo: "העברה", processedDate: "2026-10-03", originalCurrency: "USD" }] }] });
+    expect(line).toBe("accounts=1 [txns=2 balance=yes pending=1 installments=0 memo=1 processedDiffers=1 foreign=1]");
+    for (const secret of ["678901", "9876", "432", "שופרסל", "העברה"]) expect(line).not.toContain(secret);
+  });
+});
+
 describe("sweepStaleRuns", () => {
   it("kills what a dead server's run left behind and deletes it, sparing other processes and live servers' runs", async () => {
     const root = mkdtempSync(path.join(os.tmpdir(), "sweep-"));
@@ -80,7 +89,9 @@ describe("isolated sync worker", { timeout: 60_000 }, () => {
     for (const key of Object.keys(planted)) expect(seen.envKeys).not.toContain(key);
     expect(seen).toMatchObject({ secretInArgvOrEnv: false, appCodeLoaded: false, startDate: "2026-07-01T00:00:00.000Z" });
     expect(String(seen.cwd).startsWith(`${RUN_ROOT}${path.sep}run-`)).toBe(true);
-    expect(seen.tmpdir).toBe(path.join(String(seen.cwd), "tmp"));
+    expect(path.dirname(String(seen.tmpdir))).toBe(os.tmpdir());
+    expect(path.basename(String(seen.tmpdir))).toMatch(new RegExp(`^mj-sync-${process.pid}-`));
+    expect(existsSync(String(seen.tmpdir))).toBe(false);
     expect(runsLeft()).toEqual([]);
   });
 
@@ -95,6 +106,13 @@ describe("isolated sync worker", { timeout: 60_000 }, () => {
 
   it("turns a malformed result into a failure instead of trusting it", async () => {
     expect((await run("malformed")).result).toMatchObject({ success: false, errorType: "GENERAL_ERROR" });
+  });
+
+  it("names a Chrome that never started — not the bank — and keeps the reason for the log", async () => {
+    const { result, progress } = await run("launch-fails");
+    expect(result).toMatchObject({ success: false, errorType: "BROWSER_LAUNCH", errorMessage: expect.stringContaining("Failed to launch") });
+    expect(progress).toEqual([]);
+    expect(runsLeft()).toEqual([]);
   });
 
   it("reports a worker that dies mid-scrape as a failure", async () => {
@@ -169,6 +187,7 @@ describe("isolated sync worker", { timeout: 60_000 }, () => {
     expect((await run("closed-during-fetch")).result).toMatchObject({ success: false, errorType: "BROWSER_CLOSED" });
   });
 
+
   it("cancels on request: CANCELLED, worker gone, run directory removed", async () => {
     const scraper = await isolatedScraperFactory({ library: STUB, runRoot: RUN_ROOT })(options);
     const progress: string[] = [];
@@ -195,9 +214,21 @@ describe("isolated sync worker", { timeout: 60_000 }, () => {
     for (const key of Object.keys(planted)) expect(seen.chromeEnvKeys).not.toContain(key);
   }, 60_000);
 
+  // Chrome binds $TMPDIR/.org.chromium.Chromium.XXXXXX/SingletonSocket, and a socket path is capped
+  // at 107 bytes. A run root as deep as the real one (~/.local/state/…) once killed every launch.
+  it("launches Chrome from a run root as deep as the real one", async () => {
+    const deepRoot = path.join(RUN_ROOT, "as-deep-as-home-local-state-runs-xx");
+    expect(deepRoot.length).toBeGreaterThanOrEqual(path.join(os.homedir(), ".local/state/moneyjungle/scraper-runs").length);
+    const { result } = await run("chrome", isolatedScraperFactory({ library: STUB, runRoot: deepRoot }));
+    expect(result.errorType, result.errorMessage).toBe("PROBE");
+    expect(report(result.errorMessage)).toMatchObject({ text: "ok" });
+  }, 60_000);
+
   it("loads the real library and builds a scraper without logging in", async () => {
-    // No scrape call: the worker is reaped by the short hard limit.
+    // No scrape call: cancel reaps the worker and deletes its directories.
     const scraper = await isolatedScraperFactory({ hardLimitMs: 30_000, runRoot: RUN_ROOT })(options);
     expect(typeof scraper.scrape).toBe("function");
+    scraper.cancel();
+    expect(runsLeft()).toEqual([]);
   }, 60_000);
 });

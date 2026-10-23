@@ -1,7 +1,7 @@
 import puppeteer, { type Browser, type Page } from "puppeteer";
 import { TimeoutError } from "israeli-bank-scrapers/lib/helpers/waiting";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createScraper, OFFICIAL_LOGIN_URL, waitForSignIn } from "./officialLogin";
+import { createScraper, OFFICIAL_LOGIN_URL, probePath, waitForSignIn } from "./officialLogin";
 import { BROWSER_CLOSED } from "./scraperLaunch";
 
 // Offline: every request is answered here or aborted, so nothing reaches the bank.
@@ -26,6 +26,15 @@ beforeEach(async () => {
   await page.goto(LOGIN);
 });
 afterEach(async () => { if (browser.connected) await browser.close(); });
+
+describe("probePath", () => {
+  it("keeps host and path only: no query, fragment, portal state or opaque token", () => {
+    expect(probePath("https://online.fibi.co.il/MatafLoginService/MatafLoginServlet?bankId=FIBIPORTAL&site=Private#tok=abc")).toBe("online.fibi.co.il/MatafLoginService/MatafLoginServlet");
+    expect(probePath("https://online.fibi.co.il/wps/myportal/FibiMenu/Online/!ut/p/z1/04_Sj9CPykssy0xPLMnMz0vMAfI")).toBe("online.fibi.co.il/wps/myportal/FibiMenu/Online/");
+    expect(probePath(`https://online.fibi.co.il/session/${"a1".repeat(30)}/home`)).toBe("online.fibi.co.il/session/…/home");
+    for (const other of ["about:blank", "data:text/html,<p>x</p>", "chrome-error://chromewebdata/", "not a url"]) expect(probePath(other)).toBeNull();
+  });
+});
 
 describe("waitForSignIn", () => {
   it("returns once her window reaches the bank's logged-in area", async () => {
@@ -57,8 +66,11 @@ describe("createScraper (official window)", () => {
   it("opens the bank's own page, fills and clicks nothing, and hands her signed-in session to the library's fetch", async () => {
     const requested: string[] = [];
     let libraryPage: Page | null = null;
+    let started = 0;
     const scraper = createScraper({
       startDate: new Date("2026-09-01T00:00:00Z"), defaultTimeout: 2_000, showBrowser: false, loginWaitMs: 15_000,
+      // The worker's signal that Chrome is up; officialLogin hooks the same callback and must pass it on.
+      prepareBrowser: async () => { started += 1; },
       preparePage: async (pageToPrepare: Page) => {
         libraryPage = pageToPrepare;
         await pageToPrepare.setRequestInterception(true);
@@ -76,6 +88,7 @@ describe("createScraper (official window)", () => {
     });
     const result = await scraper.scrape({} as never);
     expect(requested[0]).toBe(OFFICIAL_LOGIN_URL);
+    expect(started).toBe(1);
     expect(progress).toEqual(expect.arrayContaining(["LOGGING_IN", "LOGIN_SUCCESS"]));
     // The fake portal has no account data, so the library's own fetch fails after login — proof it got that far.
     expect(requested.some((url) => url.includes("OnBalanceTrans"))).toBe(true);

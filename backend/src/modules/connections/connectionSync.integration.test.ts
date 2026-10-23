@@ -2,12 +2,13 @@ import crypto from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "../../config/database";
 import { env } from "../../config/env";
 import type { ScrapeResult, ScrapedTransaction, SyncOutcomeItem } from "../../types/connections.types";
 import { importRows } from "../imports/importRows.service";
 import { importSessions } from "../imports/importSession.service";
+import { bankService } from "../bank/bank.service";
 import { connectionsService } from "./connections.service";
 import { sealCredentials } from "./credentialsCipher";
 import { bankWorkbook, cardWorkbook } from "./scrapeWorkbook";
@@ -106,6 +107,24 @@ describe("bank and card connections", () => {
     const created = await connectionsService.create(userId, { provider: "beinleumi", bankAccountId: accountId });
     expect(created.loginMethod).toBe("official_window");
     expect((await prisma.financialConnection.findUniqueOrThrow({ where: { id: created.id } })).credentials).toBeNull();
+  });
+
+  it("links a bank connection only to her own account — one created a moment ago inside the dialog included", async () => {
+    const otherId = (await prisma.user.create({ data: { name: "__connections_test", email: `${crypto.randomUUID()}@example.test` } })).id;
+    try {
+      const foreign = await bankService.createAccount(otherId, { bankName: "הבינלאומי", accountName: "עו״ש", initialBalance: 0 });
+      await expect(connectionsService.create(userId, { provider: "beinleumi", bankAccountId: foreign.id })).rejects.toThrow(/חשבון בנק/);
+    } finally {
+      await prisma.user.delete({ where: { id: otherId } });
+    }
+    const fresh = await bankService.createAccount(userId, { bankName: "הבינלאומי", accountName: "חשבון משותף", initialBalance: 0 });
+    const created = await connectionsService.create(userId, { provider: "beinleumi", bankAccountId: fresh.id });
+    expect(created.bankAccountId).toBe(fresh.id);
+    const { done } = await connectionSync.start(userId, created.id, fakeFactory({ success: true, accounts: [{ accountNumber: "1", txns: [txn("משכורת", 7000)] }] }).factory);
+    await done;
+    const [item] = (await latestSync(created.id)).outcome as unknown as SyncOutcomeItem[];
+    const session = await prisma.importSession.findFirstOrThrow({ where: { id: item.importSessionId!, userId } });
+    expect(session.answers).toMatchObject({ accountId: fresh.id });
   });
 
   it("says it waits for the bank's answer — not that an approval was asked — then lands the statement in the import approval", async () => {
@@ -308,6 +327,38 @@ describe("bank and card connections", () => {
     approve();
     await done;
     expect(await latestSync(connection.id)).toMatchObject({ status: "succeeded", method: "official_window" });
+  });
+
+  it("says exactly where an official-window sync stopped — and only Chrome failing to start skips the wait", async () => {
+    // Emits `events` as the worker would, then fails with `result`.
+    const stopsAt = (events: string[], result: ScrapeResult): ScraperFactory => async () => {
+      let listener: (type: string) => void = () => {};
+      return { onProgress(next) { listener = next; }, cancel() {}, async scrape() { events.forEach((type) => listener(type)); return result; } };
+    };
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const cases: Array<[string[], ScrapeResult, RegExp, boolean]> = [
+      [[], { success: false, errorType: "BROWSER_LAUNCH", errorMessage: "Failed to launch the browser process" }, /הדפדפן לא נפתח במחשב הזה, ולכן לא נוצר קשר/, false],
+      [[], { success: false, errorType: "GENERIC", errorMessage: "Failed to navigate to url https://www.fibi.co.il/private/?t=tok-9f2, status code: 403" }, /החזיר שגיאה \(קוד 403\) ולא הציג את דף הכניסה/, true],
+      [[], { success: false, errorType: "GENERIC", errorMessage: "net::ERR_NAME_NOT_RESOLVED" }, /דף הכניסה של הבנק הבינלאומי לא נטען/, true],
+      [["LOGGING_IN"], { success: false, errorType: "TIMEOUT", errorMessage: "official login not completed in time" }, /לא הסתיימה תוך 5 דקות/, true],
+      [["LOGGING_IN", "LOGIN_SUCCESS"], { success: false, errorType: "GENERIC", errorMessage: "waiting for selector `div#fibi_dates` failed" }, /הכניסה הצליחה, אבל קריאת התנועות .* נכשלה/, true],
+    ];
+    try {
+      for (const [events, result, message, cooldown] of cases) {
+        const connection = await connectionsService.create(userId, { provider: "beinleumi", bankAccountId: accountId, loginMethod: "official_window" });
+        await (await connectionSync.start(userId, connection.id, stopsAt(events, result))).done;
+        expect(await latestSync(connection.id)).toMatchObject({ status: "failed", errorType: result.errorType, message: expect.stringMatching(message) });
+        expect(!!(await connectionsService.get(userId, connection.id)).retryAvailableAt).toBe(cooldown);
+        await prisma.financialConnection.delete({ where: { id: connection.id } });
+      }
+      const logged = warn.mock.calls.map((call) => call.join(" ")).join("\n");
+      expect(logged).toContain("Failed to launch the browser process");
+      expect(logged).toContain("בשלב fetching");
+      expect(logged).not.toContain("tok-9f2");
+      expect(logged).not.toContain("fibi.co.il");
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it("never blocks an official-window connection on a 'wrong password' it did not type", async () => {

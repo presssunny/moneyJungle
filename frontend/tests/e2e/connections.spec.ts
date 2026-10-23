@@ -157,6 +157,18 @@ test('If she closes the bank window, the journey stops at sign-in and she may tr
  expect(await axeSerious(page)).toEqual([]);
 });
 
+test('If Chrome never starts, she is told nothing reached the bank, no step claims the window opened, and she may retry at once',async({page})=>{
+ const message='הדפדפן לא נפתח במחשב הזה, ולכן לא נוצר קשר עם הבנק הבינלאומי. זו תקלה אצלנו ולא בבנק — אפשר לנסות שוב מיד.';
+ await mockConnections(page,[{status:'running',phase:'launching'},{status:'failed',phase:'launching',errorType:'BROWSER_LAUNCH',message,finishedAt:'2026-10-21T04:20:10Z'}]);
+ const dialog=await openNewConnection(page);
+ await expect(dialog.getByRole('alert')).toContainText(message,{timeout:20000});
+ await expect(dialog.locator('.sync-journey-step-failed')).toContainText('פותחים את החלון של הבנק הבינלאומי');
+ await expect(dialog.getByText('החלון של הבנק הבינלאומי נפתח')).toHaveCount(0);
+ await expect(dialog.getByText(/התחברת בהצלחה/)).toHaveCount(0);
+ await expect(dialog.getByRole('button',{name:'ניסיון נוסף'})).toBeEnabled();
+ expect(await axeSerious(page)).toEqual([]);
+});
+
 test('Cancel during the wait stops the sync and says nothing was added',async({page})=>{
  const requests=await mockConnections(page,[{status:'running',phase:'awaiting_user',deadlineAt:soon()}]);
  const dialog=await openNewConnection(page);
