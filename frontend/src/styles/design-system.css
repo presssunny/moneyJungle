@@ -383,6 +383,14 @@ input[type=checkbox], input[type=radio] { accent-color: var(--primary); width: 1
 .sync-journey-guide { padding: var(--space-3); border-radius: var(--radius-control); background: var(--surface-inset); border-inline-start: 3px solid var(--primary); animation: sync-journey-rise 240ms ease-out; }
 .sync-journey-guide p { margin: 0 0 var(--space-1); }
 .sync-journey-guide-list { margin: var(--space-1) 0 0; padding-inline-start: var(--space-4); display: grid; gap: var(--space-1); }
+.sync-account { display: grid; gap: var(--space-2); justify-items: start; }
+.sync-account > * { justify-self: stretch; }
+.sync-account > .btn { justify-self: start; }
+.sync-account-empty { padding: var(--space-3); border-radius: var(--radius-control); background: var(--surface-inset); border: 1px dashed var(--border); animation: sync-journey-rise 240ms ease-out; }
+.sync-account-empty p { margin: 0; }
+.sync-account-empty p + p { margin-block-start: var(--space-1); }
+.sync-account-new { display: grid; gap: var(--space-2); }
+.sync-account-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
 .sync-journey-host { font-weight: 700; font-family: var(--font-mono, monospace); unicode-bidi: isolate; }
 .sync-journey-success { display: flex; align-items: center; gap: var(--space-3); margin-block: var(--space-3); padding: var(--space-3) var(--space-4); border-radius: var(--radius-control); background: color-mix(in srgb, var(--success, var(--primary)) 14%, var(--surface)); border: 1px solid var(--success, var(--primary)); animation: sync-journey-rise 320ms ease-out; }
 .sync-journey-success p { margin: var(--space-1) 0 0; }
@@ -396,7 +404,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--primary); width: 1
 @keyframes sync-journey-pulse { 50% { opacity: 0.3; transform: scale(0.8); } }
 @keyframes sync-journey-rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) {
-  .sync-journey-step-done .sync-journey-mark, .sync-journey-step-current .sync-journey-mark::after, .sync-journey-guide, .sync-journey-success, .sync-journey-success-mark, .sync-journey-turn { animation: none; }
+  .sync-journey-step-done .sync-journey-mark, .sync-journey-step-current .sync-journey-mark::after, .sync-journey-guide, .sync-journey-success, .sync-journey-success-mark, .sync-journey-turn, .sync-account-empty { animation: none; }
   .provider-tile { transition: none; }
   .provider-tile:hover:not(.provider-tile-off) { transform: none; }
 }

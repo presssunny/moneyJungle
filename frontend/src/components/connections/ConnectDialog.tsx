@@ -9,8 +9,8 @@ import { useAsync } from "../../hooks/useAsync";
 import { useConfirm } from "../../hooks/useConfirm";
 import { apiErrorMessage } from "../../services/api";
 import { cancelSync, createConnection, syncConnection } from "../../services/connections.service";
-import { listBankAccounts } from "../../services/planning.service";
-import type { ConnectionProviderInfo, FinancialConnection } from "../../types/models";
+import { createBankAccount, listBankAccounts } from "../../services/planning.service";
+import type { BankAccount, ConnectionProviderInfo, FinancialConnection } from "../../types/models";
 import { SyncJourney } from "./SyncJourney";
 import { SyncSummary } from "./SyncSummary";
 import { awaitsReview, milestones, phaseLabel, REVIEWABLE, siteDomain } from "./syncPhases";
@@ -47,6 +47,65 @@ function ProviderTiles({ providers, chosen, onChoose }: { providers: ConnectionP
   );
 }
 
+/**
+ * The rows land in an account of ours, so one must exist. After a data wipe there is none — she makes
+ * it right here; the server still checks it is hers when the connection is created.
+ */
+function AccountPicker({ bankName, value, onChange }: { bankName: string; value: string; onChange: (id: string) => void }) {
+  const accounts = useAsync(listBankAccounts, [], "לא הצלחנו לטעון את חשבונות הבנק", ["bank"]);
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState("עו״ש");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const list = accounts.data ?? [];
+
+  async function add() {
+    setBusy(true);
+    setError("");
+    try {
+      const account = await createBankAccount({ bankName, accountName: name.trim(), initialBalance: 0 });
+      accounts.setData((current: BankAccount[] | null) => [...(current ?? []).filter((a) => a.id !== account.id), account]);
+      onChange(String(account.id));
+      setAdding(false);
+    } catch (e) {
+      setError(apiErrorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (accounts.loading && !accounts.data) return <p className="text-muted" role="status">טוענים את חשבונות הבנק…</p>;
+  if (accounts.error && !accounts.data) {
+    return <div className="error-message" role="alert">{accounts.error} <Button type="button" variant="outline" size="sm" onClick={() => void accounts.reload()}>נסי שוב</Button></div>;
+  }
+  const empty = !list.length;
+  return (
+    <div className="sync-account">
+      {!empty && <Select label="התנועות ייכנסו לחשבון" required value={value} onChange={(e) => onChange(e.target.value)} placeholder="בחירת חשבון"
+        options={list.map((a) => ({ value: a.id, label: `${a.bankName} — ${a.accountName}` }))} />}
+      {empty && (
+        <div className="sync-account-empty">
+          <p><strong>עוד אין במערכת חשבון בנק שהתנועות ייכנסו אליו.</strong></p>
+          <p className="text-muted">אפשר ליצור אותו כאן, בלי לצאת מהחלון. הוא נפתח ריק, ושום תנועה לא נכנסת אליו לפני שתאשרי את הייבוא.</p>
+        </div>
+      )}
+      {(empty || adding) ? (
+        <div className="sync-account-new">
+          <Input label={`שם החשבון (${bankName})`} value={name} onChange={(e) => setName(e.target.value)} maxLength={120}
+            onKeyDown={(e) => { if (e.key === "Enter" && name.trim() && !busy) { e.preventDefault(); void add(); } }} />
+          <div className="sync-account-actions">
+            <Button type="button" size="sm" onClick={() => void add()} disabled={!name.trim() || busy}>{busy ? "יוצרים…" : "יצירת החשבון"}</Button>
+            {!empty && <Button type="button" variant="ghost" size="sm" onClick={() => setAdding(false)} disabled={busy}>ביטול</Button>}
+          </div>
+          {error && <div className="field-error" role="alert">{error}</div>}
+        </div>
+      ) : (
+        <Button type="button" variant="ghost" size="sm" onClick={() => setAdding(true)}>+ חשבון חדש</Button>
+      )}
+    </div>
+  );
+}
+
 function Setup({ providers, onCreated, onCancel }: { providers: ConnectionProviderInfo[]; onCreated: (c: FinancialConnection, syncError?: string) => void; onCancel: () => void }) {
   const [providerId, setProviderId] = useState("");
   const [bankAccountId, setBankAccountId] = useState("");
@@ -54,7 +113,6 @@ function Setup({ providers, onCreated, onCancel }: { providers: ConnectionProvid
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const provider = providers.find((p) => p.id === providerId);
-  const accounts = useAsync(() => (provider?.kind === "bank" ? listBankAccounts() : Promise.resolve([])), [provider?.kind], "לא הצלחנו לטעון את חשבונות הבנק", ["bank"]);
   const method = provider?.loginMethods[0];
   const domain = siteDomain(provider?.officialLoginUrl ?? null);
 
@@ -88,8 +146,7 @@ function Setup({ providers, onCreated, onCancel }: { providers: ConnectionProvid
               <li>כאן תראי כל שלב: מתי נכנסת, מתי התנועות נקראו, ומה מחכה לאישור שלך.</li>
             </ul>
           </div>
-          {provider.kind === "bank" && <Select label="התנועות ייכנסו לחשבון" required value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)} placeholder="בחירת חשבון"
-            options={(accounts.data ?? []).map((a) => ({ value: a.id, label: `${a.bankName} — ${a.accountName}` }))} />}
+          {provider.kind === "bank" && <AccountPicker bankName={provider.name} value={bankAccountId} onChange={setBankAccountId} />}
           {provider.kind === "bank" && <Input label="ספרות אחרונות של מספר החשבון (רק אם יש כמה חשבונות באותה כניסה)" value={accountHint} onChange={(e) => setAccountHint(e.target.value)} inputMode="numeric" />}
           <p className="text-muted">אין רענון אוטומטי ואין ניסיון חוזר לבד. התנועות לא נוספות מיד — הן מגיעות למסך אישור הייבוא.</p>
         </div>

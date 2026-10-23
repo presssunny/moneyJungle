@@ -14,8 +14,8 @@ type Script = Row[];
 const axeSerious=async(page:Page)=>(await new AxeBuilder({page}).include('[role=dialog]').analyze()).violations.filter(v=>['serious','critical'].includes(v.impact??''));
 
 /** Each GET of a running connection advances one step of `script`, as the server's phases would. */
-async function mockConnections(page:Page, script:Script, options:{after?:Row;initial?:Row[]}={}) {
- const connections:Row[]=[...(options.initial??[])];const requests:Array<{method:string;path:string;body:unknown}>=[];let step=0;
+async function mockConnections(page:Page, script:Script, options:{after?:Row;initial?:Row[];accounts?:Row[]}={}) {
+ const connections:Row[]=[...(options.initial??[])];const accounts:Row[]=options.accounts??[{id:1,bankName:'הבינלאומי',accountName:'עו״ש',currentBalance:'0'}];const requests:Array<{method:string;path:string;body:unknown}>=[];let step=0;
  const base=(id:number,body:Row)=>({id,provider:body.provider,kind:'bank',label:'הבנק הבינלאומי',bankAccountId:body.bankAccountId??null,accountHint:null,loginMethod:'official_window',blockedReason:null,verifiedAt:null,lastSyncAt:null,createdAt:'2026-10-20T10:00:00Z',syncs:[],retryBlockedReason:null,retryMessage:null,retryAvailableAt:null});
  const withSync=(c:Row,sync:Row,extra:Row={})=>({...c,...extra,syncs:[{id:1,method:c.loginMethod,errorType:null,message:null,outcome:null,deadlineAt:null,startedAt:'2026-10-20T10:00:00Z',finishedAt:null,phase:null,...sync}]});
  await page.route('**/api/**',async route=>{
@@ -25,7 +25,8 @@ async function mockConnections(page:Page, script:Script, options:{after?:Row;ini
   if(path==='/api/gate/session')reply={user:{id:1,email:'test@example.test',displayName:'Test',role:'USER'},csrfToken:'x'};
   else if(path==='/api/settings')reply={theme:'light',currency:'ILS',notificationsJson:{}};
   else if(path==='/api/journey/profile')reply={onboarding:'completed'};
-  else if(path==='/api/bank/accounts')reply=[{id:1,bankName:'הבינלאומי',accountName:'עו״ש',currentBalance:'0'}];
+  else if(path==='/api/bank/accounts'&&method==='POST'){accounts.push({id:41,currentBalance:'0',...body});reply=accounts.at(-1);}
+  else if(path==='/api/bank/accounts')reply=accounts;
   else if(path==='/api/savings')reply={goals:[],summary:{savedTotal:0}};
   else if(path==='/api/loans')reply={loans:[],totals:{totalBalance:0}};
   else if(path==='/api/connections'&&method==='GET')reply={providers,connections};
@@ -95,6 +96,29 @@ test('She signs in at the bank\'s own window and sees each server-confirmed step
  const created=requests.find(r=>r.method==='POST'&&r.path==='/api/connections');
  expect(created?.body).toEqual({provider:'beinleumi',bankAccountId:1,accountHint:''});
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
+test('With no bank account yet (after a data wipe) she is told why and creates one without leaving the dialog',async({page},info)=>{
+ const requests=await mockConnections(page,[{status:'running',phase:'launching'}],{accounts:[]});
+ await page.goto('/accounts?tab=connections');
+ await page.getByRole('button',{name:'חיבור בנק או כרטיס'}).click();
+ const dialog=page.getByRole('dialog');
+ await dialog.getByRole('radio',{name:/הבנק הבינלאומי/}).check();
+ await dialog.getByRole('button',{name:'המשך'}).click();
+ await expect(dialog.getByText('עוד אין במערכת חשבון בנק שהתנועות ייכנסו אליו.')).toBeVisible();
+ await expect(dialog.getByLabel('התנועות ייכנסו לחשבון')).toHaveCount(0);
+ await expect(dialog.getByRole('button',{name:'פתיחת חלון הבנק'})).toBeDisabled();
+ await page.screenshot({path:info.outputPath('no-account.png')});
+ expect(await axeSerious(page)).toEqual([]);
+ await dialog.getByLabel('שם החשבון (הבנק הבינלאומי)').fill('עו״ש משותף');
+ await dialog.getByRole('button',{name:'יצירת החשבון'}).click();
+ await expect(dialog.getByLabel('התנועות ייכנסו לחשבון')).toHaveValue('41');
+ await expect(dialog.getByText('עוד אין במערכת חשבון בנק')).toHaveCount(0);
+ expect(requests.find(r=>r.method==='POST'&&r.path==='/api/bank/accounts')?.body).toEqual({bankName:'הבנק הבינלאומי',accountName:'עו״ש משותף',initialBalance:0});
+ await dialog.getByRole('button',{name:'פתיחת חלון הבנק'}).click();
+ await expect(dialog.getByRole('heading',{name:'מתחברים לבנק'})).toBeVisible();
+ expect(requests.find(r=>r.method==='POST'&&r.path==='/api/connections')?.body).toEqual({provider:'beinleumi',bankAccountId:41,accountHint:''});
+ expect(requests.some(r=>r.method==='POST'&&/\/sync$/.test(r.path))).toBe(true);
 });
 
 test('Only after she approves the import does the third success, "import approved", appear',async({page},info)=>{
