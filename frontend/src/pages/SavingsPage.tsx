@@ -52,7 +52,7 @@ export default function SavingsPage() {
 
   const goalsRes = useAsync(() => listSavingsGoals(), [reloadKey], "לא הצלחנו לטעון את היעדים");
   const loansRes = useAsync(() => listLoans(), [], "לא הצלחנו לטעון את ההלוואות", ["loans"]);
-  const openLoans = (loansRes.data?.loans ?? []).filter((loan) => loan.status !== "finished" && loan.currentBalance > 0);
+  const openLoans = (loansRes.data?.loans ?? []).filter((loan) => loan.status !== "finished" && loan.currentBalance !== null && loan.currentBalance > 0);
   const load = () => setReloadKey((k) => k + 1);
 
   function openCreate() {
@@ -209,7 +209,7 @@ export default function SavingsPage() {
                 </div>
                 <div className="budget-card-remaining">
                   {debt && source === "loan" && <span className="text-muted">נותרו {formatCurrency(remaining)} לפי יתרת {goal.loan?.loanName}, נכון ל־{formatDate(goal.progress.asOf)} · </span>}
-                  {source === "unavailable" && <span className="text-warning">ההלוואה המקושרת נמחקה — אין ממה למדוד התקדמות · </span>}
+                  {source === "unavailable" && <span className="text-warning">{goal.loan ? `יתרת ${goal.loan.loanName} חסרה` : "ההלוואה המקושרת נמחקה"} — אין ממה למדוד התקדמות · </span>}
                   {goal.monthlyTarget !== null && <span className="text-muted">יעד חודשי {formatCurrency(Number(goal.monthlyTarget))} · </span>}
                   {goal.targetDate && <span className="text-muted">עד {formatDate(goal.targetDate)}</span>}
                 </div>

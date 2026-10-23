@@ -61,12 +61,24 @@ describe("commitments a bank statement proves", () => {
     await statementCommitmentsService.apply(userId, accountId, []);
     const { loans: items, summary } = await loansService.list(userId);
     expect(items).toHaveLength(1);
-    expect(items[0]).toMatchObject({ scheduleSource: "statement", monthlyPayment: 1200, currentBalance: 0, loanNumber: "108" });
+    expect(items[0]).toMatchObject({ scheduleSource: "statement", monthlyPayment: 1200, currentBalance: null, loanNumber: "108" });
+    expect(items[0].computed).toBeNull();
     expect(items[0].progress.lifecycle).toBe("active");
-    expect(summary).toMatchObject({ totalBalance: 0, monthlyPayment: 1200 });
+    expect(summary).toMatchObject({ totalBalance: 0, unknownBalanceCount: 1, monthlyPayment: 1200, monthlyInterest: 0, unknownInterestCount: 1 });
 
     const upcoming = await buildUpcoming(userId, 40, new Date("2026-09-20T00:00:00Z"));
     expect(upcoming.events.filter((e) => e.kind === "loan").map((e) => [e.date.slice(0, 10), e.amount])).toEqual([["2026-10-15", 1200]]);
+  });
+
+  it("apply stores what the statement cannot tell as NULL with an 'unknown' opening amount — never 0", async () => {
+    await seedStatement();
+    await statementCommitmentsService.apply(userId, accountId, []);
+    const loan = await prisma.loan.findFirstOrThrow({ where: { userId } });
+    expect(loan.originalAmount).toBeNull();
+    expect(loan.currentBalance).toBeNull();
+    expect(loan.annualInterestRate).toBeNull();
+    expect(loan.originalAmountSource).toBe("unknown");
+    expect(Number(loan.monthlyPayment)).toBe(1200);
   });
 
   it("a detected payment is never materialized as an expense — the next statement brings the real one", async () => {
@@ -114,8 +126,8 @@ describe("commitments a bank statement proves", () => {
   });
 
   it.skipIf(!hasFixture("loanSchedule562"))("a schedule carves its track out of the statement loan — the monthly total does not drop", async () => {
-    const statementLoan = (monthlyPayment: number) => prisma.loan.create({ data: { userId, loanName: "הלוואה 108", loanType: "bank", originalAmount: 0, currentBalance: 0,
-      annualInterestRate: 0, monthlyPayment, startDate: new Date("2026-10-15"), loanNumber: "108", scheduleSource: "statement", detectedKey: "loan:108:15" } });
+    const statementLoan = (monthlyPayment: number) => prisma.loan.create({ data: { userId, loanName: "הלוואה 108", loanType: "bank", originalAmount: null, currentBalance: null,
+      annualInterestRate: null, originalAmountSource: "unknown", monthlyPayment, startDate: new Date("2026-10-15"), loanNumber: "108", scheduleSource: "statement", detectedKey: "loan:108:15" } });
     const placeholder = await statementLoan(5000);
     const imported = await loanScheduleService.importSchedule(userId, readFixture("loanSchedule562"), placeholder.id, true);
     const loans = await prisma.loan.findMany({ where: { userId }, orderBy: { id: "asc" } });

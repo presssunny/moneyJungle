@@ -424,3 +424,29 @@ describe("duplicate_transaction", () => {
     expect(await alertsOfType(userId, "duplicate_transaction")).toHaveLength(0);
   });
 });
+
+describe("expensive_loan", () => {
+  function loanFor(userId: number, currentBalance: number | null, annualInterestRate: number | null) {
+    return prisma.loan.create({
+      data: { userId, loanName: "הלוואה", loanType: "bank", originalAmount: null, currentBalance, annualInterestRate,
+        monthlyPayment: 1000, startDate: midCurrentMonth(), scheduleSource: "computed" },
+    });
+  }
+
+  it("מתריע על ריבית גבוהה כשהיתרה והריבית ידועות", async ({ skip }) => {
+    if (!dbUp) skip("MariaDB אינו זמין — יש להריץ bash backend/start-db.sh");
+    const userId = await createUser("loan_known");
+    await loanFor(userId, 20000, 12);
+    await scanForAlerts(userId);
+    expect((await alertsOfType(userId, "expensive_loan")).map((a) => a.title)).toEqual(["ריבית גבוהה: הלוואה"]);
+  });
+
+  it("לא ממציא התרעת ריבית כשהיתרה או הריבית לא ידועות", async ({ skip }) => {
+    if (!dbUp) skip("MariaDB אינו זמין — יש להריץ bash backend/start-db.sh");
+    const userId = await createUser("loan_unknown");
+    await loanFor(userId, null, 12);
+    await loanFor(userId, 20000, null);
+    await scanForAlerts(userId);
+    expect(await alertsOfType(userId, "expensive_loan")).toHaveLength(0);
+  });
+});

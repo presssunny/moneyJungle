@@ -1,7 +1,7 @@
 import { prisma } from "../../config/database";
 import type { Prisma } from "../../../generated/prisma/client";
 import { ApiError } from "../../utils/ApiError";
-import { decimalToNumber, round2 } from "../../utils/money.utils";
+import { decimalOrNull, decimalToNumber, round2 } from "../../utils/money.utils";
 import { CreateSavingsGoalBody, UpdateSavingsGoalBody } from "./savings.validation";
 
 export const withLoan = { loan: { select: { id: true, loanName: true, currentBalance: true, status: true, updatedAt: true } } } as const;
@@ -30,8 +30,9 @@ export function goalProgress(goal: GoalRecord): GoalProgress {
     const saved = decimalToNumber(goal.currentAmount);
     return { ...progressOf(saved, target), remaining: round2(Math.max(0, target - saved)), complete: saved >= target, source: "manual", asOf: null };
   }
-  if (!goal.loan) return { current: 0, target, remaining: target, percent: 0, complete: false, source: "unavailable", asOf: null };
-  const owed = goal.loan.status === "finished" ? 0 : decimalToNumber(goal.loan.currentBalance);
+  const owed = goal.loan?.status === "finished" ? 0 : decimalOrNull(goal.loan?.currentBalance);
+  // An unknown balance is not "nothing left to pay" — progress can't be read from it.
+  if (!goal.loan || owed === null) return { current: 0, target, remaining: target, percent: 0, complete: false, source: "unavailable", asOf: null };
   return {
     ...progressOf(Math.max(0, target - owed), target), remaining: round2(owed), complete: owed <= 0,
     source: "loan", asOf: goal.loan.updatedAt.toISOString(),
@@ -74,7 +75,8 @@ export const savingsService = {
       const loan = body.loanId ? await prisma.loan.findFirst({ where: { id: body.loanId, userId } }) : null;
       if (!loan) throw ApiError.badRequest("יש לבחור הלוואה קיימת לסילוק");
       if (loan.status === "finished") throw ApiError.badRequest("ההלוואה הזו כבר סולקה");
-      const balance = decimalToNumber(loan.currentBalance);
+      const balance = decimalOrNull(loan.currentBalance);
+      if (balance === null) throw ApiError.badRequest("יתרת ההלוואה לא ידועה — אפשר להגדיר יעד סילוק אחרי שתירשם יתרה או יועלה לוח סילוקין");
       if (balance <= 0) throw ApiError.badRequest("להלוואה אין יתרה פתוחה");
       return present(await prisma.savingsGoal.create({
         data: { ...base, goalType: "debt_payoff", loanId: loan.id, targetAmount: balance, currentAmount: 0 },

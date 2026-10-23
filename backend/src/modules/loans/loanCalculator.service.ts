@@ -1,4 +1,5 @@
-import { round2 } from "../../utils/money.utils";
+import { Prisma } from "../../../generated/prisma/client";
+import { decimalOrNull, decimalToNumber, round2 } from "../../utils/money.utils";
 
 /** Annual interest rate (%) at or above this is flagged as expensive. */
 export const EXPENSIVE_LOAN_THRESHOLD = 8;
@@ -64,6 +65,81 @@ export function computeLoan(input: LoanInput): LoanComputed {
   };
 }
 
+/** Spitzer figures only when both inputs are known — an unknown rate is not 0%. */
+export function computeKnownLoan(input: {
+  currentBalance: number | null;
+  annualInterestRate: number | null;
+  monthlyPayment: number;
+}): LoanComputed | null {
+  if (input.currentBalance === null || input.annualInterestRate === null) return null;
+  return computeLoan({
+    currentBalance: input.currentBalance,
+    annualInterestRate: input.annualInterestRate,
+    monthlyPayment: input.monthlyPayment,
+  });
+}
+
+/** A stored loan's figures as numbers, null where unknown, with its Spitzer split. */
+export function loanFigures(loan: {
+  currentBalance: Prisma.Decimal | null;
+  annualInterestRate: Prisma.Decimal | null;
+  monthlyPayment: Prisma.Decimal;
+}) {
+  const figures = {
+    currentBalance: decimalOrNull(loan.currentBalance),
+    annualInterestRate: decimalOrNull(loan.annualInterestRate),
+    monthlyPayment: decimalToNumber(loan.monthlyPayment),
+  };
+  return { ...figures, computed: computeKnownLoan(figures) };
+}
+
+export interface LoanTotalsItem {
+  currentBalance: number | null;
+  monthlyPayment: number;
+  computed: LoanComputed | null;
+}
+
+export interface LoanTotals {
+  knownBalance: number;
+  unknownBalanceCount: number;
+  monthlyPayment: number;
+  knownMonthlyInterest: number;
+  knownAnnualInterest: number;
+  unknownInterestCount: number;
+}
+
+/**
+ * The one sum over loans (CLAUDE.md §4). Callers choose the population. An
+ * unknown balance or rate is counted, never added as 0; the monthly debit is
+ * real either way, so it always counts.
+ */
+export function loanTotals(items: LoanTotalsItem[]): LoanTotals {
+  let knownBalance = 0;
+  let monthlyPayment = 0;
+  let knownMonthlyInterest = 0;
+  let knownAnnualInterest = 0;
+  let unknownBalanceCount = 0;
+  let unknownInterestCount = 0;
+  for (const item of items) {
+    monthlyPayment += item.monthlyPayment;
+    if (item.currentBalance === null) unknownBalanceCount += 1;
+    else knownBalance += item.currentBalance;
+    if (item.computed === null) unknownInterestCount += 1;
+    else {
+      knownMonthlyInterest += item.computed.monthlyInterestPayment;
+      knownAnnualInterest += item.computed.estimatedAnnualInterest;
+    }
+  }
+  return {
+    knownBalance: round2(knownBalance),
+    unknownBalanceCount,
+    monthlyPayment: round2(monthlyPayment),
+    knownMonthlyInterest: round2(knownMonthlyInterest),
+    knownAnnualInterest: round2(knownAnnualInterest),
+    unknownInterestCount,
+  };
+}
+
 /**
  * Where a loan stands. Derived, never stored, so it cannot drift from the
  * balance. `ending_soon` exists so the last months show BEFORE they happen —
@@ -85,10 +161,10 @@ export const ENDING_SOON_PAYMENTS = 3;
 
 export interface LoanProgressInput {
   status: string;
-  originalAmount: number;
-  currentBalance: number;
+  originalAmount: number | null;
+  currentBalance: number | null;
   monthlyPayment: number;
-  annualInterestRate: number;
+  annualInterestRate: number | null;
   totalPayments: number | null;
   paymentsMade: number | null;
   originalAmountSource: string;
@@ -117,25 +193,23 @@ export interface LoanProgress {
  * shape five modules depend on — this is additive, that stays untouched.
  */
 export function loanProgress(loan: LoanProgressInput): LoanProgress {
-  const repaid = Math.max(loan.originalAmount - loan.currentBalance, 0);
+  const { originalAmount, currentBalance } = loan;
+  const repaid =
+    originalAmount === null || currentBalance === null ? 0 : Math.max(originalAmount - currentBalance, 0);
   const percent =
-    loan.originalAmount > 0 ? Math.min(round2((repaid / loan.originalAmount) * 100), 100) : 0;
+    originalAmount !== null && originalAmount > 0 ? Math.min(round2((repaid / originalAmount) * 100), 100) : 0;
 
   // Payments left: from the schedule when it exists, else from the simulation.
   let remaining: number | null = null;
   if (loan.totalPayments !== null && loan.paymentsMade !== null) {
     remaining = Math.max(loan.totalPayments - loan.paymentsMade, 0);
-  } else if (loan.currentBalance > 0 && loan.scheduleSource !== "statement") {
-    remaining = computeLoan({
-      currentBalance: loan.currentBalance,
-      annualInterestRate: loan.annualInterestRate,
-      monthlyPayment: loan.monthlyPayment,
-    }).remainingMonths;
+  } else if (currentBalance !== null && currentBalance > 0) {
+    remaining = computeKnownLoan({ ...loan, currentBalance })?.remainingMonths ?? null;
   }
 
   const simulatedRemaining = loan.totalPayments === null || loan.paymentsMade === null;
-  // A statement-detected loan carries 0 for "balance unknown", not "paid off".
-  const closed = loan.status === "finished" || (loan.currentBalance <= 0.005 && loan.scheduleSource !== "statement");
+  // An unknown balance is not a paid-off one.
+  const closed = loan.status === "finished" || (currentBalance !== null && currentBalance <= 0.005);
   const lifecycle: LoanLifecycle = closed
     ? "closed"
     : loan.status === "overdue"
@@ -154,6 +228,9 @@ export function loanProgress(loan: LoanProgressInput): LoanProgress {
     certainty:
       loan.scheduleSource === "bank_file" &&
       loan.originalAmountSource !== "reconstructed" &&
+      loan.originalAmountSource !== "unknown" &&
+      originalAmount !== null &&
+      currentBalance !== null &&
       !simulatedRemaining
         ? "measured"
         : "scenario",

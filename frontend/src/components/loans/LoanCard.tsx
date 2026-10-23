@@ -3,6 +3,7 @@ import { Button } from "../common/Button";
 import { Term } from "../common/Tooltip";
 import { LoanProgressBar } from "./LoanProgressBar";
 import { LoanStatusBadge } from "./LoanStatusBadge";
+import { MissingValue } from "../common/MissingValue";
 import type { Loan } from "../../types/models";
 import { formatCurrency } from "../../utils/format";
 import { loanTypeLabel } from "../../app/loanTypes";
@@ -83,8 +84,18 @@ function ActionsMenu({ loan, actions }: { loan: Loan; actions: LoanActions }) {
   );
 }
 
-/** One fact in the card's detail row. */
-function Fact({ label, value, tone }: { label: ReactNode; value: string; tone?: string }) {
+/** One fact in the card's detail row. `null` is a value the server does not know. */
+function Fact({ label, value, tone }: { label: ReactNode; value: string | null; tone?: string }) {
+  if (value === null) {
+    return (
+      <div className="loan-fact">
+        <span className="loan-fact-label">{label}</span>
+        <span className="loan-fact-value">
+          <MissingValue />
+        </span>
+      </div>
+    );
+  }
   return (
     <div className="loan-fact">
       <span className="loan-fact-label">{label}</span>
@@ -99,9 +110,10 @@ function Fact({ label, value, tone }: { label: ReactNode; value: string; tone?: 
  */
 export function LoanCard({ loan, actions }: { loan: Loan; actions: LoanActions }) {
   const closed = loan.status === "finished";
-  // Seen only as a monthly debit on a bank statement — the 0 balance means unknown.
+  // Seen only as a monthly debit on a bank statement: balance, rate and term arrive as null.
   const fromStatement = loan.scheduleSource === "statement" && !closed;
   const { progress } = loan;
+  const amount = (value: number | null) => (value === null ? null : formatCurrency(value));
 
   return (
     <article className={`loan-card ${closed ? "loan-card-closed" : ""}`}>
@@ -109,7 +121,7 @@ export function LoanCard({ loan, actions }: { loan: Loan; actions: LoanActions }
         <div className="loan-card-identity">
           <LoanStatusBadge lifecycle={progress.lifecycle} closedAt={loan.closedAt} />
           <h3 className="loan-card-name">
-            {loan.computed.isExpensive && !closed && !fromStatement && <span title="ריבית גבוהה">🔥 </span>}
+            {loan.computed?.isExpensive && !closed && !fromStatement && <span title="ריבית גבוהה">🔥 </span>}
             {loan.loanName}
           </h3>
           <p className="loan-card-meta">
@@ -132,13 +144,13 @@ export function LoanCard({ loan, actions }: { loan: Loan; actions: LoanActions }
 
       {fromStatement ? (
         <div className="loan-card-facts">
-          <Fact label={<>יתרת <Term name="קרן" /></>} value="לא ידועה" tone="text-muted" />
+          <Fact label={<>יתרת <Term name="קרן" /></>} value={amount(loan.currentBalance)} />
           <Fact label="החזר חודשי" value={formatCurrency(loan.monthlyPayment)} />
           <Fact label="החיוב הבא" value={new Date(loan.startDate).toLocaleDateString("he-IL")} />
         </div>
       ) : closed ? (
         <div className="loan-card-facts">
-          <Fact label="סכום מקורי" value={formatCurrency(loan.originalAmount)} />
+          <Fact label="סכום מקורי" value={amount(loan.originalAmount)} />
           <Fact
             label="החזר חודשי שהתפנה"
             value={formatCurrency(loan.monthlyPayment)}
@@ -154,16 +166,16 @@ export function LoanCard({ loan, actions }: { loan: Loan; actions: LoanActions }
         </div>
       ) : (
         <div className="loan-card-facts">
-          <Fact label={<>יתרת <Term name="קרן" /></>} value={formatCurrency(loan.currentBalance)} />
+          <Fact label={<>יתרת <Term name="קרן" /></>} value={amount(loan.currentBalance)} />
           <Fact label="החזר חודשי" value={formatCurrency(loan.monthlyPayment)} />
           <Fact
             label="ריבית שנתית"
-            value={`${loan.annualInterestRate}%`}
-            tone={loan.computed.isExpensive ? "text-danger" : ""}
+            value={loan.annualInterestRate === null ? null : `${loan.annualInterestRate}%`}
+            tone={loan.computed?.isExpensive ? "text-danger" : ""}
           />
           <Fact
             label={<><Term name="ריבית" /> חודשית</>}
-            value={formatCurrency(loan.computed.monthlyInterestPayment)}
+            value={loan.computed === null ? null : formatCurrency(loan.computed.monthlyInterestPayment)}
             tone="text-warning"
           />
           <Fact

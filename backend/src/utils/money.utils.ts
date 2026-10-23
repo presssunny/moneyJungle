@@ -11,6 +11,15 @@ export function decimalToNumber(value: Prisma.Decimal | number | null | undefine
   return typeof value === "number" ? value : value.toNumber();
 }
 
+/**
+ * For a value that may be unknown (a loan's balance, rate or opening amount).
+ * `decimalToNumber` turns null into 0, which would read as "paid off" or "0%".
+ */
+export function decimalOrNull(value: Prisma.Decimal | number | null | undefined): number | null {
+  if (value === null || value === undefined) return null;
+  return typeof value === "number" ? value : value.toNumber();
+}
+
 /** Sum an array of Prisma Decimals into a rounded number. */
 export function sumDecimals(values: Array<Prisma.Decimal | number | null | undefined>): number {
   return round2(values.reduce<number>((acc, v) => acc + decimalToNumber(v), 0));

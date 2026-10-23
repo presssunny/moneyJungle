@@ -1,6 +1,6 @@
 import { decimalToNumber, percent, round2 } from "../../utils/money.utils";
 import { monthRange, toMonthKey } from "../../utils/date.utils";
-import { computeLoan } from "../loans/loanCalculator.service";
+import { loanFigures, loanTotals } from "../loans/loanCalculator.service";
 import { loansRepository } from "../loans/loans.repository";
 import { dashboardRepository } from "./dashboard.repository";
 
@@ -118,21 +118,7 @@ export const dashboardService = {
     const savingsMonthly = savingsCategory ? (spent.get(savingsCategory.id) ?? 0) : 0;
 
     const loans = await loansRepository.findActive(userId);
-    let loanMonthlyPayment = 0;
-    let loanMonthlyInterest = 0;
-    let loanAnnualInterest = 0;
-    let loanTotalBalance = 0;
-    for (const loan of loans) {
-      const computed = computeLoan({
-        currentBalance: decimalToNumber(loan.currentBalance),
-        annualInterestRate: decimalToNumber(loan.annualInterestRate),
-        monthlyPayment: decimalToNumber(loan.monthlyPayment),
-      });
-      loanMonthlyPayment += decimalToNumber(loan.monthlyPayment);
-      loanMonthlyInterest += computed.monthlyInterestPayment;
-      loanAnnualInterest += computed.estimatedAnnualInterest;
-      loanTotalBalance += decimalToNumber(loan.currentBalance);
-    }
+    const loanSums = loanTotals(loans.map(loanFigures));
 
     // Money that reached the app but no figure yet — surfaced so the totals are
     // never mistaken for the whole story.
@@ -169,11 +155,13 @@ export const dashboardService = {
         overrunCount,
       },
       loans: {
-        monthlyPayment: round2(loanMonthlyPayment),
-        monthlyInterest: round2(loanMonthlyInterest),
-        annualInterest: round2(loanAnnualInterest),
-        totalBalance: round2(loanTotalBalance),
+        monthlyPayment: loanSums.monthlyPayment,
+        monthlyInterest: loanSums.knownMonthlyInterest,
+        annualInterest: loanSums.knownAnnualInterest,
+        totalBalance: loanSums.knownBalance,
         count: loans.length,
+        unknownBalanceCount: loanSums.unknownBalanceCount,
+        unknownInterestCount: loanSums.unknownInterestCount,
       },
     };
   },
@@ -223,20 +211,13 @@ export const dashboardService = {
       .filter((c) => c.value > 0)
       .sort((a, b) => b.value - a.value);
 
-    // Loans: interest vs principal per loan. A statement-detected loan has no
-    // known split (CLAUDE.md §5) — showing it all as principal would invent one.
-    const loans = (await loansRepository.findActive(userId)).filter((loan) => loan.scheduleSource !== "statement");
-    const loanSplit = loans.map((loan) => {
-      const computed = computeLoan({
-        currentBalance: decimalToNumber(loan.currentBalance),
-        annualInterestRate: decimalToNumber(loan.annualInterestRate),
-        monthlyPayment: decimalToNumber(loan.monthlyPayment),
-      });
-      return {
-        name: loan.loanName,
-        interest: computed.monthlyInterestPayment,
-        principal: computed.monthlyPrincipalPayment,
-      };
+    // Loans: interest vs principal per loan. Without a known balance and rate
+    // there is no split (CLAUDE.md §5) — showing it all as principal would invent one.
+    const loanSplit = (await loansRepository.findActive(userId)).flatMap((loan) => {
+      const { computed } = loanFigures(loan);
+      return computed
+        ? [{ name: loan.loanName, interest: computed.monthlyInterestPayment, principal: computed.monthlyPrincipalPayment }]
+        : [];
     });
 
     return { trend, byCategory, creditByCategory, loanSplit };

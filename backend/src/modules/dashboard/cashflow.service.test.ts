@@ -64,6 +64,11 @@ describe("forward obligations", () => {
     const result = await buildUpcoming(1, 365);
     expect(result.events.map((event) => event.date.slice(0, 10))).toEqual(["2026-01-10", "2026-02-10"]);
   });
+  it("still projects the monthly payment of a loan whose balance is unknown, within the window and with no invented end", async () => {
+    setup(); db.loan.findMany.mockResolvedValue([{ loanName: "loan", scheduleSource: "computed", monthlyPayment: 900, currentBalance: null, startDate: new Date("2025-12-15"), endDate: null }]);
+    const result = await buildUpcoming(1, 90);
+    expect(result.events.map((event) => [event.date.slice(0, 10), event.amount])).toEqual([["2026-01-15", 900], ["2026-02-15", 900], ["2026-03-15", 900]]);
+  });
   it("projects weekly payments even when their anchor is many years old", async () => {
     setup(); db.recurringPayment.findMany.mockResolvedValue([{ name: "weekly", amount: 100, frequency: "weekly", nextPaymentDate: new Date("2000-01-01") }]);
     const result = await buildUpcoming(1, 14);

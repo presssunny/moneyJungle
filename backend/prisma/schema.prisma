@@ -540,9 +540,9 @@ model Loan {
   loanName           String     @map("loan_name") @db.VarChar(120)
   loanType           String     @map("loan_type") @db.VarChar(30) // bank | credit | car | mortgage | private | other
   lenderName         String?    @map("lender_name") @db.VarChar(120)
-  originalAmount     Decimal    @map("original_amount") @db.Decimal(12, 2)
-  currentBalance     Decimal    @map("current_balance") @db.Decimal(12, 2)
-  annualInterestRate Decimal    @map("annual_interest_rate") @db.Decimal(5, 2) // percent
+  originalAmount     Decimal?   @map("original_amount") @db.Decimal(12, 2)
+  currentBalance     Decimal?   @map("current_balance") @db.Decimal(12, 2)
+  annualInterestRate Decimal?   @map("annual_interest_rate") @db.Decimal(5, 2) // percent
   monthlyPayment     Decimal    @map("monthly_payment") @db.Decimal(12, 2)
   startDate          DateTime   @map("start_date") @db.Date
   endDate            DateTime?  @map("end_date") @db.Date
@@ -577,10 +577,10 @@ model Loan {
   paymentsMade         Int?      @map("payments_made")
   scheduleSource       String    @default("computed") @map("schedule_source") @db.VarChar(20) // bank_file | computed | statement
   // `statement`: only the monthly debit is known — balance, rate and term await a
-  // schedule file, so currentBalance 0 means "unknown", never "paid off".
+  // schedule file. Unknown is null, never 0: 0 would read as "paid off" / "0%".
   detectedKey          String?   @map("detected_key") @db.VarChar(160)
   detectedThrough      DateTime? @map("detected_through") @db.Date
-  originalAmountSource String    @default("manual") @map("original_amount_source") @db.VarChar(20) // contract | reconstructed | manual
+  originalAmountSource String    @default("manual") @map("original_amount_source") @db.VarChar(20) // contract | reconstructed | manual | unknown
   scheduleImportedAt   DateTime? @map("schedule_imported_at")
 
   createdAt DateTime @default(now()) @map("created_at")

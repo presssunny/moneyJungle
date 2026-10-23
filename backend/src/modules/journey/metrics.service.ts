@@ -109,9 +109,14 @@ export async function financialMetric(userId: number, name: MetricName, month: s
     ];
     metric.sources.push({ key: "assets", label: "נכסים רשומים", to: "/accounts?tab=assets" });
     components = assets.map(a => ({ key: `asset:${a.id}`, label: a.name, value: decimalToNumber(a.currentValue), date: a.asOfDate.toISOString().slice(0, 10), detail: a.assetType, to: "/accounts?tab=assets" }));
-    if (undecided.length) {
+    // An unknown loan balance is debt of unknown size, not zero debt — same rule as an undecided bill.
+    const blockers = [
+      ...(undecided.length ? [`יש ${undecided.length} חיובי אשראי היסטוריים ללא החלטה — לא ניתן לקבוע את שווי הנטו עד שיסומנו`] : []),
+      ...(loanSummary.unknownBalanceCount > 0 ? [`יש ${loanSummary.unknownBalanceCount} הלוואות ללא יתרה ידועה — לא ניתן לקבוע את שווי הנטו עד שתועלה יתרה או לוח סילוקין`] : []),
+    ];
+    if (blockers.length) {
       metric.state = "unavailable";
-      metric.missingData = [...metric.missingData, `יש ${undecided.length} חיובי אשראי היסטוריים ללא החלטה — לא ניתן לקבוע את שווי הנטו עד שיסומנו`];
+      metric.missingData = [...metric.missingData, ...blockers];
     } else {
       const unpaidCardDebt = round2(cardBills.filter(e => e.decision === "unpaid" && e.amount !== null).reduce((s, e) => s + Math.max(0, e.amount!), 0));
       const liabilitiesTotal = round2(loanSummary.totalBalance + unpaidCardDebt);

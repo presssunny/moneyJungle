@@ -74,3 +74,23 @@ describe("net worth stays evidence-based, never a silent guess (Net Worth milest
     expect(after.value).toBe(metric.value);
   });
 });
+
+describe("net worth with a loan whose balance is unknown", () => {
+  let otherUserId: number;
+  beforeAll(async () => {
+    otherUserId = (await prisma.user.create({ data: { name: "__networth_unknown", email: `${crypto.randomUUID()}@example.test` } })).id;
+    await prisma.asset.create({ data: { userId: otherUserId, name: "קרן השתלמות", assetType: "pension", currentValue: 30000, asOfDate: new Date("2026-09-01") } });
+    await prisma.loan.create({
+      data: { userId: otherUserId, loanName: "הלוואה 108", loanType: "bank", originalAmount: null, currentBalance: null, annualInterestRate: null,
+        originalAmountSource: "unknown", monthlyPayment: 1200, startDate: new Date("2026-10-15"), scheduleSource: "statement", status: "active" },
+    });
+  });
+  afterAll(async () => { await prisma.user.deleteMany({ where: { id: otherUserId } }); });
+
+  it("is unavailable rather than counting the unknown debt as 0", async () => {
+    const metric = await financialMetric(otherUserId, "netWorth", "2026-09");
+    expect(metric.state).toBe("unavailable");
+    expect(metric.value).toBeNull();
+    expect(metric.missingData).toContain("יש 1 הלוואות ללא יתרה ידועה — לא ניתן לקבוע את שווי הנטו עד שתועלה יתרה או לוח סילוקין");
+  });
+});

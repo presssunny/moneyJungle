@@ -139,6 +139,41 @@ describe("loanProgress", () => {
   });
 });
 
+describe("loanProgress with unknown values", () => {
+  const statementLoan = {
+    status: "active",
+    originalAmount: null,
+    currentBalance: null,
+    monthlyPayment: 1886,
+    annualInterestRate: null,
+    totalPayments: null,
+    paymentsMade: null,
+    originalAmountSource: "unknown",
+    scheduleSource: "statement",
+  };
+
+  it("never reads an unknown balance as paid off", () => {
+    const p = loanProgress(statementLoan);
+    expect(p.lifecycle).toBe("active");
+    expect(p.paymentsRemaining).toBeNull();
+    expect(p.progressPercent).toBe(0);
+    expect(p.certainty).toBe("scenario");
+  });
+
+  it("decides by the value, not the source: a computed loan with no known balance is not closed either", () => {
+    expect(loanProgress({ ...statementLoan, scheduleSource: "computed" }).lifecycle).toBe("active");
+  });
+
+  it("treats an unknown opening amount as a scenario even on a bank schedule", () => {
+    const measured = {
+      ...statementLoan, originalAmount: null, currentBalance: 87646.82, annualInterestRate: 9.4,
+      totalPayments: 60, paymentsMade: 2, scheduleSource: "bank_file",
+    };
+    expect(loanProgress(measured).certainty).toBe("scenario");
+    expect(loanProgress({ ...measured, originalAmount: 90017.86, originalAmountSource: "contract" }).certainty).toBe("measured");
+  });
+});
+
 describe("spitzerMonthlyPayment", () => {
   it("reproduces the bank's monthly payment from principal, rate and term", () => {
     // Loan 108/432: 90,017.86 over 60 months at 9.4% → the bank charges 1,886.

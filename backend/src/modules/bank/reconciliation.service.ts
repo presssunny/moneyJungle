@@ -789,15 +789,19 @@ export const reconciliationService = {
       // statement itself supplies the opening balance.
       const drawdown = txs.find((t) => t.lineKind === "loan_drawdown");
       const drawdownAmount = drawdown ? decimalToNumber(drawdown.amount) : undefined;
+      // What neither the user nor a drawdown states is unknown (null), not 0.
+      const originalAmount = body.originalAmount ?? drawdownAmount ?? null;
       const created = await prisma.loan.create({
         data: {
           userId,
           loanName: body.loanName ?? "הלוואה מיובאת",
           loanType: body.loanType ?? "bank",
           lenderName: body.lenderName ?? null,
-          originalAmount: body.originalAmount ?? drawdownAmount ?? 0,
-          currentBalance: body.currentBalance ?? body.originalAmount ?? drawdownAmount ?? 0,
-          annualInterestRate: body.annualInterestRate ?? 0,
+          originalAmount,
+          ...(originalAmount === null ? { originalAmountSource: "unknown" } : {}),
+          currentBalance: body.currentBalance ?? originalAmount,
+          annualInterestRate: body.annualInterestRate ?? null,
+          // TODO(P0 later phase): 0 here is an invented payment, not a known one.
           monthlyPayment: body.monthlyPayment ?? 0,
           startDate: body.startDate ? new Date(body.startDate) : txs[0]!.transactionDate,
         },

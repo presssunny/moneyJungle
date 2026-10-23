@@ -1,5 +1,6 @@
 import { AsyncSection } from "../common/AsyncSection";
 import { Button } from "../common/Button";
+import { MissingValue } from "../common/MissingValue";
 import { Modal } from "../common/Modal";
 import { SkeletonRows } from "../common/Skeleton";
 import { Term } from "../common/Tooltip";
@@ -9,20 +10,42 @@ import { getEarlyRepaymentQuote } from "../../services/finance.service";
 import type { Loan } from "../../types/models";
 import { formatCurrency } from "../../utils/format";
 
+interface DialogProps {
+  loan: Loan;
+  onClose: () => void;
+  onConfirmClose: (loan: Loan) => void;
+}
+
 /**
  * "What would it cost to close this today, and what would I gain?" Read-only.
  * The saving comes from the bank's own schedule; without one we say we cannot
  * tell rather than show a confident 0 (IA §1.2).
  */
-export function EarlyRepaymentDialog({
-  loan,
-  onClose,
-  onConfirmClose,
-}: {
-  loan: Loan;
-  onClose: () => void;
-  onConfirmClose: (loan: Loan) => void;
-}) {
+export function EarlyRepaymentDialog(props: DialogProps) {
+  const { loan, onClose } = props;
+  if (loan.currentBalance !== null && loan.annualInterestRate !== null) return <QuoteDialog {...props} />;
+  const missing = [loan.currentBalance === null && "יתרת הקרן", loan.annualInterestRate === null && "הריבית"].filter(Boolean).join(" ו");
+  return (
+    <Modal title={`פירעון מוקדם — ${loan.loanName}`} open onClose={onClose}>
+      <div className="quote-gain state-unknown">
+        <p>
+          אי אפשר לחשב פירעון מוקדם כי {missing} של ההלוואה {loan.currentBalance === null && loan.annualInterestRate === null ? "חסרות" : "חסרה"}.{" "}
+          <MissingValue />
+        </p>
+        <p className="text-muted">
+          אפשר להעלות את לוח הסילוקין מתפריט הפעולות, או להזין את הנתונים בעריכת ההלוואה.
+        </p>
+      </div>
+      <div className="modal-actions">
+        <Button variant="ghost" onClick={onClose}>
+          סגירה
+        </Button>
+      </div>
+    </Modal>
+  );
+}
+
+function QuoteDialog({ loan, onClose, onConfirmClose }: DialogProps) {
   const quote = useAsync(
     () => getEarlyRepaymentQuote(loan.id),
     [loan.id],

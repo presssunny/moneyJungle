@@ -104,7 +104,9 @@ export async function answerQuestion(userId: number, routed: RoutedQuestion, doc
           : "אין הלוואות פעילות רשומות.",
         facts: [fact("יתרה להחזר", summary.totalBalance), fact("תשלום חודשי", summary.monthlyPayment), fact("ריבית חודשית משוערת", summary.monthlyInterest)],
         links: [{ label: "ההלוואות", to: "/accounts?tab=loans" }],
-        limitations: ["היתרה היא האחרונה שנרשמה להלוואה, ומתעדכנת בייבוא לוח סילוקין או בעריכה", "הריבית המשוערת מחושבת מהיתרה ומשיעור הריבית; בהלוואה בריבית מותנית היא עלולה לא להיגבות. הריבית בפועל — מדף הבנק"],
+        limitations: ["היתרה היא האחרונה שנרשמה להלוואה, ומתעדכנת בייבוא לוח סילוקין או בעריכה", "הריבית המשוערת מחושבת מהיתרה ומשיעור הריבית; בהלוואה בריבית מותנית היא עלולה לא להיגבות. הריבית בפועל — מדף הבנק",
+          ...(summary.unknownBalanceCount ? [`ל־${summary.unknownBalanceCount} הלוואות היתרה לא ידועה, והיא אינה כלולה ביתרה להחזר`] : []),
+          ...(summary.unknownInterestCount ? [`ל־${summary.unknownInterestCount} הלוואות היתרה או הריבית לא ידועות, והן אינן כלולות בריבית המשוערת`] : [])],
       };
     }
     case "goals": {

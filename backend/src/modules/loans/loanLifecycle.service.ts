@@ -1,6 +1,6 @@
 import { prisma } from "../../config/database";
 import { Prisma } from "../../../generated/prisma/client";
-import { decimalToNumber, round2 } from "../../utils/money.utils";
+import { decimalOrNull, decimalToNumber, round2 } from "../../utils/money.utils";
 import { ApiError } from "../../utils/ApiError";
 
 const PAYOFF_TOLERANCE = 1.0;
@@ -133,8 +133,9 @@ export const loanLifecycleService = {
 
     for (const loan of loans) {
       if (loan.status === "finished") continue; // already closed — nothing to re-derive
-      const balance = decimalToNumber(loan.currentBalance);
-      if (balance <= 0.005) continue;
+      // A payoff is recognised by matching the balance — an unknown one matches nothing.
+      const balance = decimalOrNull(loan.currentBalance);
+      if (balance === null || balance <= 0.005) continue;
 
       // Only rows that name this loan. A row with no number cannot be attributed
       // to one of several loans, and guessing would close the wrong one.
@@ -370,8 +371,9 @@ export const loanLifecycleService = {
   async earlyRepaymentQuote(userId: number, loanId: number) {
     const loan = await prisma.loan.findFirst({ where: { id: loanId, userId } });
     if (!loan) return null;
-    // Its 0 balance means "unknown" — a payoff of 0 ₪ would be a made-up figure.
-    if (loan.scheduleSource === "statement") throw ApiError.badRequest("יתרת ההלוואה לא ידועה. אפשר לחשב פירעון מוקדם אחרי העלאת לוח הסילוקין שלה.");
+    // A payoff figure needs a known balance — never a made-up 0 ₪.
+    const balance = decimalOrNull(loan.currentBalance);
+    if (balance === null) throw ApiError.badRequest("יתרת ההלוואה לא ידועה. אפשר לחשב פירעון מוקדם אחרי העלאת לוח הסילוקין שלה.");
 
     const today = new Date();
     const remaining = await prisma.loanScheduleEntry.aggregate({
@@ -380,7 +382,6 @@ export const loanLifecycleService = {
       _count: true,
     });
 
-    const balance = decimalToNumber(loan.currentBalance);
     const fee = decimalToNumber(loan.earlyRepaymentFee);
     const savedInterest = round2(decimalToNumber(remaining._sum.interest));
 

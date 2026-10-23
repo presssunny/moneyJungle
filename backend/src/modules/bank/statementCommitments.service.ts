@@ -132,7 +132,8 @@ export const statementCommitmentsService = {
         await prisma.loan.create({
           data: {
             userId, loanName: c.name, loanType: "bank", lenderName: account?.bankName ?? null,
-            originalAmount: 0, currentBalance: 0, annualInterestRate: 0, monthlyPayment: c.amount,
+            // A statement shows only the debit; the rest stays unknown until a schedule arrives.
+            originalAmount: null, currentBalance: null, annualInterestRate: null, originalAmountSource: "unknown", monthlyPayment: c.amount,
             // The first payment not yet on a statement — earlier ones are already counted from the bank rows.
             startDate: new Date(c.nextDate), loanNumber: c.loanNumber, scheduleSource: "statement", detectedKey: c.key, detectedThrough: new Date(c.lastDate),
           },

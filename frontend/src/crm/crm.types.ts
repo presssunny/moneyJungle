@@ -99,9 +99,9 @@ export interface CrmLoan {
   loanName: string;
   loanType: string;
   lenderName: string | null;
-  originalAmount: number;
-  currentBalance: number;
-  annualInterestRate: number;
+  originalAmount: number | null;
+  currentBalance: number | null;
+  annualInterestRate: number | null;
   monthlyPayment: number;
   startDate: string;
   endDate: string | null;

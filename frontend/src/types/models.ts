@@ -101,9 +101,10 @@ export interface Loan {
   loanName: string;
   loanType: string;
   lenderName: string | null;
-  originalAmount: number;
-  currentBalance: number;
-  annualInterestRate: number;
+  /** null = unknown (e.g. seen only as a statement debit) — never render as 0. */
+  originalAmount: number | null;
+  currentBalance: number | null;
+  annualInterestRate: number | null;
   monthlyPayment: number;
   startDate: string;
   endDate: string | null;
@@ -120,9 +121,10 @@ export interface Loan {
   totalPayments: number | null;
   paymentsMade: number | null;
   scheduleSource: "bank_file" | "computed" | "statement";
-  originalAmountSource: "contract" | "reconstructed" | "manual";
+  originalAmountSource: "contract" | "reconstructed" | "manual" | "unknown";
   scheduleImportedAt: string | null;
-  computed: LoanComputed;
+  /** null while the balance or the rate is unknown. */
+  computed: LoanComputed | null;
   progress: LoanProgress;
 }
 
@@ -130,10 +132,13 @@ export interface Loan {
 export interface LoanSummary {
   activeCount: number;
   closedCount: number;
+  /** Known balances only; `unknownBalanceCount` loans are not in it. */
   totalBalance: number;
   monthlyPayment: number;
   monthlyInterest: number;
   annualInterest: number;
+  unknownBalanceCount: number;
+  unknownInterestCount: number;
   /** Monthly repayment that closing loans has freed up. */
   freedMonthlyPayment: number;
   closureCosts: number;
@@ -146,6 +151,7 @@ export interface LoanGroup {
   loanNumber: string;
   trackIds: number[];
   totalBalance: number;
+  unknownBalanceCount: number;
   activeTracks: number;
   closedTracks: number;
 }
@@ -170,6 +176,8 @@ export interface LoanTotals {
   monthlyInterest: number;
   annualInterest: number;
   activeCount: number;
+  unknownBalanceCount: number;
+  unknownInterestCount: number;
 }
 
 export interface LoanScheduleRow {

@@ -1,5 +1,5 @@
 import { prisma } from "../../config/database";
-import { decimalToNumber, round2 } from "../../utils/money.utils";
+import { decimalOrNull, decimalToNumber, round2 } from "../../utils/money.utils";
 import { businessDate } from "../journey/journey.utils";
 
 /**
@@ -155,9 +155,10 @@ export async function buildUpcoming(userId: number, windowDays: number, anchor =
     }
     const amount = decimalToNumber(loan.monthlyPayment);
     if (amount <= 0) continue;
-    // A statement-detected loan has no known balance; its monthly debit is still real.
-    const balance = decimalToNumber(loan.currentBalance);
-    if (balance <= 0 && loan.scheduleSource !== "statement") continue;
+    // An unknown balance (null) still has a real monthly debit, and with no known
+    // end it is projected only across the window shown. Only a known 0 is paid off.
+    const balance = decimalOrNull(loan.currentBalance);
+    if (balance !== null && balance <= 0) continue;
     const endDate = loan.endDate ? new Date(loan.endDate) : null;
     const start = new Date(loan.startDate);
     const dates = monthlyOccurrences(start, includeOverdue ? laterOf(start, historicalFloor(from)) : from, to);

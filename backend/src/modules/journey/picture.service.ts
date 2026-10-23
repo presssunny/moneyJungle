@@ -73,7 +73,7 @@ export function buildPicture(state:Base,evidence:PictureEvidence) {
  }
  for(const loan of evidence.loans){
   const p=periods(loan.schedule.map(s=>date(s.paymentDate)));const estimated=loan.scheduleSource!=='bank_file';
-  sources.push({key:`loan:${loan.id}`,kind:'loan',name:loan.loanName,count:loan.schedule.length,...p,asOf:null,to:`/imports?kind=loan_schedule&loanId=${loan.id}`,status:estimated?'estimate':'known',summary:estimated?'תכנון לפי פרטי ההלוואה שהוזנו; לוח מהבנק ישפר את הדיוק':'לוח תשלומים מהבנק; תאריך שעבר אינו אישור שהתשלום בוצע'});
+  sources.push({key:`loan:${loan.id}`,kind:'loan',name:loan.loanName,count:loan.schedule.length,...p,asOf:null,to:`/imports?kind=loan_schedule&loanId=${loan.id}`,status:estimated?'estimate':'known',summary:loan.scheduleSource==='statement'?'זוהתה מהעו״ש; יתרה וריבית חסרות':estimated?'תכנון לפי פרטי ההלוואה שהוזנו; לוח מהבנק ישפר את הדיוק':'לוח תשלומים מהבנק; תאריך שעבר אינו אישור שהתשלום בוצע'});
   if(estimated)add(`schedule:${loan.id}`,`אפשר לדייק את ${loan.loanName}`,'לוח תשלומים מהבנק הוא שיפור אפשרי; ההלוואה כבר רשומה.',`/imports?kind=loan_schedule&loanId=${loan.id}`,80);
  }
  const manual=evidence.expenses.filter(e=>['manual','recurring'].includes(e.source));

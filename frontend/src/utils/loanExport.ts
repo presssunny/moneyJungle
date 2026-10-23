@@ -104,9 +104,9 @@ function toPdf(loan: Loan, schedule: LoanSchedule): void {
       : "לוח סילוקין מחושב — תרחיש, לא מדוח הבנק"
   } · הופק ${new Date().toLocaleDateString("he-IL")}</div>
 <div class="facts">
-  <span>יתרה: ${formatCurrency(loan.currentBalance)}</span>
+  <span>יתרה: ${loan.currentBalance === null ? "חסר" : formatCurrency(loan.currentBalance)}</span>
   <span>החזר חודשי: ${formatCurrency(loan.monthlyPayment)}</span>
-  <span>ריבית: ${loan.annualInterestRate}%</span>
+  <span>ריבית: ${loan.annualInterestRate === null ? "חסר" : `${loan.annualInterestRate}%`}</span>
   <span>תשלומים: ${loan.paymentsMade ?? "—"}/${loan.totalPayments ?? "—"}</span>
 </div>
 <table><thead><tr>${HEADERS.map((h) => `<th>${h}</th>`).join("")}</tr></thead>

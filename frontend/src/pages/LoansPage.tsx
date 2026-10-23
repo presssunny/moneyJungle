@@ -30,7 +30,7 @@ import {
   type LoanInput,
 } from "../services/finance.service";
 import type { StatementLoanGroup } from "../services/planning.service";
-import type { Loan, LoanEvent } from "../types/models";
+import type { Loan, LoanEvent, LoanSummary } from "../types/models";
 import { formatCurrency } from "../utils/format";
 import { LOAN_TYPE_OPTIONS } from "../app/loanTypes";
 
@@ -41,16 +41,73 @@ const STATUS_LABELS: Record<string, string> = {
   overdue: "בפיגור",
 };
 
-const emptyForm: LoanInput = {
+// An unknown value stays an empty field; it is never written back as 0.
+type LoanForm = Omit<LoanInput, "originalAmount" | "currentBalance" | "annualInterestRate"> & {
+  originalAmount: number | null;
+  currentBalance: number | null;
+  annualInterestRate: number | null;
+};
+
+const numberOrNull = (raw: string) => (raw === "" ? null : Number(raw));
+
+const emptyForm: LoanForm = {
   loanName: "",
   loanType: "bank",
   lenderName: "",
-  originalAmount: 0,
-  currentBalance: 0,
-  annualInterestRate: 0,
+  originalAmount: null,
+  currentBalance: null,
+  annualInterestRate: null,
   monthlyPayment: 0,
   startDate: new Date().toISOString().slice(0, 10),
 };
+
+/**
+ * The server sums known balances only. With some unknown the sum is a floor, so it
+ * is labelled "לפחות" — and never shown as a green 0 when nothing is known.
+ */
+function BalanceCard({ summary }: { summary: LoanSummary }) {
+  const unknown = summary.unknownBalanceCount;
+  if (unknown === 0) {
+    return (
+      <SummaryCard
+        label="יתרת הקרן"
+        value={formatCurrency(summary.totalBalance)}
+        icon="📉"
+        tone={summary.totalBalance > 0 ? "danger" : "success"}
+      />
+    );
+  }
+  const sub = `${unknown === 1 ? "הלוואה אחת" : `${unknown} הלוואות`} ללא יתרה ידועה`;
+  if (summary.totalBalance === 0) {
+    return <SummaryCard label="יתרת הקרן" value="—" icon="📉" certainty="unknown" sub={sub} />;
+  }
+  return (
+    <SummaryCard
+      label="יתרת הקרן"
+      value={`לפחות ${formatCurrency(summary.totalBalance)}`}
+      icon="📉"
+      sub={`עוד ${sub}`}
+    />
+  );
+}
+
+function InterestCard({ summary }: { summary: LoanSummary }) {
+  const unknown = summary.unknownInterestCount;
+  const missing = `${unknown === 1 ? "הלוואה אחת" : `${unknown} הלוואות`} ללא ריבית ידועה`;
+  if (unknown > 0 && summary.monthlyInterest === 0) {
+    return <SummaryCard label="ריבית חודשית" value="—" icon="💸" certainty="unknown" sub={missing} />;
+  }
+  return (
+    <SummaryCard
+      label="ריבית חודשית"
+      value={formatCurrency(summary.monthlyInterest)}
+      icon="💸"
+      tone="warning"
+      sub={`${formatCurrency(summary.annualInterest)} בשנה`}
+      footnote={unknown > 0 ? `חלקי — לא כולל ${missing}` : undefined}
+    />
+  );
+}
 
 /**
  * Loan management, not a list: summary → upload → active → closed → what the
@@ -64,7 +121,7 @@ export default function LoansPage() {
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Loan | null>(null);
-  const [form, setForm] = useState<LoanInput>(emptyForm);
+  const [form, setForm] = useState<LoanForm>(emptyForm);
   const [error, setError] = useState("");
 
   const [scheduleFor, setScheduleFor] = useState<Loan | null>(null);
@@ -112,8 +169,20 @@ export default function LoansPage() {
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError("");
+    const { originalAmount, currentBalance, annualInterestRate } = form;
+    if (originalAmount === null || currentBalance === null || annualInterestRate === null) {
+      setError("יש להזין סכום מקורי, יתרה נוכחית וריבית שנתית");
+      return;
+    }
     try {
-      const payload = { ...form, lenderName: form.lenderName || null, endDate: form.endDate || null };
+      const payload: LoanInput = {
+        ...form,
+        originalAmount,
+        currentBalance,
+        annualInterestRate,
+        lenderName: form.lenderName || null,
+        endDate: form.endDate || null,
+      };
       if (editing) await updateLoan(editing.id, payload);
       else await createLoan(payload);
       setFormOpen(false);
@@ -244,20 +313,9 @@ export default function LoansPage() {
           <div className="kpi-row loans-kpi-row">
             <SummaryCard label="הלוואות פעילות" value={String(summary.activeCount)} icon="🟢" />
             <SummaryCard label="נסגרו" value={String(summary.closedCount)} icon="⚫" />
-            <SummaryCard
-              label="יתרת הקרן"
-              value={formatCurrency(summary.totalBalance)}
-              icon="📉"
-              tone={summary.totalBalance > 0 ? "danger" : "success"}
-            />
+            <BalanceCard summary={summary} />
             <SummaryCard label="החזר חודשי" value={formatCurrency(summary.monthlyPayment)} icon="📅" />
-            <SummaryCard
-              label="ריבית חודשית"
-              value={formatCurrency(summary.monthlyInterest)}
-              icon="💸"
-              tone="warning"
-              sub={`${formatCurrency(summary.annualInterest)} בשנה`}
-            />
+            <InterestCard summary={summary} />
             <SummaryCard
               label="נחסך בהחזרים"
               value={formatCurrency(summary.freedMonthlyPayment)}
@@ -474,8 +532,8 @@ export default function LoansPage() {
               step="0.01"
               min="1"
               required
-              value={form.originalAmount || ""}
-              onChange={(e) => setForm({ ...form, originalAmount: Number(e.target.value) })}
+              value={form.originalAmount ?? ""}
+              onChange={(e) => setForm({ ...form, originalAmount: numberOrNull(e.target.value) })}
             />
             <Input
               label="יתרה נוכחית (₪)"
@@ -483,8 +541,8 @@ export default function LoansPage() {
               step="0.01"
               min="0"
               required
-              value={form.currentBalance || ""}
-              onChange={(e) => setForm({ ...form, currentBalance: Number(e.target.value) })}
+              value={form.currentBalance ?? ""}
+              onChange={(e) => setForm({ ...form, currentBalance: numberOrNull(e.target.value) })}
             />
           </div>
           <div className="form-row">
@@ -495,8 +553,8 @@ export default function LoansPage() {
               min="0"
               max="100"
               required
-              value={form.annualInterestRate || ""}
-              onChange={(e) => setForm({ ...form, annualInterestRate: Number(e.target.value) })}
+              value={form.annualInterestRate ?? ""}
+              onChange={(e) => setForm({ ...form, annualInterestRate: numberOrNull(e.target.value) })}
             />
             <Input
               label="החזר חודשי (₪)"

@@ -6,7 +6,7 @@ import { buildUpcoming, type UpcomingResponse } from "../dashboard/cashflow.serv
 import { spendingCreditInMonth } from "../dashboard/dashboard.repository";
 import { spentByCategory } from "../dashboard/dashboard.service";
 import { expensesRepository } from "../expenses/expenses.repository";
-import { computeLoan } from "../loans/loanCalculator.service";
+import { loanFigures } from "../loans/loanCalculator.service";
 import { loansRepository } from "../loans/loans.repository";
 import { alertsRepository } from "./alerts.repository";
 
@@ -106,12 +106,9 @@ export async function scanForAlerts(userId: number): Promise<void> {
   // Expensive loans
   const loans = await loansRepository.findActive(userId);
   for (const loan of loans) {
-    const rate = decimalToNumber(loan.annualInterestRate);
-    const computed = computeLoan({
-      currentBalance: decimalToNumber(loan.currentBalance),
-      annualInterestRate: rate,
-      monthlyPayment: decimalToNumber(loan.monthlyPayment),
-    });
+    // Unknown balance or rate: any interest figure or "never pays off" would be invented.
+    const { annualInterestRate: rate, computed } = loanFigures(loan);
+    if (!computed) continue;
     if (computed.isExpensive) {
       detected.push({
         type: "expensive_loan",
@@ -120,8 +117,7 @@ export async function scanForAlerts(userId: number): Promise<void> {
         severity: "warning",
       });
     }
-    // Statement-detected: balance unknown, so "never pays off" would be invented.
-    if (computed.remainingMonths === null && loan.scheduleSource !== "statement") {
+    if (computed.remainingMonths === null) {
       detected.push({
         type: "expensive_loan",
         title: `ההחזר על ${loan.loanName} לא מכסה את הריבית`,

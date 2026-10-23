@@ -1,5 +1,5 @@
 import { prisma } from "../../config/database";
-import { decimalToNumber } from "../../utils/money.utils";
+import { decimalOrNull, decimalToNumber } from "../../utils/money.utils";
 
 export interface SearchItem {
   key: string;
@@ -45,7 +45,7 @@ export async function searchRecords(userId: number, query: string): Promise<Sear
     { kind: "documents", label: "מסמכים", items: documents.map((r) => ({ key: `document:${r.id}`, label: r.fileName, detail: null,
       amount: null, date: day(r.uploadedAt), to: "/data" })) },
     { kind: "loans", label: "הלוואות", items: loans.map((r) => ({ key: `loan:${r.id}`, label: r.loanName, detail: r.lenderName,
-      amount: r.status === "finished" ? 0 : decimalToNumber(r.currentBalance), date: null, to: "/accounts?tab=loans" })) },
+      amount: r.status === "finished" ? 0 : decimalOrNull(r.currentBalance), date: null, to: "/accounts?tab=loans" })) },
     { kind: "goals", label: "יעדים", items: goals.map((r) => ({ key: `goal:${r.id}`, label: r.goalName, detail: null,
       amount: null, date: day(r.targetDate), to: "/accounts?tab=savings" })) },
   ];

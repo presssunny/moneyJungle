@@ -1,7 +1,7 @@
 import { prisma } from "../../config/database";
 import { monthRange } from "../../utils/date.utils";
 import { decimalToNumber, formatILS, round2 } from "../../utils/money.utils";
-import { computeLoan } from "../loans/loanCalculator.service";
+import { loanFigures } from "../loans/loanCalculator.service";
 import { loansRepository } from "../loans/loans.repository";
 import { monthTotals, spentByCategory } from "./dashboard.service";
 import { savingsService } from "../savings/savings.service";
@@ -171,15 +171,12 @@ export async function buildInsights(userId: number, year: number, month: number)
 
   // Loans — up to 15 pts
   const loans = await loansRepository.findActive(userId);
-  const loanComputed = loans.map((loan) => ({
-    loan,
-    computed: computeLoan({
-      currentBalance: decimalToNumber(loan.currentBalance),
-      annualInterestRate: decimalToNumber(loan.annualInterestRate),
-      monthlyPayment: decimalToNumber(loan.monthlyPayment),
-    }),
-  }));
-  const neverEnding = loanComputed.filter((l) => l.computed.remainingMonths === null && l.loan.scheduleSource !== "statement");
+  // Unknown balance or rate: no interest figure to judge, so the loan is left out.
+  const loanComputed = loans.flatMap((loan) => {
+    const { computed } = loanFigures(loan);
+    return computed ? [{ loan, computed }] : [];
+  });
+  const neverEnding = loanComputed.filter((l) => l.computed.remainingMonths === null);
   const expensive = loanComputed.filter((l) => l.computed.isExpensive);
   if (neverEnding.length > 0) score += 0;
   else if (expensive.length > 0) score += 7;

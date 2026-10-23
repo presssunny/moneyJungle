@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Prisma } from "../../generated/prisma/client";
-import { decimalToNumber, percent, round2, sumDecimals } from "./money.utils";
+import { decimalOrNull, decimalToNumber, percent, round2, sumDecimals } from "./money.utils";
 
 describe("round2", () => {
   it("rounds to two decimals", () => {
@@ -43,6 +43,23 @@ describe("decimalToNumber", () => {
 
   it("does not treat 0 as missing", () => {
     expect(decimalToNumber(new Prisma.Decimal(0))).toBe(0);
+  });
+});
+
+describe("decimalOrNull", () => {
+  it("keeps an unknown value unknown — null is not 0", () => {
+    expect(decimalOrNull(null)).toBeNull();
+    expect(decimalOrNull(undefined)).toBeNull();
+  });
+
+  it("keeps a real 0, e.g. a 0% loan", () => {
+    expect(decimalOrNull(new Prisma.Decimal(0))).toBe(0);
+    expect(decimalOrNull(0)).toBe(0);
+  });
+
+  it("converts a Prisma Decimal and passes a number through", () => {
+    expect(decimalOrNull(new Prisma.Decimal("42000.55"))).toBe(42000.55);
+    expect(decimalOrNull(5.2)).toBe(5.2);
   });
 });
 

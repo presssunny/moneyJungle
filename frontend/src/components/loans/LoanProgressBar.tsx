@@ -1,3 +1,4 @@
+import { MissingValue } from "../common/MissingValue";
 import { UncertaintyBadge } from "../common/UncertaintyBadge";
 import { formatCurrency } from "../../utils/format";
 import type { Loan } from "../../types/models";
@@ -16,7 +17,9 @@ export function LoanProgressBar({ loan }: { loan: Loan }) {
       <div className="loan-progress-head">
         <span className="loan-progress-label">
           נפרעו <strong className="mono">{formatCurrency(principalRepaid)}</strong>
-          <span className="text-muted"> מתוך {formatCurrency(loan.originalAmount)}</span>
+          <span className="text-muted">
+            {" "}מתוך {loan.originalAmount === null ? <MissingValue /> : formatCurrency(loan.originalAmount)}
+          </span>
         </span>
         <span className="loan-progress-pct">
           <span className="mono">{scenario ? `(${progressPercent}%)` : `${progressPercent}%`}</span>

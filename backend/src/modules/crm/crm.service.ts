@@ -1,5 +1,5 @@
 import { ApiError } from "../../utils/ApiError";
-import { decimalToNumber, sumDecimals } from "../../utils/money.utils";
+import { decimalOrNull, decimalToNumber, sumDecimals } from "../../utils/money.utils";
 import { hashPassword } from "../../utils/password.utils";
 import { crmRepository } from "./crm.repository";
 import { CreateCustomerBody, UpdateCustomerBody } from "./crm.validation";
@@ -162,9 +162,10 @@ export const crmService = {
       },
       loans: loans.map((l) => ({
         ...l,
-        originalAmount: num(l.originalAmount),
-        currentBalance: num(l.currentBalance),
-        annualInterestRate: num(l.annualInterestRate),
+        // Unknown shows as 0 here on purpose for now: the CRM view is not yet null-aware.
+        originalAmount: decimalOrNull(l.originalAmount) ?? 0,
+        currentBalance: decimalOrNull(l.currentBalance) ?? 0,
+        annualInterestRate: decimalOrNull(l.annualInterestRate) ?? 0,
         monthlyPayment: num(l.monthlyPayment),
         earlyRepaymentFee: num(l.earlyRepaymentFee),
         closureCost: num(l.closureCost),

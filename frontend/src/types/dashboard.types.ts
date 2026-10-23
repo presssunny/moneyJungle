@@ -49,6 +49,8 @@ export interface DashboardSummary {
     annualInterest: number;
     totalBalance: number;
     count: number;
+    unknownBalanceCount: number;
+    unknownInterestCount: number;
   };
 }
 

@@ -1,7 +1,7 @@
 import { prisma } from "../../config/database";
 import { ApiError } from "../../utils/ApiError";
 import { decimalToNumber, round2 } from "../../utils/money.utils";
-import { isTrackLeftover } from "./loanCalculator.service";
+import { isTrackLeftover, loanFigures } from "./loanCalculator.service";
 import crypto from "crypto";
 import type { AssistantStep } from "../assistant/assistant.types";
 import { documentsService } from "../documents/documents.service";
@@ -296,11 +296,12 @@ export const loanScheduleService = {
     // No file yet: fall back to the simulation the app has always used, but
     // labelled — an assumed schedule must never look like the bank's.
     const { amortizationSchedule } = await import("./loanCalculator.service");
-    const simulated = amortizationSchedule({
-      currentBalance: decimalToNumber(loan.currentBalance),
-      annualInterestRate: decimalToNumber(loan.annualInterestRate),
-      monthlyPayment: decimalToNumber(loan.monthlyPayment),
-    });
+    // An unknown balance or rate has nothing to simulate from — no rows, not rows from 0.
+    const { currentBalance, annualInterestRate, monthlyPayment } = loanFigures(loan);
+    const simulated =
+      currentBalance === null || annualInterestRate === null
+        ? []
+        : amortizationSchedule({ currentBalance, annualInterestRate, monthlyPayment });
     const start = new Date(loan.startDate);
     const rows = simulated.map((row) => {
       const date = new Date(start);

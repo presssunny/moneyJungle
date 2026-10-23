@@ -563,8 +563,8 @@ function LoanGroupCard({
                     transactionIds: group.rows.map((r) => r.id),
                     loanName: form.loanName,
                     loanType: form.loanType,
-                    originalAmount: form.originalAmount ? Number(form.originalAmount) : 0,
-                    annualInterestRate: form.annualInterestRate ? Number(form.annualInterestRate) : 0,
+                    originalAmount: form.originalAmount ? Number(form.originalAmount) : undefined,
+                    annualInterestRate: form.annualInterestRate ? Number(form.annualInterestRate) : undefined,
                     monthlyPayment: form.monthlyPayment ? Number(form.monthlyPayment) : 0,
                   }),
                 "נוצרה הלוואה"

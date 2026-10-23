@@ -7,6 +7,7 @@ import { EmptyState } from "../../components/common/EmptyState";
 import { ErrorMessage } from "../../components/common/ErrorMessage";
 import { Input } from "../../components/common/Input";
 import { Loading } from "../../components/common/Loading";
+import { MissingValue } from "../../components/common/MissingValue";
 import { Modal } from "../../components/common/Modal";
 import { PageShell } from "../../components/common/PageShell";
 import { Select } from "../../components/common/Select";
@@ -148,6 +149,7 @@ export default function CrmCustomerDetailPage() {
   }
   const data = detail.data;
   if (!data) return null;
+  const activeLoans = data.loans.filter((l) => l.status === "active");
 
   const familyColumns: Column<CrmFamilyMember>[] = [
     { key: "name", header: "שם", render: (r) => r.name },
@@ -183,7 +185,7 @@ export default function CrmCustomerDetailPage() {
     { key: "lender", header: "גורם מלווה", render: (r) => r.lenderName ?? "—" },
     { key: "type", header: "סוג", render: (r) => r.loanType },
     { key: "status", header: "סטטוס", render: (r) => <span className={`crm-pill crm-pill-${r.status === "active" ? "active" : r.status === "overdue" ? "danger" : "empty"}`}>{LOAN_STATUS_LABEL[r.status] ?? r.status}</span> },
-    { key: "balance", header: "יתרה נוכחית", align: "left", render: (r) => <span className="mono">{formatCurrency(r.currentBalance)}</span> },
+    { key: "balance", header: "יתרה נוכחית", align: "left", render: (r) => (r.currentBalance === null ? <MissingValue /> : <span className="mono">{formatCurrency(r.currentBalance)}</span>) },
     { key: "monthly", header: "תשלום חודשי", align: "left", render: (r) => <span className="mono">{formatCurrency(r.monthlyPayment)}</span> },
     { key: "schedule", header: "שורות לוח סילוקין", render: (r) => String(r.scheduleEntryCount) },
   ];
@@ -328,7 +330,8 @@ export default function CrmCustomerDetailPage() {
           />
           <SummaryCard
             label="יתרת הלוואות פעילות"
-            value={formatCurrency(data.loans.filter((l) => l.status === "active").reduce((s, l) => s + l.currentBalance, 0))}
+            value={`${activeLoans.some((l) => l.currentBalance === null) ? "לפחות " : ""}${formatCurrency(activeLoans.reduce((s, l) => s + (l.currentBalance ?? 0), 0))}`}
+            sub={activeLoans.some((l) => l.currentBalance === null) ? "לא כולל הלוואות ללא יתרה ידועה" : undefined}
             icon="📉"
           />
           <SummaryCard label="יתרת חשבונות בנק" value={formatCurrency(data.bank.totalBalance)} icon="🏦" />

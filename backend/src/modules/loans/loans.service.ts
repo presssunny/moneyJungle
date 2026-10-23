@@ -1,8 +1,8 @@
 import { Prisma } from "../../../generated/prisma/client";
 import { ApiError } from "../../utils/ApiError";
-import { decimalToNumber, round2 } from "../../utils/money.utils";
+import { decimalOrNull, decimalToNumber, round2 } from "../../utils/money.utils";
 import { reconciliationService } from "../bank/reconciliation.service";
-import { computeLoan, loanProgress } from "./loanCalculator.service";
+import { loanFigures, loanProgress, loanTotals } from "./loanCalculator.service";
 import {
   closureMaxedPaymentsMade,
   loanLifecycleService,
@@ -14,12 +14,12 @@ import { CreateLoanBody, UpdateLoanBody } from "./loans.validation";
 
 type LoanRecord = NonNullable<Awaited<ReturnType<typeof loansRepository.findById>>>;
 
+export { loanTotals };
+
 /** Flatten decimals to numbers and attach derived Spitzer + lifecycle values. */
 function serializeLoan(loan: LoanRecord) {
-  const currentBalance = decimalToNumber(loan.currentBalance);
-  const annualInterestRate = decimalToNumber(loan.annualInterestRate);
-  const monthlyPayment = decimalToNumber(loan.monthlyPayment);
-  const originalAmount = decimalToNumber(loan.originalAmount);
+  const { currentBalance, annualInterestRate, monthlyPayment, computed } = loanFigures(loan);
+  const originalAmount = decimalOrNull(loan.originalAmount);
 
   return {
     ...loan,
@@ -30,8 +30,8 @@ function serializeLoan(loan: LoanRecord) {
     earlyRepaymentFee:
       loan.earlyRepaymentFee === null ? null : decimalToNumber(loan.earlyRepaymentFee),
     closureCost: loan.closureCost === null ? null : decimalToNumber(loan.closureCost),
-    // Unchanged shape — five other modules depend on `computed` exactly as it is.
-    computed: computeLoan({ currentBalance, annualInterestRate, monthlyPayment }),
+    // null when the balance or rate is unknown — never a split made up from 0.
+    computed,
     progress: loanProgress({
       status: loan.status,
       originalAmount,
@@ -55,14 +55,17 @@ export type SerializedLoan = ReturnType<typeof serializeLoan>;
 function buildSummary(items: SerializedLoan[]) {
   const active = items.filter((loan) => loan.status !== "finished");
   const closed = items.filter((loan) => loan.status === "finished");
+  const totals = loanTotals(active);
 
   return {
     activeCount: active.length,
     closedCount: closed.length,
-    totalBalance: round2(active.reduce((sum, l) => sum + l.currentBalance, 0)),
-    monthlyPayment: round2(active.reduce((sum, l) => sum + l.monthlyPayment, 0)),
-    monthlyInterest: round2(active.reduce((sum, l) => sum + l.computed.monthlyInterestPayment, 0)),
-    annualInterest: round2(active.reduce((sum, l) => sum + l.computed.estimatedAnnualInterest, 0)),
+    totalBalance: totals.knownBalance,
+    unknownBalanceCount: totals.unknownBalanceCount,
+    monthlyPayment: totals.monthlyPayment,
+    monthlyInterest: totals.knownMonthlyInterest,
+    annualInterest: totals.knownAnnualInterest,
+    unknownInterestCount: totals.unknownInterestCount,
     /**
      * Repayment that closing loans has freed up — the achievement card. It is the
      * monthly instalment those loans no longer take, which is exactly the money
@@ -94,17 +97,17 @@ function groupByLoanNumber(items: SerializedLoan[]) {
   }
   return [...groups.values()]
     .filter((group) => group.tracks.length > 1)
-    .map((group) => ({
-      loanNumber: group.loanNumber,
-      trackIds: group.tracks.map((t) => t.id),
-      totalBalance: round2(
-        group.tracks
-          .filter((t) => t.status !== "finished")
-          .reduce((sum, t) => sum + t.currentBalance, 0)
-      ),
-      activeTracks: group.tracks.filter((t) => t.status !== "finished").length,
-      closedTracks: group.tracks.filter((t) => t.status === "finished").length,
-    }));
+    .map((group) => {
+      const totals = loanTotals(group.tracks.filter((t) => t.status !== "finished"));
+      return {
+        loanNumber: group.loanNumber,
+        trackIds: group.tracks.map((t) => t.id),
+        totalBalance: totals.knownBalance,
+        unknownBalanceCount: totals.unknownBalanceCount,
+        activeTracks: group.tracks.filter((t) => t.status !== "finished").length,
+        closedTracks: group.tracks.filter((t) => t.status === "finished").length,
+      };
+    });
 }
 
 export const loansService = {
@@ -138,6 +141,8 @@ export const loansService = {
         monthlyInterest: summary.monthlyInterest,
         annualInterest: summary.annualInterest,
         activeCount: summary.activeCount,
+        unknownBalanceCount: summary.unknownBalanceCount,
+        unknownInterestCount: summary.unknownInterestCount,
       },
     };
   },
