@@ -219,7 +219,7 @@ describe("isolated sync worker", { timeout: 60_000 }, () => {
   }, 60_000);
 
   // Chrome binds $TMPDIR/.org.chromium.Chromium.XXXXXX/SingletonSocket, and a socket path is capped
-  // at 107 bytes. A run root as deep as the real one (~/.local/state/…) once killed every launch.
+  // at 107 bytes, which a TMPDIR under a run root as deep as the real one (~/.local/state/…) exceeds.
   it("launches Chrome from a run root as deep as the real one", async () => {
     const deepRoot = path.join(RUN_ROOT, "as-deep-as-home-local-state-runs-xx");
     expect(deepRoot.length).toBeGreaterThanOrEqual(path.join(os.homedir(), ".local/state/moneyjungle/scraper-runs").length);
