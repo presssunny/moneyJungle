@@ -4,7 +4,7 @@ import { decimalToNumber, round2 } from "../../utils/money.utils";
 import { businessDate } from "../../utils/date.utils";
 import { isTrackLeftover } from "../loans/loanCalculator.service";
 import type { ParsedBankRow } from "./bankParser.service";
-import { detectStatementCommitments, normalizePayee } from "./statementCommitments.detector";
+import { detectStatementCommitments, samePayee } from "./statementCommitments.detector";
 import type { DetectedCommitment, StatementDebit } from "../../types/commitments.types";
 
 const SAME_PAYMENT_DAYS = 3;
@@ -55,8 +55,7 @@ async function untracked(userId: number, found: DetectedCommitment[]): Promise<D
     // A loan number already on record is that loan, whichever track — its schedule owns the terms.
     if (c.kind === "loan") return !(c.loanNumber && loans.some((l) => l.loanNumber === c.loanNumber)) && !matches(activeLoans, c);
     // Amount and day alone would let two different payees of the same sum swallow each other.
-    const payee = normalizePayee(c.name);
-    return !matches(planned.filter((p) => { const name = normalizePayee(p.name); return name.includes(payee) || payee.includes(name); }), c);
+    return !matches(planned.filter((p) => samePayee(p.name, c.name)), c);
   });
 }
 

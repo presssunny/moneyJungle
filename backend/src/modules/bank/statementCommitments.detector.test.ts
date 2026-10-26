@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { parseBankStatement, parseBankStatementPdf, type ParsedBankRow } from "./bankParser.service";
-import { detectStatementCommitments } from "./statementCommitments.detector";
+import { detectStatementCommitments, normalizePayee, samePayee } from "./statementCommitments.detector";
 import type { StatementDebit } from "../../types/commitments.types";
 import { fixturePath, hasFixture } from "../../testing/fixtures";
 
@@ -87,3 +87,20 @@ for (const name of ["bankStatementH1", "bankStatementDailyPdf"] as const) {
     });
   });
 }
+
+describe("samePayee", () => {
+  it("knows a service by its Hebrew and English names, in any case", () => {
+    expect(samePayee("NETFLIX.COM", "נטפליקס")).toBe(true);
+    expect(samePayee("Spotify P0A1B2", "ספוטיפיי")).toBe(true);
+    expect(samePayee("netflix", "NETFLIX")).toBe(true);
+  });
+
+  it("still tells different payees apart", () => {
+    expect(samePayee("NETFLIX.COM", "ספוטיפיי")).toBe(false);
+    expect(samePayee("חוג", "משיכת שיק")).toBe(false);
+  });
+
+  it("leaves the key a statement line is remembered by unchanged", () => {
+    expect(normalizePayee("NETFLIX.COM")).toBe("NETFLIXCOM");
+  });
+});

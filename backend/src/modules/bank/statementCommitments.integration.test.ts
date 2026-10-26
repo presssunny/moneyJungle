@@ -105,6 +105,16 @@ describe("commitments a bank statement proves", () => {
     expect((await statementCommitmentsService.detect(userId, accountId)).map((c) => c.kind).sort()).toEqual(["loan", "recurring"]);
   });
 
+  it("a subscription entered in Hebrew is the same payee as its English bank line", async () => {
+    await prisma.bankTransaction.createMany({ data: months.map((m) => ({ userId, bankAccountId: accountId, type: "withdrawal", transactionDate: new Date(`${m}-12`),
+      description: "NETFLIX.COM", amount: 49.9, lineKind: "standard", loanRef: null })) });
+    const before = (await statementCommitmentsService.detect(userId, accountId)).map((c) => c.key);
+    await prisma.subscription.create({ data: { userId, name: "נטפליקס", amount: 49.9, billingDate: new Date("2026-10-12") } });
+    const after = (await statementCommitmentsService.detect(userId, accountId)).map((c) => c.key);
+    expect(before).toContain("recurring:NETFLIXCOM");
+    expect(after).not.toContain("recurring:NETFLIXCOM");
+  });
+
   it("a loan entered by hand with the same payment day and amount is not offered again", async () => {
     await seedStatement();
     await prisma.loan.create({ data: { userId, loanName: "הלוואת בנק", loanType: "bank", originalAmount: 50000, currentBalance: 30000, annualInterestRate: 5, monthlyPayment: 1200, startDate: new Date("2025-01-15") } });
