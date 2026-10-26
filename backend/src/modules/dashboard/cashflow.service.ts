@@ -26,6 +26,8 @@ export interface UpcomingResponse {
   from: string;
   to: string;
   total: KnownSum;
+  /** Per calendar month (YYYY-MM) of the events in the window. */
+  months: Array<{ monthKey: string; total: KnownSum }>;
   events: UpcomingEvent[];
   heaviestDay: { date: string; total: KnownSum; count: number } | null;
 }
@@ -203,11 +205,18 @@ export async function buildUpcoming(userId: number, windowDays: number, anchor =
     }
   }
 
+  const byMonth = new Map<string, Array<number | null>>();
+  for (const e of events) {
+    const key = e.date.slice(0, 7);
+    byMonth.set(key, [...(byMonth.get(key) ?? []), e.amount]);
+  }
+
   return {
     windowDays,
     from: from.toISOString(),
     to: to.toISOString(),
     total: sumKnown(events.map((e) => e.amount)),
+    months: [...byMonth].map(([monthKey, amounts]) => ({ monthKey, total: sumKnown(amounts) })),
     events,
     heaviestDay,
   };

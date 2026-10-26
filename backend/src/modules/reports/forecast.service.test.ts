@@ -55,6 +55,9 @@ describe("registered payments per month", () => {
         { date: "2027-01-05T00:00:00.000Z", kind: "reminder", name: "renewal", amount: null, icon: "🔔" },
         { date: "2027-01-10T00:00:00.000Z", kind: "recurring", name: "rent", amount: 100, icon: "🔁" },
         { date: "2027-02-05T00:00:00.000Z", kind: "reminder", name: "fee", amount: null, icon: "🔔" },
+      ], months: [
+        { monthKey: "2027-01", total: { knownTotal: 100, unknownCount: 1 } },
+        { monthKey: "2027-02", total: { knownTotal: 0, unknownCount: 1 } },
       ] });
       const result = await getForecast(1, scenario, []);
       expect(result.commitments[0]).toMatchObject({ monthKey: "2027-01", total: { knownTotal: 100, unknownCount: 1 } });
