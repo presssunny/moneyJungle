@@ -146,7 +146,7 @@ export function LoanCard({ loan, actions }: { loan: Loan; actions: LoanActions }
         <div className="loan-card-facts">
           <Fact label={<>יתרת <Term name="קרן" /></>} value={amount(loan.currentBalance)} />
           <Fact label="החזר חודשי" value={formatCurrency(loan.monthlyPayment)} />
-          <Fact label="החיוב הבא" value={new Date(loan.startDate).toLocaleDateString("he-IL")} />
+          <Fact label="החיוב הבא" value={new Date(loan.nextPaymentDate).toLocaleDateString("he-IL")} />
         </div>
       ) : closed ? (
         <div className="loan-card-facts">
@@ -190,7 +190,13 @@ export function LoanCard({ loan, actions }: { loan: Loan; actions: LoanActions }
             label="נותרו"
             value={progress.paymentsRemaining !== null ? `${progress.paymentsRemaining} תשלומים` : "—"}
           />
-          <Fact label="תאריך פתיחה" value={new Date(loan.startDate).toLocaleDateString("he-IL")} />
+          <Fact
+            label={loan.startDateMeaning === "opening" ? "תשלום הבא (משוער)" : "תשלום הבא"}
+            value={new Date(loan.nextPaymentDate).toLocaleDateString("he-IL")}
+          />
+          {loan.startDateMeaning === "opening" && (
+            <Fact label="תאריך פתיחה" value={new Date(loan.startDate).toLocaleDateString("he-IL")} />
+          )}
           <Fact
             label="סיום צפוי"
             value={loan.endDate ? new Date(loan.endDate).toLocaleDateString("he-IL") : "—"}

@@ -106,7 +106,11 @@ export interface Loan {
   currentBalance: number | null;
   annualInterestRate: number | null;
   monthlyPayment: number;
+  /** "opening" when she typed it; otherwise a recorded payment date (statement or schedule). */
   startDate: string;
+  startDateMeaning: "opening" | "recorded";
+  /** Computed by the server from startDate — the first payment on or after today. */
+  nextPaymentDate: string;
   endDate: string | null;
   isIndexLinked: boolean;
   earlyRepaymentFee: number | null;

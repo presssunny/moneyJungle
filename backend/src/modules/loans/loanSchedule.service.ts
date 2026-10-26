@@ -2,6 +2,8 @@ import { prisma } from "../../config/database";
 import { ApiError } from "../../utils/ApiError";
 import { decimalToNumber, round2 } from "../../utils/money.utils";
 import { isTrackLeftover, loanFigures } from "./loanCalculator.service";
+import { nextPaymentDate, paymentAfter } from "./loanDates";
+import { businessDate } from "../../utils/date.utils";
 import crypto from "crypto";
 import type { AssistantStep } from "../assistant/assistant.types";
 import { documentsService } from "../documents/documents.service";
@@ -302,10 +304,10 @@ export const loanScheduleService = {
       currentBalance === null || annualInterestRate === null
         ? []
         : amortizationSchedule({ currentBalance, annualInterestRate, monthlyPayment });
-    const start = new Date(loan.startDate);
+    const first = nextPaymentDate(loan, new Date(businessDate()));
+    const day = new Date(loan.startDate).getUTCDate();
     const rows = simulated.map((row) => {
-      const date = new Date(start);
-      date.setMonth(date.getMonth() + row.month);
+      const date = paymentAfter(first, day, row.month - 1);
       return {
         paymentNumber: row.month,
         date: date.toISOString().slice(0, 10),

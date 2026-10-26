@@ -9,6 +9,8 @@ import {
   reopenedLoanFields,
 } from "./loanLifecycle.service";
 import { loansRepository } from "./loans.repository";
+import { nextPaymentDate, startDateMeaning } from "./loanDates";
+import { businessDate } from "../../utils/date.utils";
 import { statementCommitmentsService } from "../bank/statementCommitments.service";
 import { CreateLoanBody, UpdateLoanBody } from "./loans.validation";
 
@@ -32,6 +34,8 @@ function serializeLoan(loan: LoanRecord) {
     closureCost: loan.closureCost === null ? null : decimalToNumber(loan.closureCost),
     // null when the balance or rate is unknown — never a split made up from 0.
     computed,
+    nextPaymentDate: nextPaymentDate(loan, new Date(businessDate())).toISOString().slice(0, 10),
+    startDateMeaning: startDateMeaning(loan),
     progress: loanProgress({
       status: loan.status,
       originalAmount,

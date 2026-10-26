@@ -3,7 +3,7 @@ import AxeBuilder from '@axe-core/playwright';
 
 // The API is mocked end to end. A loan seen only on the statement arrives with null
 // balance/rate/original amount: it must read "חסר", never a 0 ₪ that looks paid off.
-const base={loanType:'bank',lenderName:null,startDate:'2026-11-15',endDate:null,isIndexLinked:false,earlyRepaymentFee:null,status:'active',
+const base={loanType:'bank',lenderName:null,startDate:'2026-11-15',nextPaymentDate:'2026-11-15',startDateMeaning:'recorded',endDate:null,isIndexLinked:false,earlyRepaymentFee:null,status:'active',
  trackNumber:null,trackName:null,closedAt:null,closureReason:null,closureCost:null,scheduleImportedAt:null};
 const known={...base,id:1,loanName:'הלוואת רכב',loanNumber:'201',originalAmount:50000,currentBalance:30000,annualInterestRate:5,monthlyPayment:1200,
  totalPayments:50,paymentsMade:20,scheduleSource:'bank_file',originalAmountSource:'contract',
@@ -12,7 +12,7 @@ const known={...base,id:1,loanName:'הלוואת רכב',loanNumber:'201',origin
 const fromStatement={...base,id:2,loanName:'הלוואה 108',loanNumber:'108',originalAmount:null,currentBalance:null,annualInterestRate:null,monthlyPayment:1500,
  totalPayments:null,paymentsMade:null,scheduleSource:'statement',originalAmountSource:'unknown',computed:null,
  progress:{lifecycle:'active',principalRepaid:0,progressPercent:0,paymentsMade:null,paymentsRemaining:null,totalPayments:null,certainty:'scenario'}};
-const noRate={...base,id:3,loanName:'הלוואה פרטית',loanType:'private',loanNumber:null,originalAmount:10000,currentBalance:8000,annualInterestRate:null,monthlyPayment:500,
+const noRate={...base,id:3,startDate:'2020-03-15',startDateMeaning:'opening',loanName:'הלוואה פרטית',loanType:'private',loanNumber:null,originalAmount:10000,currentBalance:8000,annualInterestRate:null,monthlyPayment:500,
  totalPayments:null,paymentsMade:null,scheduleSource:'computed',originalAmountSource:'manual',computed:null,
  progress:{lifecycle:'active',principalRepaid:2000,progressPercent:20,paymentsMade:null,paymentsRemaining:null,totalPayments:null,certainty:'measured'}};
 const summary={activeCount:3,closedCount:0,totalBalance:38000,monthlyPayment:3200,monthlyInterest:125,annualInterest:1500,freedMonthlyPayment:0,closureCosts:0,
@@ -52,7 +52,13 @@ test('A loan with unknown values shows "חסר" — never 0 — and the totals s
  const noRateCard=page.locator('.loan-card').filter({hasText:'הלוואה פרטית'});
  await expect(noRateCard.locator('.loan-fact').filter({hasText:'ריבית שנתית'})).toContainText('חסר');
  await expect(noRateCard.locator('.loan-fact').filter({hasText:'חודשית'}).filter({hasNotText:'החזר'})).toContainText('חסר');
- expect(await noRateCard.innerText()).not.toMatch(/null|NaN/);
+ expect(await noRateCard.innerText()).not.toMatch(/null|NaN|Invalid Date/);
+ // A typed opening date is not a payment date: the card names both, and the next one is an estimate.
+ await expect(noRateCard.locator('.loan-fact').filter({hasText:'תשלום הבא (משוער)'})).toContainText('15.11.2026');
+ await expect(noRateCard.locator('.loan-fact').filter({hasText:'תאריך פתיחה'})).toContainText('15.3.2020');
+ const knownCard=page.locator('.loan-card').filter({hasText:'הלוואת רכב'});
+ await expect(knownCard.locator('.loan-fact').filter({hasText:'תאריך פתיחה'})).toHaveCount(0);
+ await expect(knownCard.locator('.loan-fact').filter({hasText:/^תשלום הבא/})).toContainText('15.11.2026');
 
  const balanceCard=page.locator('.summary-card').filter({hasText:'יתרת הקרן'});
  await expect(balanceCard).toContainText('לפחות');
