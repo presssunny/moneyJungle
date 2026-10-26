@@ -37,15 +37,14 @@ export function normalizePayee(description: string): string {
   return description.replace(/[\d\s.,'"״׳`\-–־/\\()[\]:]+/g, "");
 }
 
-// The same service written in Hebrew by her and in English by the bank. Only distinctive
-// names: a short one ("hot", "yes") would match inside unrelated payees.
+// The same service written in Hebrew by her and in English by the bank. Only names that
+// do not sit inside common words: "hot", "yes" or "אפל" (in "אפליקציה") would merge payees.
 const PAYEE_ALIASES: Array<[string, RegExp]> = [
   ["netflix", /נטפליקס/g],
   ["spotify", /ספוטיפיי?/g],
   ["disney", /דיסני/g],
   ["youtube", /יוטיוב/g],
   ["google", /גוגל/g],
-  ["apple", /אפל/g],
   ["amazon", /אמזון/g],
   ["cellcom", /סלקום/g],
   ["partner", /פרטנר/g],

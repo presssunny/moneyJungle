@@ -98,6 +98,7 @@ describe("samePayee", () => {
   it("still tells different payees apart", () => {
     expect(samePayee("NETFLIX.COM", "ספוטיפיי")).toBe(false);
     expect(samePayee("חוג", "משיכת שיק")).toBe(false);
+    expect(samePayee("APPLE", "אפליקציה")).toBe(false);
   });
 
   it("leaves the key a statement line is remembered by unchanged", () => {
