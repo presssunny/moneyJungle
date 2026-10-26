@@ -16,13 +16,17 @@ export function onDayOfMonth(year: number, month: number, day: number): Date {
   return new Date(Date.UTC(year, month, Math.min(day, lastDay)));
 }
 
+/** The loan's first payment: an opening date is not itself a payment, so it falls a month later. */
+export function firstPaymentDate(loan: { startDate: Date; scheduleSource: string }): Date {
+  const start = new Date(loan.startDate);
+  const offset = startDateMeaning(loan) === "opening" ? 1 : 0;
+  return onDayOfMonth(start.getUTCFullYear(), start.getUTCMonth() + offset, start.getUTCDate());
+}
+
 /** First payment on or after `today` (a UTC midnight date). */
 export function nextPaymentDate(loan: { startDate: Date; scheduleSource: string }, today: Date): Date {
-  const start = new Date(loan.startDate);
-  const day = start.getUTCDate();
-  // An opening date is not itself a payment; the first one falls a month later.
-  const offset = startDateMeaning(loan) === "opening" ? 1 : 0;
-  const earliest = onDayOfMonth(start.getUTCFullYear(), start.getUTCMonth() + offset, day);
+  const day = new Date(loan.startDate).getUTCDate();
+  const earliest = firstPaymentDate(loan);
   const from = earliest > today ? earliest : today;
   let year = from.getUTCFullYear();
   let month = from.getUTCMonth();

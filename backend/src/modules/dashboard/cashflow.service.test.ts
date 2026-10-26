@@ -69,6 +69,18 @@ describe("forward obligations", () => {
     expect(result.heaviestDay).toEqual({ date: "2026-01-10T00:00:00.000Z", count: 2, total: { knownTotal: 100, unknownCount: 1 } });
     expect(result.months).toEqual([{ monthKey: "2026-01", total: { knownTotal: 100, unknownCount: 1 } }]);
   });
+  it("a loan she opened is not paid on its opening day — the first payment is a month later, as on the loan card", async () => {
+    setup(); db.loan.findMany.mockResolvedValue([
+      { id: 1, loanName: "opened", scheduleSource: "computed", monthlyPayment: 100, currentBalance: 5000, startDate: new Date("2026-01-10"), endDate: null },
+      { id: 2, loanName: "month-end", scheduleSource: "computed", monthlyPayment: 100, currentBalance: 5000, startDate: new Date("2025-12-31"), endDate: null },
+      { id: 3, loanName: "detected", scheduleSource: "statement", monthlyPayment: 100, currentBalance: null, startDate: new Date("2026-01-10"), endDate: null },
+    ]);
+    const dates = (name: string) => (r: Awaited<ReturnType<typeof buildUpcoming>>) => r.events.filter((e) => e.name === name).map((e) => e.date.slice(0, 10));
+    const result = await buildUpcoming(1, 90);
+    expect(dates("opened")(result)).toEqual(["2026-02-10", "2026-03-10"]);
+    expect(dates("month-end")(result)).toEqual(["2026-01-31", "2026-02-28", "2026-03-31"]);
+    expect(dates("detected")(result)).toEqual(["2026-01-10", "2026-02-10", "2026-03-10"]);
+  });
   it("ends computed loan obligations at the end date", async () => {
     setup(); db.loan.findMany.mockResolvedValue([{ loanName: "loan", scheduleSource: "computed", monthlyPayment: 100, currentBalance: 200, startDate: new Date("2025-12-10"), endDate: new Date("2026-02-10") }]);
     const result = await buildUpcoming(1, 365);

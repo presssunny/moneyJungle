@@ -1,6 +1,7 @@
 import { prisma } from "../../config/database";
 import { decimalOrNull, decimalToNumber, sumKnown, type KnownSum } from "../../utils/money.utils";
 import { businessDate } from "../journey/journey.utils";
+import { firstPaymentDate } from "../loans/loanDates";
 
 /**
  * Forward-looking cash-flow: projects dated obligations (recurring payments,
@@ -60,9 +61,8 @@ function laterOf(a: Date, b: Date): Date {
   return a > b ? a : b;
 }
 
-/** Monthly occurrences on the anchor's day-of-month (clamped) within [from, to]. */
-function monthlyOccurrences(anchor: Date, from: Date, to: Date): Date[] {
-  const day = anchor.getUTCDate();
+/** Monthly occurrences on `day` (the anchor's by default, clamped) within [from, to], none before the anchor. */
+function monthlyOccurrences(anchor: Date, from: Date, to: Date, day = anchor.getUTCDate()): Date[] {
   const res: Date[] = [];
   let y = from.getUTCFullYear();
   let m = from.getUTCMonth();
@@ -162,8 +162,8 @@ export async function buildUpcoming(userId: number, windowDays: number, anchor =
     const balance = decimalOrNull(loan.currentBalance);
     if (balance !== null && balance <= 0) continue;
     const endDate = loan.endDate ? new Date(loan.endDate) : null;
-    const start = new Date(loan.startDate);
-    const dates = monthlyOccurrences(start, includeOverdue ? laterOf(start, historicalFloor(from)) : from, to);
+    const first = firstPaymentDate(loan);
+    const dates = monthlyOccurrences(first, includeOverdue ? laterOf(first, historicalFloor(from)) : from, to, new Date(loan.startDate).getUTCDate());
     for (const d of dates) {
       if (endDate && d > endDate) continue;
       events.push({

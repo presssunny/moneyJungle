@@ -94,9 +94,11 @@ describe("commitment evidence and coverage", () => {
   });
 
   it("includes overdue loans and installments older than the display window", async () => {
-    const date = new Date(nextDate(today, -90));
-    const loan = await prisma.loan.create({ data: { userId, loanName: "overdue", loanType: "bank", originalAmount: 100, currentBalance: 100, annualInterestRate: 0, monthlyPayment: 100, startDate: date, status: "overdue", scheduleSource: "computed", endDate: date } });
-    expect((await commitments(userId)).find(e => e.key === `loan:${loan.id}:${nextDate(today, -90)}`)).toMatchObject({ amount: 100, decision: null });
+    // A typed start date is the opening; its one payment falls a month later, ~90 days ago.
+    const due = new Date(nextDate(today, -90)); due.setUTCDate(Math.min(due.getUTCDate(), 28));
+    const opened = new Date(Date.UTC(due.getUTCFullYear(), due.getUTCMonth() - 1, due.getUTCDate()));
+    const loan = await prisma.loan.create({ data: { userId, loanName: "overdue", loanType: "bank", originalAmount: 100, currentBalance: 100, annualInterestRate: 0, monthlyPayment: 100, startDate: opened, status: "overdue", scheduleSource: "computed", endDate: due } });
+    expect((await commitments(userId)).find(e => e.key === `loan:${loan.id}:${due.toISOString().slice(0, 10)}`)).toMatchObject({ amount: 100, decision: null });
   });
 
   it("rejects duplicate allocations exceeding their target and invalidates existing over-allocation", async () => {
