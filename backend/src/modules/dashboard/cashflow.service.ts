@@ -1,5 +1,5 @@
 import { prisma } from "../../config/database";
-import { decimalOrNull, decimalToNumber, round2 } from "../../utils/money.utils";
+import { decimalOrNull, decimalToNumber, sumKnown, type KnownSum } from "../../utils/money.utils";
 import { businessDate } from "../journey/journey.utils";
 
 /**
@@ -16,8 +16,8 @@ export interface UpcomingEvent {
   date: string; // ISO date
   kind: UpcomingKind;
   name: string;
-  amount: number;
-  amountKnown?: boolean;
+  /** null = unknown, never 0. */
+  amount: number | null;
   icon: string;
 }
 
@@ -25,9 +25,9 @@ export interface UpcomingResponse {
   windowDays: number;
   from: string;
   to: string;
-  total: number;
+  total: KnownSum;
   events: UpcomingEvent[];
-  heaviestDay: { date: string; total: number; count: number } | null;
+  heaviestDay: { date: string; total: KnownSum; count: number } | null;
 }
 
 const KIND_ICON: Record<UpcomingKind, string> = {
@@ -182,8 +182,7 @@ export async function buildUpcoming(userId: number, windowDays: number, anchor =
       date: new Date(rem.eventDate).toISOString(),
       kind: "reminder",
       name: rem.title,
-      amount: rem.estimatedAmount != null ? decimalToNumber(rem.estimatedAmount) : 0,
-      amountKnown: rem.estimatedAmount != null,
+      amount: decimalOrNull(rem.estimatedAmount),
       icon: rem.icon || KIND_ICON.reminder,
     });
   }
@@ -191,18 +190,16 @@ export async function buildUpcoming(userId: number, windowDays: number, anchor =
   events.sort((a, b) => a.date.localeCompare(b.date));
 
   // Heaviest single day — the "pressure" moment worth warning about.
-  const byDay = new Map<string, { total: number; count: number }>();
+  const byDay = new Map<string, Array<number | null>>();
   for (const e of events) {
     const key = e.date.slice(0, 10);
-    const agg = byDay.get(key) ?? { total: 0, count: 0 };
-    agg.total += e.amount;
-    agg.count += 1;
-    byDay.set(key, agg);
+    byDay.set(key, [...(byDay.get(key) ?? []), e.amount]);
   }
   let heaviestDay: UpcomingResponse["heaviestDay"] = null;
-  for (const [date, agg] of byDay) {
-    if (!heaviestDay || agg.total > heaviestDay.total) {
-      heaviestDay = { date: `${date}T00:00:00.000Z`, total: round2(agg.total), count: agg.count };
+  for (const [date, amounts] of byDay) {
+    const total = sumKnown(amounts);
+    if (!heaviestDay || total.knownTotal > heaviestDay.total.knownTotal) {
+      heaviestDay = { date: `${date}T00:00:00.000Z`, count: amounts.length, total };
     }
   }
 
@@ -210,7 +207,7 @@ export async function buildUpcoming(userId: number, windowDays: number, anchor =
     windowDays,
     from: from.toISOString(),
     to: to.toISOString(),
-    total: round2(events.reduce((sum, e) => sum + e.amount, 0)),
+    total: sumKnown(events.map((e) => e.amount)),
     events,
     heaviestDay,
   };

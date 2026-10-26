@@ -57,7 +57,16 @@ describe("forward obligations", () => {
     setup(); db.loan.findMany.mockResolvedValue([{ loanName: "loan", scheduleSource: "bank_file", monthlyPayment: 100, schedule: [{ paymentDate: new Date("2026-02-01"), total: 35 }] }]);
     const result = await buildUpcoming(1, 365);
     expect(result.events).toHaveLength(1);
-    expect(result.total).toBe(35);
+    expect(result.total).toEqual({ knownTotal: 35, unknownCount: 0 });
+  });
+  it("keeps a reminder without an amount unknown instead of adding it as 0", async () => {
+    setup();
+    db.recurringPayment.findMany.mockResolvedValue([{ id: 1, name: "rent", amount: 100, frequency: "monthly", nextPaymentDate: new Date("2026-01-10") }]);
+    db.reminder.findMany.mockResolvedValue([{ id: 2, title: "renewal", eventDate: new Date("2026-01-10"), estimatedAmount: null, type: "expected_expense", icon: null }]);
+    const result = await buildUpcoming(1, 20);
+    expect(result.events.map((event) => event.amount)).toEqual([100, null]);
+    expect(result.total).toEqual({ knownTotal: 100, unknownCount: 1 });
+    expect(result.heaviestDay).toEqual({ date: "2026-01-10T00:00:00.000Z", count: 2, total: { knownTotal: 100, unknownCount: 1 } });
   });
   it("ends computed loan obligations at the end date", async () => {
     setup(); db.loan.findMany.mockResolvedValue([{ loanName: "loan", scheduleSource: "computed", monthlyPayment: 100, currentBalance: 200, startDate: new Date("2025-12-10"), endDate: new Date("2026-02-10") }]);

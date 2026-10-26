@@ -1,6 +1,6 @@
 import { prisma } from "../../config/database";
 import { addDays, daysUntil, monthRange, relativeDayLabel, startOfToday } from "../../utils/date.utils";
-import { decimalToNumber, formatILS } from "../../utils/money.utils";
+import { decimalToNumber, describeKnownSum, formatILS } from "../../utils/money.utils";
 import { alertsService } from "../alerts/alerts.service";
 import { formatDayMonth, isHeavyDay, UPCOMING_WINDOW_DAYS } from "../alerts/alertsScanner.service";
 import { remindersRepository } from "../reminders/reminders.repository";
@@ -216,7 +216,7 @@ export async function collectAttentionCandidates(
     candidates.push({
       id: "upcoming-heavy-day",
       icon: "📅",
-      text: `${heaviest.count} חיובים בסך ${formatILS(heaviest.total)} מתרכזים ב־${formatDayMonth(new Date(heaviest.date))}`,
+      text: `${heaviest.count} חיובים בסך ${describeKnownSum(heaviest.total)} מתרכזים ב־${formatDayMonth(new Date(heaviest.date))}`,
       to: "/manage?tab=calendar",
       tone: "warning",
       source: "upcoming",

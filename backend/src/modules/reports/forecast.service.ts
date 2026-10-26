@@ -1,6 +1,6 @@
 import { reportsService } from "./reports.service";
 import { buildUpcoming } from "../dashboard/cashflow.service";
-import { round2 } from "../../utils/money.utils";
+import { round2, sumKnown } from "../../utils/money.utils";
 import type { ForecastHistoryMonth, ForecastMonth, ForecastScenario } from "../../types/planning.types";
 
 function historicalBaseline(history: ForecastHistoryMonth[], excludedMonths: string[]) {
@@ -49,9 +49,9 @@ export async function getForecast(userId: number, scenario: ForecastScenario, ex
   const result = calculateForecast(history, anchor, scenario, excludedMonths);
   const commitments = result.months.map((month) => {
     const events = upcoming.events.filter((event) => event.date.startsWith(month.monthKey));
-    return { monthKey: month.monthKey, events, total: round2(events.reduce((sum, event) => sum + event.amount, 0)) };
+    return { monthKey: month.monthKey, events, total: sumKnown(events.map((event) => event.amount)) };
   });
-  const heaviest = commitments.reduce((max, row) => row.total > max.total ? row : max, commitments[0]);
-  return { ...result, commitments, heaviest: heaviest.total > 0 ? { monthKey: heaviest.monthKey, total: heaviest.total } : null,
+  const heaviest = commitments.reduce((max, row) => row.total.knownTotal > max.total.knownTotal ? row : max, commitments[0]);
+  return { ...result, commitments, heaviest: heaviest.total.knownTotal > 0 ? { monthKey: heaviest.monthKey, total: heaviest.total } : null,
     generatedAt: now.toISOString(), anchorMonth: anchor.toISOString().slice(0, 7) };
 }

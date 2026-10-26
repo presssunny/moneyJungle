@@ -155,7 +155,7 @@ describe("upcoming_payment", () => {
 
       const upcoming = await buildUpcoming(userId, UPCOMING_WINDOW_DAYS);
       expect(upcoming.heaviestDay).not.toBeNull();
-      const windowShare = upcoming.heaviestDay!.total / upcoming.total;
+      const windowShare = upcoming.heaviestDay!.total.knownTotal / upcoming.total.knownTotal;
       expect(windowShare).toBeLessThan(HEAVY_DAY_SHARE);
       expect(windowShare).toBeGreaterThan(HEAVY_DAY_SHARE * (30 / UPCOMING_WINDOW_DAYS));
 
@@ -179,6 +179,26 @@ describe("upcoming_payment", () => {
 
     await scanForAlerts(userId);
     expect(await alertsOfType(userId, "upcoming_payment")).toHaveLength(0);
+  });
+});
+
+describe("upcoming_payment with unknown amounts", () => {
+  it("says 'at least' and gives no share when a charge on the day has no amount", async ({ skip }) => {
+    if (!dbUp) skip("MariaDB אינו זמין — יש להריץ bash backend/start-db.sh");
+    const userId = await createUser("unknown_amount");
+    const heavyDay = daysFromToday(5);
+    await prisma.subscription.createMany({
+      data: [
+        { userId, name: "ביטוח רכב", amount: 780, billingDate: heavyDay, status: "active" },
+        { userId, name: "חוג ילדים", amount: 640, billingDate: heavyDay, status: "active" },
+      ],
+    });
+    await prisma.reminder.create({ data: { userId, title: "חידוש רישיון", eventDate: heavyDay, estimatedAmount: null, type: "expected_expense" } });
+
+    await scanForAlerts(userId);
+    const [alert] = await alertsOfType(userId, "upcoming_payment");
+    expect(alert.message).toContain("לפחות ₪1,420 · עוד 1 בלי סכום");
+    expect(alert.message).not.toContain("%");
   });
 });
 

@@ -25,6 +25,28 @@ export function sumDecimals(values: Array<Prisma.Decimal | number | null | undef
   return round2(values.reduce<number>((acc, v) => acc + decimalToNumber(v), 0));
 }
 
+export interface KnownSum {
+  knownTotal: number;
+  unknownCount: number;
+}
+
+/** An unknown amount is counted, never added as 0 — the known part is only a lower bound. */
+export function sumKnown(values: Iterable<number | null>): KnownSum {
+  let knownTotal = 0;
+  let unknownCount = 0;
+  for (const value of values) {
+    if (value === null) unknownCount += 1;
+    else knownTotal += value;
+  }
+  return { knownTotal: round2(knownTotal), unknownCount };
+}
+
+export function describeKnownSum({ knownTotal, unknownCount }: KnownSum): string {
+  if (!unknownCount) return formatILS(knownTotal);
+  const missing = `${unknownCount} בלי סכום`;
+  return knownTotal > 0 ? `לפחות ${formatILS(knownTotal)} · עוד ${missing}` : `סכום לא ידוע · ${missing}`;
+}
+
 /** Shekels inside a sentence — whole numbers, because agorot only add noise there. */
 /** Whole shekels by default; `exact` keeps agorot when there are any, for answers the household may check against a statement. */
 export function formatILS(amount: number, { exact = false } = {}): string {

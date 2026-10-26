@@ -1,7 +1,7 @@
 import { pendingDuplicates } from "../householdAssistant/duplicateReview.service";
 import { prisma } from "../../config/database";
 import { monthRange } from "../../utils/date.utils";
-import { decimalToNumber, formatILS, percent, round2 } from "../../utils/money.utils";
+import { decimalToNumber, describeKnownSum, formatILS, percent, round2 } from "../../utils/money.utils";
 import { buildUpcoming, type UpcomingResponse } from "../dashboard/cashflow.service";
 import { spendingCreditInMonth } from "../dashboard/dashboard.repository";
 import { spentByCategory } from "../dashboard/dashboard.service";
@@ -56,9 +56,9 @@ export function formatDayMonth(date: Date): string {
  */
 export function isHeavyDay(upcoming: UpcomingResponse): boolean {
   const heaviest = upcoming.heaviestDay;
-  if (!heaviest || upcoming.total <= 0 || heaviest.count < 2) return false;
-  const cycleTotal = (upcoming.total * 30) / UPCOMING_WINDOW_DAYS;
-  return heaviest.total >= cycleTotal * HEAVY_DAY_SHARE;
+  if (!heaviest || upcoming.total.knownTotal <= 0 || heaviest.count < 2) return false;
+  const cycleTotal = (upcoming.total.knownTotal * 30) / UPCOMING_WINDOW_DAYS;
+  return heaviest.total.knownTotal >= cycleTotal * HEAVY_DAY_SHARE;
 }
 
 /**
@@ -142,7 +142,9 @@ export async function scanForAlerts(userId: number): Promise<void> {
       // as the heaviest day rolls forward with the window.
       type: "upcoming_payment",
       title: "יום עמוס בתשלומים",
-      message: `${heaviest.count} חיובים בסך ${formatILS(heaviest.total)} מתרכזים ב־${formatDayMonth(heaviestDate)} — ${Math.round(percent(heaviest.total, upcoming.total))}% מכל התשלומים הצפויים ב־${UPCOMING_WINDOW_DAYS} הימים הקרובים.`,
+      // A share of a partly unknown total would be a made-up percentage.
+      message: `${heaviest.count} חיובים בסך ${describeKnownSum(heaviest.total)} מתרכזים ב־${formatDayMonth(heaviestDate)}` +
+        (upcoming.total.unknownCount ? "." : ` — ${Math.round(percent(heaviest.total.knownTotal, upcoming.total.knownTotal))}% מכל התשלומים הצפויים ב־${UPCOMING_WINDOW_DAYS} הימים הקרובים.`),
       severity: "warning",
     });
   }

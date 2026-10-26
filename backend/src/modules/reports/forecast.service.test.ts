@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-vi.mock("./reports.service", () => ({ reportsService: { trend: vi.fn() } }));
-vi.mock("../dashboard/cashflow.service", () => ({ buildUpcoming: vi.fn() }));
-import { backtestForecast, calculateForecast } from "./forecast.service";
+const mocks = vi.hoisted(() => ({ trend: vi.fn(), buildUpcoming: vi.fn() }));
+vi.mock("./reports.service", () => ({ reportsService: { trend: mocks.trend } }));
+vi.mock("../dashboard/cashflow.service", () => ({ buildUpcoming: mocks.buildUpcoming }));
+import { backtestForecast, calculateForecast, getForecast } from "./forecast.service";
 
 const anchor = new Date("2026-12-01T00:00:00Z");
 const scenario = { monthlyIncomeChange: 0, monthlyExpenseChange: 0, oneTimeExpense: 0, oneTimeMonth: 1 };
@@ -42,5 +43,23 @@ describe("annual forecast", () => {
     expect(result.monthsTested).toBe(1);
     expect(result.meanAbsoluteExpenseError).toBe(6000);
     expect(backtestForecast(history).monthsTested).toBe(0);
+  });
+});
+
+describe("registered payments per month", () => {
+  it("never counts a payment without an amount as 0", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(new Date("2026-12-15T12:00:00Z"));
+    try {
+      mocks.trend.mockResolvedValue(history);
+      mocks.buildUpcoming.mockResolvedValue({ events: [
+        { date: "2027-01-05T00:00:00.000Z", kind: "reminder", name: "renewal", amount: null, icon: "🔔" },
+        { date: "2027-01-10T00:00:00.000Z", kind: "recurring", name: "rent", amount: 100, icon: "🔁" },
+        { date: "2027-02-05T00:00:00.000Z", kind: "reminder", name: "fee", amount: null, icon: "🔔" },
+      ] });
+      const result = await getForecast(1, scenario, []);
+      expect(result.commitments[0]).toMatchObject({ monthKey: "2027-01", total: { knownTotal: 100, unknownCount: 1 } });
+      expect(result.commitments[1]).toMatchObject({ monthKey: "2027-02", total: { knownTotal: 0, unknownCount: 1 } });
+      expect(result.heaviest).toEqual({ monthKey: "2027-01", total: { knownTotal: 100, unknownCount: 1 } });
+    } finally { vi.useRealTimers(); }
   });
 });

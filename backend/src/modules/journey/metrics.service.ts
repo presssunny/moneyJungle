@@ -1,7 +1,7 @@
 import { prisma } from "../../config/database";
 import { ApiError } from "../../utils/ApiError";
 import { monthRange } from "../../utils/date.utils";
-import { decimalToNumber, round2 } from "../../utils/money.utils";
+import { decimalToNumber, round2, sumKnown } from "../../utils/money.utils";
 import type { FinancialMetric, MetricComponent, MetricName } from "../../types/metric.types";
 import { monthTotals } from "../dashboard/dashboard.service";
 import { spendingCredit, spendingCreditInMonth } from "../dashboard/dashboard.repository";
@@ -81,7 +81,7 @@ export async function financialMetric(userId: number, name: MetricName, month: s
     metric.assumptions=["רק תנועות עד היום נכללות; טווח תנועות בדוח אינו הוכחת רציפות", "יתרה ללא עוגן מאומת היא אומדן מיתרת הפתיחה והתנועות"];
   } else if (name === "commitments") {
     const open=state.events.filter(e=>e.decision!=="paid"&&e.decision!=="duplicate");
-    metric.value=round2(open.reduce((sum,e)=>sum+(e.amount??0),0));
+    metric.value=sumKnown(open.map(e=>e.amount)).knownTotal;
     if(open.some(e=>e.amount===null))metric.missingData=[...metric.missingData,"הסכום הוא חלקי: יש התחייבויות ללא סכום"];
     metric.formula="סכום ההתחייבויות הפתוחות הידועות, כולל פיגורים; שולם וכפילות אינם נספרים";
     metric.assumptions=["סכום לא ידוע אינו אפס; התחייבות בלי החלטה עדיין טעונה בדיקה"];

@@ -1,4 +1,5 @@
 /** Formatting helpers — all display formatting lives here. */
+import type { KnownSum } from "../types/models";
 
 /** `exact` keeps the agorot (₪1,234.50) — for a figure compared against a bank's own. */
 export function formatCurrency(amount: number | null | undefined, options?: { sign?: boolean; exact?: boolean }): string {
@@ -45,4 +46,10 @@ export function shiftMonthKey(monthKey: string, delta: number): string {
   const [year, month] = monthKey.split("-").map(Number);
   const d = new Date(year, month - 1 + delta, 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+export function formatKnownSum({ knownTotal, unknownCount }: KnownSum): string {
+  if (!unknownCount) return formatCurrency(knownTotal);
+  const missing = `${unknownCount} בלי סכום`;
+  return knownTotal > 0 ? `לפחות ${formatCurrency(knownTotal)} · עוד ${missing}` : `סכום לא ידוע · ${missing}`;
 }

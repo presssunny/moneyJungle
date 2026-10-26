@@ -487,6 +487,12 @@ export interface ForecastScenario {
   oneTimeMonth: number;
 }
 
+/** A sum where an unknown amount is counted, not added as 0: the known part is a lower bound. */
+export interface KnownSum {
+  knownTotal: number;
+  unknownCount: number;
+}
+
 export interface ForecastResponse {
   backtest: { monthsTested: number; meanAbsoluteExpenseError: number | null };
   generatedAt: string;
@@ -497,8 +503,8 @@ export interface ForecastResponse {
   months: Array<{ monthKey: string; incomeTotal: number | null; expenseTotal: number | null; balance: number | null; scenarioBalance: number | null }>;
   annualBalance: number | null;
   scenarioAnnualBalance: number | null;
-  commitments: Array<{ monthKey: string; total: number; events: Array<{ date: string; name: string; amount: number; kind: string }> }>;
-  heaviest: { monthKey: string; total: number } | null;
+  commitments: Array<{ monthKey: string; total: KnownSum; events: Array<{ date: string; name: string; amount: number | null; kind: string }> }>;
+  heaviest: { monthKey: string; total: KnownSum } | null;
 }
 
 export interface WalletTransaction {

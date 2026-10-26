@@ -12,7 +12,7 @@ import { chartChrome, tooltipStyle } from "../components/dashboard/chartTheme";
 import { useAsync } from "../hooks/useAsync";
 import { getForecast } from "../services/future.service";
 import { emptyForecastScenario as initial, readForecastPreferences, saveForecastPreferences } from "../services/forecastPreferences";
-import { formatCurrency, formatDate, formatMonthKey } from "../utils/format";
+import { formatCurrency, formatDate, formatKnownSum, formatMonthKey } from "../utils/format";
 import "../styles/future.css";
 
 const money = (value: number | null) => value === null ? "—" : formatCurrency(value);
@@ -52,7 +52,7 @@ export default function ForecastPage() {
           <div className="kpi-row">
             <SummaryCard label="עודף משוער בחודש הבא" value={money(data.months[0].balance)} certainty={data.sufficient ? "scenario" : "unknown"} sub="הכנסות פחות הוצאות · לא יתרת בנק" />
             <SummaryCard label="עודף משוער ב־12 חודשים" value={money(data.annualBalance)} certainty={data.sufficient ? "scenario" : "unknown"} sub="בהנחה שהממוצע ההיסטורי נמשך" />
-            <SummaryCard label="החודש העמוס בהתחייבויות רשומות" value={data.heaviest ? formatMonthKey(data.heaviest.monthKey) : "—"} certainty={data.heaviest ? "scenario" : "unknown"} sub={data.heaviest ? `${money(data.heaviest.total)} · לפי הרשומות הקיימות` : "לא נמצאו התחייבויות בטווח"} />
+            <SummaryCard label="החודש העמוס בהתחייבויות רשומות" value={data.heaviest ? formatMonthKey(data.heaviest.monthKey) : "—"} certainty={data.heaviest ? "scenario" : "unknown"} sub={data.heaviest ? `${formatKnownSum(data.heaviest.total)} · לפי הרשומות הקיימות` : "לא נמצאו התחייבויות בטווח"} />
           </div>
           <Card title="מהעבר אל השנה הקרובה" action={<Select aria-label="מדד בגרף" value={metric} onChange={(e) => setMetric(e.target.value)} options={[{ value: "balance", label: "עודף / גירעון" }, { value: "incomeTotal", label: "הכנסות" }, { value: "expenseTotal", label: "הוצאות" }]} />}>
             <p className="text-muted">קו רציף: נתונים רשומים · קו מקווקו: אומדן. החודש הנוכחי אינו נכלל בממוצע.</p>
@@ -86,9 +86,9 @@ export default function ForecastPage() {
             <div className="future-detail" aria-live="polite"><h3>{formatMonthKey(month.monthKey)}</h3>
               <p>הכנסה משוערת: {money(month.incomeTotal)} · הוצאה משוערת: {money(month.expenseTotal)} · עודף משוער: {money(month.balance)}</p>
               {scenarioActive && <p>עודף בתרחיש שלך: <strong>{money(month.scenarioBalance)}</strong></p>}
-              <details><summary>תשלומים רשומים לחודש הזה ({commitments.events.length})</summary>
+              <details><summary>תשלומים רשומים לחודש הזה ({commitments.events.length}){commitments.events.length > 0 && ` · ${formatKnownSum(commitments.total)}`}</summary>
                 <p className="text-muted">רשימה נפרדת שאינה מתווספת לאומדן: חלק מהחיובים כבר נכללים בעבר. יש לבדוק רישום כפול בין מנויים לתשלומים קבועים. סכומי תזכורות והלוואות עשויים להיות משוערים.</p>
-                {commitments.events.length ? <ul className="future-events">{commitments.events.map((event, i) => <li key={`${event.date}-${i}`}><span>{formatDate(event.date)} · {event.name}</span><strong>{money(event.amount)}</strong></li>)}</ul> : <p>אין תשלומים רשומים לחודש הזה; אין בכך אישור שלא יהיו הוצאות.</p>}
+                {commitments.events.length ? <ul className="future-events">{commitments.events.map((event, i) => <li key={`${event.date}-${i}`}><span>{formatDate(event.date)} · {event.name}</span><strong>{event.amount === null ? "סכום לא ידוע" : formatCurrency(event.amount)}</strong></li>)}</ul> : <p>אין תשלומים רשומים לחודש הזה; אין בכך אישור שלא יהיו הוצאות.</p>}
               </details>
             </div>
           </Card>

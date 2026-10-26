@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Prisma } from "../../generated/prisma/client";
-import { decimalOrNull, decimalToNumber, percent, round2, sumDecimals } from "./money.utils";
+import { decimalOrNull, decimalToNumber, describeKnownSum, percent, round2, sumDecimals, sumKnown } from "./money.utils";
 
 describe("round2", () => {
   it("rounds to two decimals", () => {
@@ -99,5 +99,19 @@ describe("percent", () => {
 
   it("reports over-budget above 100 rather than capping", () => {
     expect(percent(300, 200)).toBe(150);
+  });
+});
+
+describe("sumKnown", () => {
+  it("counts an unknown amount instead of adding it as 0", () => {
+    expect(sumKnown([null, 100])).toEqual({ knownTotal: 100, unknownCount: 1 });
+    expect(sumKnown([0.1, 0.2])).toEqual({ knownTotal: 0.3, unknownCount: 0 });
+    expect(sumKnown([])).toEqual({ knownTotal: 0, unknownCount: 0 });
+  });
+
+  it("says 'at least' while some amounts are unknown", () => {
+    expect(describeKnownSum({ knownTotal: 1200, unknownCount: 0 })).toBe("₪1,200");
+    expect(describeKnownSum({ knownTotal: 1200, unknownCount: 2 })).toBe("לפחות ₪1,200 · עוד 2 בלי סכום");
+    expect(describeKnownSum({ knownTotal: 0, unknownCount: 1 })).toBe("סכום לא ידוע · 1 בלי סכום");
   });
 });

@@ -58,7 +58,7 @@ export async function commitments(userId: number): Promise<Commitment[]> {
     prisma.commitmentDecision.findMany({ where: { userId } }),
   ]);
   const rows: Array<Pick<Commitment, "key" | "date" | "name" | "amount" | "kind" | "to">> = upcoming.events.map(e => ({ key: e.key!, date: e.date.slice(0, 10), name: e.name,
-    amount: e.amountKnown === false ? null : e.amount, kind: e.kind,
+    amount: e.amount, kind: e.kind,
     to: e.kind === "loan" ? "/accounts?tab=loans" : `/commitments?tab=${e.kind === "subscription" ? "subscriptions" : e.kind === "recurring" ? "recurring" : "calendar"}` }));
   const bills = new Map<string, { key: string; date: string; name: string; amount: number; kind: string; to: string; cardId: number | null; cardLastFour: string | null }>();
   for (const tx of cards) {
