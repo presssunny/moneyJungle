@@ -8,10 +8,13 @@ const accountFields = {
   accountName: z.string().min(1, "יש להזין שם חשבון").max(120),
 };
 
-export const createBankAccountSchema = z.object({ ...accountFields, initialBalance: z.coerce.number().default(0) });
+// No default: an opening balance she did not state is unknown (null), not 0.
+const openingBalance = z.number().finite().min(-9999999999).max(9999999999).nullable();
+
+export const createBankAccountSchema = z.object({ ...accountFields, initialBalance: openingBalance.optional() });
 
 // Built without defaults: .partial() keeps them, and an edit of the name alone reset the opening balance to 0.
-export const updateBankAccountSchema = z.object({ ...accountFields, initialBalance: z.coerce.number() }).partial();
+export const updateBankAccountSchema = z.object({ ...accountFields, initialBalance: openingBalance }).partial();
 
 export const createBankTransactionSchema = z.object({
   transactionDate: z.coerce.date(),

@@ -35,7 +35,7 @@ interface PlannedObligation { key: string; name: string; date: string; amount: n
  */
 function planAcrossAccounts(input: {
   profile: { spendingAccountId: number | null; savedReserve: unknown; savedReserveLocation: string | null };
-  balances: Array<{ id: number; name: string; balance: number; anchor: { coverageTo: string } | null }>;
+  balances: Array<{ id: number; name: string; balance: number | null; anchor: { coverageTo: string } | null }>;
   unpaid: Array<{ key: string; name: string; date: string; amount: number | null; kind: string }>;
   fundingRows: Array<{ sourceKey: string; bankAccountId: number }>;
   today: string; end: string; dates: string[]; blockers: string[];
@@ -43,7 +43,7 @@ function planAcrossAccounts(input: {
   const { profile, balances, unpaid, today, end, dates, blockers } = input;
   const payer = new Map(input.fundingRows.map(r => [r.sourceKey, r.bankAccountId]));
   const spending = balances.find(b => b.id === profile.spendingAccountId);
-  const empty = { cashInPlan: 0, savedReserveCounted: 0, obligations: [] as PlannedObligation[], transfers: [] as PlannedTransfer[] };
+  const empty = { cashInPlan: 0 as number | null, savedReserveCounted: 0, obligations: [] as PlannedObligation[], transfers: [] as PlannedTransfer[] };
   if (!spending) { blockers.push("יש לבחור את החשבון שממנו יוצאות ההוצאות השוטפות, כדי לתכנן כשיש כמה חשבונות"); return empty; }
   const savedReserve = Number(profile.savedReserve);
   if (savedReserve > 0 && !profile.savedReserveLocation) blockers.push("יש לציין באיזה חשבון מוחזק החיסכון ששוריין");
@@ -58,6 +58,8 @@ function planAcrossAccounts(input: {
     const own = relevant.filter(o => o.accountId === other.id);
     const inPeriod: CashObligation[] = own.filter(o => o.date <= end).map(o => ({ date: o.date, amount: o.amount }));
     const after = own.filter(o => o.date > end).reduce((sum, o) => sum + o.amount, 0);
+    // An unknown balance already blocks the plan (no anchor); its deficit cannot be computed.
+    if (other.balance === null) continue;
     const deficit = accountDeficit(other.balance, dates, inPeriod, after);
     if (deficit.amount > 0 && deficit.date) transfers.push({ accountId: other.id, name: other.name, amount: deficit.amount, date: deficit.date });
   }
@@ -112,6 +114,7 @@ export async function financialStatus(userId: number) {
   if (!accounts.length) blockers.push("אין יתרת בנק מאומתת לתכנון מזומן");
   const multiAccount = accounts.length > 1;
   if (!multiAccount && balances.some(b => b.anchor?.coverageTo !== today)) blockers.push("נדרשת יתרה מאומתת להיום בכל חשבון בנק");
+  for (const b of balances) if (b.balance === null) blockers.push(`יתרת הפתיחה של ${b.name} לא ידועה — יש להזין את היתרה מהבנק`);
   if (issues.some(i => i.blocking)) blockers.push("נשארו דוחות או תנועות שצריך לבדוק");
   if (pendingDates) blockers.push("יש עסקאות אשראי ללא מועד חיוב או כרטיס — לא ניתן לקבוע התחייבות מלאה");
   if (financing) blockers.push("יש עסקאות מימון שטרם הותאמו להתחייבות ההחזר — לא ניתן לקבוע את סכום התשלום המלא");
@@ -123,12 +126,13 @@ export async function financialStatus(userId: number) {
   const end = new Date(Date.UTC(Number(today.slice(0,4)), Number(today.slice(5,7)), 0)).toISOString().slice(0,10);
   const dates: string[] = []; for (let d=today; d<=end; d=nextDate(d,1)) dates.push(d);
   const unpaid = events.filter(e => e.decision === "unpaid" && e.amount !== null);
-  const cash = balances.reduce((sum,b)=>sum+b.balance,0);
+  // One unknown balance makes the total unknown: a bank balance can be an overdraft, so the rest is no lower bound.
+  const cash = balances.some(b => b.balance === null) ? null : balances.reduce((sum,b)=>sum+b.balance!,0);
   const plan = multiAccount ? planAcrossAccounts({ profile, balances, unpaid, fundingRows, today, end, dates, blockers })
     : { cashInPlan: cash, savedReserveCounted: Number(profile.savedReserve), obligations: unpaid.filter(e=>e.date<=end||e.kind==="credit").map(e=>({ key: e.key, name: e.name, date: e.date, amount: Math.max(0,e.amount!) })), transfers: [] as PlannedTransfer[] };
   const futureCardReserve = plan.obligations.filter(o => o.key.startsWith("credit:") && o.date > end).reduce((s,o)=>s+o.amount,0);
   const reserves = Number(profile.cashBuffer) + plan.savedReserveCounted + futureCardReserve;
-  const calculated = calculateAllowance(plan.cashInPlan, reserves, Number(profile.essentialReserve), dates, [
+  const calculated = plan.cashInPlan === null ? null : calculateAllowance(plan.cashInPlan, reserves, Number(profile.essentialReserve), dates, [
     ...plan.obligations.filter(o=>o.date<=end).map(o=>({date:o.date,amount:o.amount})),
     ...plan.transfers.map(t=>({date:t.date,amount:t.amount})),
   ]);
@@ -136,7 +140,7 @@ export async function financialStatus(userId: number) {
   // the current coverage/limitations summary — not a client-supplied boolean.
   const coverageAcknowledged = !coverageStale && !coverageSourcesStale;
   const state = { today, end, hasActivity: Boolean(expenses.length || incomes.length || bankRows.length || creditRows.length), dataVersion, profile, sources, balances, cards, events, issues, blockers, coverageAcknowledged,
-    allowance: { limitingDate: blockers.length ? null : calculated.limitingDate, amount: blockers.length ? null : calculated.daily, shortfall: blockers.length ? null : calculated.shortfall,
+    allowance: { limitingDate: blockers.length || !calculated ? null : calculated.limitingDate, amount: blockers.length || !calculated ? null : calculated.daily, shortfall: blockers.length || !calculated ? null : calculated.shortfall,
       state: blockers.length ? "unavailable" : "provisional", cash, reserves, essentialReserve: Number(profile.essentialReserve),
       /** The cash the calculation starts from: every account's with one account, the spending account's with several. */
       cashInPlan: plan.cashInPlan, savedReserveCounted: plan.savedReserveCounted,

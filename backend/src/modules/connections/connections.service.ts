@@ -35,10 +35,12 @@ const outcomeOf = (connection: PublicConnection) => (Array.isArray(connection.sy
 /**
  * Synced bank rows carry no running balance, so completeness is checked against the site's own
  * balance once the import is approved (banker 2026-10-17). Ours comes from the one balance service.
+ * An unknown balance of ours is not compared — it would show the whole site balance as a gap.
  */
-async function ourBalance(userId: number, connection: PublicConnection, item: SyncOutcomeItem, status: string | undefined): Promise<number | null> {
-  if (connection.kind !== "bank" || !connection.bankAccountId || item.siteBalance == null || status !== "completed") return null;
-  return (await accountBalanceService.derive(userId, connection.bankAccountId)).balance;
+async function balanceCheck(userId: number, connection: PublicConnection, item: SyncOutcomeItem, status: string | undefined) {
+  if (connection.kind !== "bank" || !connection.bankAccountId || item.siteBalance == null || status !== "completed") return { ourBalance: null, balanceUnknown: false };
+  const { balance } = await accountBalanceService.derive(userId, connection.bankAccountId);
+  return { ourBalance: balance, balanceUnknown: balance === null };
 }
 
 /**
@@ -52,7 +54,7 @@ async function present(userId: number, connections: PublicConnection[]) {
     const block = retryBlock(connection, connection.syncs[0]);
     const outcome = await Promise.all(outcomeOf(connection).map(async (item) => {
       const itemReview = item.importSessionId ? review.get(item.importSessionId) ?? null : null;
-      return { ...item, review: itemReview, ourBalance: await ourBalance(userId, connection, item, itemReview?.status) };
+      return { ...item, review: itemReview, ...(await balanceCheck(userId, connection, item, itemReview?.status)) };
     }));
     const syncs = connection.syncs.map((sync, index) => (index > 0 ? sync : { ...sync, outcome }));
     return { ...connection, syncs, retryBlockedReason: block?.reason ?? null, retryMessage: block?.message ?? null, retryAvailableAt: block?.until ?? null };

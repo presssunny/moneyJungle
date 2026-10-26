@@ -376,9 +376,10 @@ model BankAccount {
   userId         Int       @map("user_id")
   bankName       String    @map("bank_name") @db.VarChar(120)
   accountName    String    @map("account_name") @db.VarChar(120)
-  initialBalance Decimal   @default(0) @map("initial_balance") @db.Decimal(12, 2)
-  /// Derived, never accumulated — a cached copy of accountBalance.derive().
-  currentBalance Decimal   @default(0) @map("current_balance") @db.Decimal(12, 2)
+  /// null = never stated: unknown, not an empty account.
+  initialBalance Decimal?  @map("initial_balance") @db.Decimal(12, 2)
+  /// Derived, never accumulated — a cached copy of accountBalance.derive(); null when unknown.
+  currentBalance Decimal?  @map("current_balance") @db.Decimal(12, 2)
   /// Balance the user states from the bank itself, as of `anchorDate`. Used when
   /// no statement carries a printed balance column. Competes with statement
   /// anchors on date: whichever is more recent wins.

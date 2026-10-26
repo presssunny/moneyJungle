@@ -96,7 +96,7 @@ export const crmRepository = {
   },
 
   sumBankBalanceByUser() {
-    return prisma.bankAccount.groupBy({ by: ["userId"], _sum: { currentBalance: true } });
+    return prisma.bankAccount.groupBy({ by: ["userId"], _sum: { currentBalance: true }, _count: { _all: true, currentBalance: true } });
   },
 
   /** Most recent touch per user across the tables that matter for "last activity". */

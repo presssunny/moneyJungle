@@ -70,8 +70,8 @@ export const bankService = {
         userId,
         bankName: body.bankName,
         accountName: body.accountName,
-        initialBalance: body.initialBalance,
-        currentBalance: body.initialBalance,
+        initialBalance: body.initialBalance ?? null,
+        currentBalance: body.initialBalance ?? null,
       },
     });
   },
@@ -228,7 +228,7 @@ export const bankService = {
     // Full recomputation — there is no increment path left that could drift.
     const balance = await accountBalanceService.recompute(userId, accountId);
     console.log(
-      `[קליטת דוח בנק] יתרת החשבון: ${balance.balance} — ${balance.explanation}` +
+      `[קליטת דוח בנק] יתרת החשבון: ${balance.balance ?? "לא ידועה"} — ${balance.explanation}` +
         (report.closingBalance === null
           ? " (הקובץ הזה אינו כולל עמודת יתרה, ולכן אינו יכול לעגן את היתרה)"
           : "")

@@ -7,7 +7,7 @@ import { financialStatus } from "./coverage.service";
 import { businessDate, fingerprint, json } from "./journey.utils";
 interface SnapshotRow { key:string; date:string; amount:number; hash:string }
 export interface CheckInSnapshot {
-  version:1|2; date:string; rows:SnapshotRow[]; bankCash:number; coverageVersion:string; incomplete:boolean;
+  version:1|2; date:string; rows:SnapshotRow[]; bankCash:number|null; coverageVersion:string; incomplete:boolean;
   calculationVersion?:string; windowStart?:string; historicalHash?:string; historicalCount?:number; truncated?:boolean; limitations?:string[];
 }
 export function compareSnapshots(previous:CheckInSnapshot|null,current:CheckInSnapshot) {
@@ -20,7 +20,7 @@ export function compareSnapshots(previous:CheckInSnapshot|null,current:CheckInSn
   return {baseline:false,added:limited?null:added.length,late:limited?null:added.filter(r=>r.date<previous.date).length,
     changed:limited?null:[...after.values()].filter(r=>before.has(r.key)&&before.get(r.key)!.hash!==r.hash).length,
     removed:limited?null:[...before.keys()].filter(key=>!after.has(key)).length,
-    cashChange:previous.incomplete||current.incomplete?null:Math.round((current.bankCash-previous.bankCash)*100)/100,
+    cashChange:previous.incomplete||current.incomplete||current.bankCash===null||previous.bankCash===null?null:Math.round((current.bankCash-previous.bankCash)*100)/100,
     limited,historyChanged:previous.windowStart===current.windowStart?previous.historicalHash!==current.historicalHash:null};
 }
 function snapshotAccumulator(date:string) {

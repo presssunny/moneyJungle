@@ -1,17 +1,19 @@
 import { businessDate } from "../journey/journey.utils";
 import { prisma } from "../../config/database";
-import { decimalToNumber, round2 } from "../../utils/money.utils";
+import { decimalOrNull, decimalToNumber, round2 } from "../../utils/money.utils";
 
 /**
  * Account balance, derived — never accumulated: the newest printed closing
  * balance plus only what is dated after it, so re-importing an overlapping
  * statement cannot drift it. With no anchor at all it falls back to the
- * accumulated sum and SAYS so — an admitted estimate beats a false fact.
+ * accumulated sum and SAYS so — an admitted estimate beats a false fact. With no
+ * anchor and no opening balance either, it is unknown (null), never 0.
  */
-export type BalanceBasis = "statement" | "accumulated";
+export type BalanceBasis = "statement" | "accumulated" | "unknown";
 
 export interface DerivedBalance {
-  balance: number;
+  /** null = unknown: nothing states where the account started or stands. */
+  balance: number | null;
   basis: BalanceBasis;
   /** The anchor it is measured from — null when falling back. */
   anchor: {
@@ -90,6 +92,18 @@ export const accountBalanceService = {
 
     const anchor = await findAnchor(userId, accountId, account);
 
+    const opening = decimalOrNull(account.initialBalance);
+    if (!anchor && opening === null) {
+      return {
+        balance: null,
+        basis: "unknown",
+        anchor: null,
+        afterAnchorNet: 0,
+        afterAnchorCount: 0,
+        explanation: "יתרה לא ידועה — אין יתרת פתיחה, דוח עם יתרה מודפסת או יתרה שהזנת",
+      };
+    }
+
     if (!anchor) {
       // No statement ever reported a balance — the best we can do is the old
       // sum. Reported as "accumulated" so the UI never presents it as verified.
@@ -99,7 +113,7 @@ export const accountBalanceService = {
       });
       const net = all.reduce((sum, t) => sum + signed(t.type, decimalToNumber(t.amount)), 0);
       return {
-        balance: round2(decimalToNumber(account.initialBalance) + net),
+        balance: round2((opening ?? 0) + net),
         basis: "accumulated",
         anchor: null,
         afterAnchorNet: round2(net),

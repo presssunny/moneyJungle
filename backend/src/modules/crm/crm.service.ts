@@ -35,6 +35,8 @@ export const crmService = {
     const expenseMap = toSumMap(expenseSums, "amount");
     const loanMap = toSumMap(loanSums, "currentBalance");
     const bankMap = toSumMap(bankSums, "currentBalance");
+    // SUM skips NULL: a user with an unknown balance would show the rest as the whole.
+    const bankUnknown = new Set(bankSums.filter((g) => g._count._all > g._count.currentBalance).map((g) => g.userId));
 
     // Latest touch across incomes/expenses/loans/bank transactions, per user.
     const lastActivityMap = new Map<number, Date>();
@@ -66,7 +68,7 @@ export const crmService = {
         totalExpense,
         netCashflow: sumDecimals([totalIncome, -totalExpense]),
         activeLoanBalance: loanMap.get(user.id) ?? 0,
-        bankBalance: bankMap.get(user.id) ?? 0,
+        bankBalance: bankUnknown.has(user.id) ? null : bankMap.get(user.id) ?? 0,
         lastActivityAt: lastActivityMap.get(user.id) ?? null,
       };
     });
@@ -173,13 +175,15 @@ export const crmService = {
       bank: {
         accounts: bankAccounts.map((a) => ({
           ...a,
-          initialBalance: num(a.initialBalance),
-          currentBalance: num(a.currentBalance),
-          anchorBalance: num(a.anchorBalance),
+          initialBalance: decimalOrNull(a.initialBalance),
+          currentBalance: decimalOrNull(a.currentBalance),
+          anchorBalance: decimalOrNull(a.anchorBalance),
           transactionCount: a._count.transactions,
           statementCount: a._count.statements,
         })),
-        totalBalance: sumDecimals(bankAccounts.map((a) => a.currentBalance)),
+        // A bank balance can be an overdraft: with one unknown, the rest is no lower bound.
+        totalBalance: bankAccounts.some((a) => a.currentBalance === null) ? null : sumDecimals(bankAccounts.map((a) => a.currentBalance)),
+        unknownBalanceCount: bankAccounts.filter((a) => a.currentBalance === null).length,
         recentTransactions: recentBankTransactions.map((t) => ({
           ...t,
           amount: num(t.amount),

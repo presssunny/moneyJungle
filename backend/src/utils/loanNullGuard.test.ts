@@ -12,10 +12,6 @@ const ZERO_FOR_UNKNOWN = new RegExp(
   ].join("|")
 );
 
-// A bank account's balance is not a loan field but shares the name; it becomes
-// nullable in P0-B, which removes this entry. Matched by content, not line number.
-const ALLOWED = ["currentBalance: num(a.currentBalance),"];
-
 const SRC = path.resolve(__dirname, "..");
 
 function sourceFiles(dir: string): string[] {
@@ -41,7 +37,7 @@ describe("an unknown loan value is never read as 0", () => {
       readFileSync(file, "utf8")
         .split("\n")
         .flatMap((line, i) =>
-          ZERO_FOR_UNKNOWN.test(line) && !ALLOWED.includes(line.trim()) ? [`${path.relative(SRC, file)}:${i + 1}`] : []
+          ZERO_FOR_UNKNOWN.test(line) ? [`${path.relative(SRC, file)}:${i + 1}`] : []
         )
     );
     expect(offenders).toEqual([]);

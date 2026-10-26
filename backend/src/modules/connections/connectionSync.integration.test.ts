@@ -473,15 +473,25 @@ describe("bank and card connections", () => {
   });
 
   it("after approval, puts our balance next to the bank site's balance from the sync", async () => {
+    await prisma.bankAccount.update({ where: { id: accountId }, data: { initialBalance: 1000 } });
     const connection = await bankConnection();
     const scrape = fakeFactory({ success: true, accounts: [{ accountNumber: "1", balance: 970, txns: [txn("חדש", -30)] }] });
     await (await connectionSync.start(userId, connection.id, scrape.factory)).done;
     const before = (await connectionsService.get(userId, connection.id)).syncs[0].outcome as unknown as Array<{ ourBalance: number | null }>;
     expect(before[0].ourBalance).toBeNull();
     await prisma.importSession.update({ where: { id: (await sessionOf(connection.id)).importSessionId! }, data: { status: "completed" } });
-    const after = (await connectionsService.get(userId, connection.id)).syncs[0].outcome as unknown as Array<{ siteBalance: number; ourBalance: number | null }>;
+    const after = (await connectionsService.get(userId, connection.id)).syncs[0].outcome as unknown as Array<{ siteBalance: number; ourBalance: number | null; balanceUnknown: boolean }>;
     expect(after[0].siteBalance).toBe(970);
     expect(typeof after[0].ourBalance).toBe("number");
+    expect(after[0].balanceUnknown).toBe(false);
+  });
+
+  it("does not compare with the site when our opening balance is unknown — that would show the whole balance as a gap", async () => {
+    const connection = await bankConnection();
+    await (await connectionSync.start(userId, connection.id, fakeFactory({ success: true, accounts: [{ accountNumber: "1", balance: 970, txns: [txn("חדש", -30)] }] }).factory)).done;
+    await prisma.importSession.update({ where: { id: (await sessionOf(connection.id)).importSessionId! }, data: { status: "completed" } });
+    const after = (await connectionsService.get(userId, connection.id)).syncs[0].outcome as unknown as Array<{ ourBalance: number | null; balanceUnknown: boolean }>;
+    expect(after[0]).toMatchObject({ ourBalance: null, balanceUnknown: true });
   });
 
   it("offers the official window for Beinleumi only", async () => {
