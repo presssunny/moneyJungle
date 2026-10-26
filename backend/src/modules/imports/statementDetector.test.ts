@@ -3,9 +3,12 @@
  * where a mistake costs most: the wrong parser does not fail loudly, it writes
  * plausible nonsense into a real account.
  */
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import * as XLSX from "xlsx";
-import { detectStatement } from "./statementDetector.service";
+import { readPdfText } from "../bank/bankParser.service";
+import { fixturePath, hasFixture, type FixtureName } from "../../testing/fixtures";
+import { detectStatement, isScheduleText } from "./statementDetector.service";
 
 /** Build a real .xlsx in memory from header rows, so the detector runs for real. */
 function sheetOf(rows: string[][]): Buffer {
@@ -77,5 +80,18 @@ describe("detectStatement", () => {
   it("אותו קובץ מקבל את אותו hash", () => {
     const buffer = sheetOf(BANK_HEADER);
     expect(detectStatement(buffer, "a.xlsx").fileHash).toBe(detectStatement(buffer, "b.xlsx").fileHash);
+  });
+});
+
+describe("a PDF is held back as a schedule only on a schedule's own markers", () => {
+  const pdfs: FixtureName[] = ["bankStatementPdf", "bankStatementDailyPdf", "bankStatementDailyStartPdf"];
+  it.each(pdfs)("the real bank statement %s is not taken for a schedule", async (name) => {
+    if (!hasFixture(name)) return;
+    expect(isScheduleText(await readPdfText(readFileSync(fixturePath(name))))).toBe(false);
+  });
+
+  it("a balance column alone does not make a schedule", () => {
+    expect(isScheduleText("תאריך תיאור חובה זכות יתרה")).toBe(false);
+    expect(isScheduleText("לוח סילוקין · מספר תשלום קרן · יתרה לאחר תשלום קרן")).toBe(true);
   });
 });

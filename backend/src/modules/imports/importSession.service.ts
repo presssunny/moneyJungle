@@ -5,14 +5,14 @@ import { ApiError } from "../../utils/ApiError";
 import { documentStorage } from "../documents/documentStorage.service";
 import { documentsService } from "../documents/documents.service";
 import { bankService } from "../bank/bank.service";
-import { describeIngestionIssues, describeIngestionReport, parseBankStatement, parseBankStatementPdf, type ParsedBankStatement } from "../bank/bankParser.service";
+import { describeIngestionIssues, describeIngestionReport, parseBankStatement, parseBankStatementPdf, readPdfText, type ParsedBankStatement } from "../bank/bankParser.service";
 import { creditService } from "../credit/credit.service";
 import { parseCreditFile } from "../credit/creditParser.service";
 import { loanScheduleService } from "../loans/loanSchedule.service";
 import { parseLoanSchedule } from "../loans/loanSchedule.parser";
 import { importsService } from "./imports.service";
 import { parseExpensesFile } from "./importsParser.service";
-import { detectStatement, hashFile } from "./statementDetector.service";
+import { detectStatement, hashFile, isScheduleText } from "./statementDetector.service";
 import { importRows, type ImportOrigin, type PreviewRow, type SourceRef } from "./importRows.service";
 import { json } from "../journey/journey.utils";
 import { statementCommitmentsService } from "../bank/statementCommitments.service";
@@ -47,6 +47,12 @@ async function prepare(userId: number, buffer: Buffer, fileName: string, answers
   const isPdf = /\.pdf$/i.test(fileName) || buffer.subarray(0,5).toString() === "%PDF-";
   let kind: string = answers.kind ?? (isPdf ? "unknown" : detected.kind);
   let detectedBank: ParsedBankStatement | undefined;
+  // Whatever kind was chosen: a schedule read as a statement wrote years of future "transactions" once.
+  if (isPdf && isScheduleText(await readPdfText(buffer).catch(() => ""))) {
+    const preview: ImportPreview = { rows: [], total: 0, count: 0, warnings: [], questions: [],
+      blockingIssues: ["לוח סילוקין נקלט כרגע רק מקובץ Excel. אפשר להוריד מהבנק את הלוח כקובץ Excel ולהעלות אותו כאן."] };
+    return { kind: "loan_schedule", preview };
+  }
   if (kind === "unknown" && isPdf) {
     // Physical table headers and dated rows establish the kind; an extension cannot.
     try { detectedBank = await parseBankStatementPdf(buffer, { requireColumns: true }); kind = "bank"; }

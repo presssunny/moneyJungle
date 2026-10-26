@@ -1016,18 +1016,21 @@ function keywordType(text: string): BankTransactionKind | null {
   return null;
 }
 
+export async function readPdfText(buffer: Buffer): Promise<string> {
+  try {
+    return (await pdfParse(buffer)).text;
+  } catch {
+    throw ApiError.badRequest("לא ניתן לקרוא את קובץ ה-PDF");
+  }
+}
+
 /**
  * Last-resort PDF parser for statements with no recoverable columns: line by
  * line, classifying by the change in running balance, else by sign or keywords.
  * Rows classified by keywords alone go to the review queue — a guess must show.
  */
 async function parseBankStatementPdfByText(buffer: Buffer): Promise<ParsedBankStatement> {
-  let text: string;
-  try {
-    text = (await pdfParse(buffer)).text;
-  } catch {
-    throw ApiError.badRequest("לא ניתן לקרוא את קובץ ה-PDF");
-  }
+  const text = await readPdfText(buffer);
 
   const lines = text
     .split(/\r?\n/)

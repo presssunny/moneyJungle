@@ -49,6 +49,15 @@ const SCHEDULE_SIGNALS: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /סכום\s*תשלום\s*קרן/, label: "סכום תשלום קרן" },
 ];
 
+/** Two of a schedule's own markers are conclusive — in a sheet's headers or a PDF's text. */
+export function isScheduleText(text: string): boolean {
+  return scheduleSignalHits(text).length >= 2;
+}
+
+function scheduleSignalHits(text: string): string[] {
+  return SCHEDULE_SIGNALS.filter((signal) => signal.pattern.test(text)).map((signal) => signal.label);
+}
+
 const CREDIT_SIGNALS: Array<{ pattern: RegExp; label: string; weight: number }> = [
   { pattern: /בית\s*עסק/, label: "שם בית עסק", weight: 3 },
   { pattern: /מועד\s*ה?חיוב|תאריך\s*חיוב/, label: "מועד חיוב", weight: 3 },
@@ -141,12 +150,12 @@ export function detectStatement(buffer: Buffer, fileName: string): StatementDete
   // A schedule is decided before anything else: two of its own markers are
   // conclusive, and letting it fall through to the statement scoring is what
   // put future-dated rows into a real bank account.
-  const scheduleHits = SCHEDULE_SIGNALS.filter((signal) => signal.pattern.test(text));
-  if (scheduleHits.length >= 2) {
+  if (isScheduleText(text)) {
+    const scheduleHits = scheduleSignalHits(text);
     return {
       kind: "loan_schedule",
-      reason: `זוהה לוח סילוקין של הלוואה לפי: ${scheduleHits.map((h) => h.label).join(", ")}`,
-      matchedSignals: scheduleHits.map((h) => h.label),
+      reason: `זוהה לוח סילוקין של הלוואה לפי: ${scheduleHits.join(", ")}`,
+      matchedSignals: scheduleHits,
       bankScore: 0,
       creditScore: 0,
       fileHash,
