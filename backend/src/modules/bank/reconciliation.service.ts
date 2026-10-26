@@ -785,6 +785,8 @@ export const reconciliationService = {
       const existing = await prisma.loan.findFirst({ where: { id: loanId, userId } });
       if (!existing) throw ApiError.notFound("ההלוואה לא נמצאה");
     } else {
+      // The payment is the one figure a new loan cannot do without, and only she knows it.
+      if (!body.monthlyPayment || body.monthlyPayment <= 0) throw ApiError.badRequest("יש להזין החזר חודשי");
       // A drawdown states the loan's own amount, so it is the one case where the
       // statement itself supplies the opening balance.
       const drawdown = txs.find((t) => t.lineKind === "loan_drawdown");
@@ -801,8 +803,7 @@ export const reconciliationService = {
           ...(originalAmount === null ? { originalAmountSource: "unknown" } : {}),
           currentBalance: body.currentBalance ?? originalAmount,
           annualInterestRate: body.annualInterestRate ?? null,
-          // TODO(P0 later phase): 0 here is an invented payment, not a known one.
-          monthlyPayment: body.monthlyPayment ?? 0,
+          monthlyPayment: body.monthlyPayment,
           startDate: body.startDate ? new Date(body.startDate) : txs[0]!.transactionDate,
         },
       });

@@ -43,7 +43,7 @@ export const reconcileLoanSchema = z.object({
   annualInterestRate: z.coerce.number().nonnegative().max(100).optional(),
   monthlyPayment: z.coerce.number().nonnegative().optional(),
   startDate: z.string().optional(),
-});
+}).refine((body) => body.loanId !== undefined || (body.monthlyPayment ?? 0) > 0, { message: "יש להזין החזר חודשי", path: ["monthlyPayment"] });
 
 /** A balance can legitimately be negative (overdraft) — no nonnegative here. */
 export const setAnchorSchema = z.object({

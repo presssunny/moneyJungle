@@ -4,7 +4,17 @@ import { describe, expect, it } from "vitest";
 
 // decimalToNumber turns an unknown loan balance/rate/opening amount into 0 —
 // "paid off" or "0%". Loan fields go through decimalOrNull / loanFigures.
-const ZERO_FOR_UNKNOWN = /decimalToNumber\(\s*[\w.]*\.(currentBalance|originalAmount|annualInterestRate)\)/;
+const LOAN_FIELD = "(currentBalance|originalAmount|annualInterestRate)";
+const ZERO_FOR_UNKNOWN = new RegExp(
+  [
+    `(decimalToNumber|num|Number)\\(\\s*[\\w.]*\\.${LOAN_FIELD}\\)`,
+    `decimalOrNull\\(\\s*[\\w.]*\\.${LOAN_FIELD}\\)\\s*\\?\\?\\s*0\\b`,
+  ].join("|")
+);
+
+// A bank account's balance is not a loan field but shares the name; it becomes
+// nullable in P0-B, which removes this entry. Matched by content, not line number.
+const ALLOWED = ["currentBalance: num(a.currentBalance),"];
 
 const SRC = path.resolve(__dirname, "..");
 
@@ -21,13 +31,18 @@ describe("an unknown loan value is never read as 0", () => {
     expect(ZERO_FOR_UNKNOWN.test("const b = decimalToNumber(loan.currentBalance);")).toBe(true);
     expect(ZERO_FOR_UNKNOWN.test("decimalToNumber(goal.loan.annualInterestRate)")).toBe(true);
     expect(ZERO_FOR_UNKNOWN.test("decimalOrNull(loan.currentBalance)")).toBe(false);
+    expect(ZERO_FOR_UNKNOWN.test("originalAmount: decimalOrNull(l.originalAmount) ?? 0,")).toBe(true);
+    expect(ZERO_FOR_UNKNOWN.test("rate: num(l.annualInterestRate),")).toBe(true);
+    expect(ZERO_FOR_UNKNOWN.test("Number(loan.currentBalance)")).toBe(true);
   });
 
   it("no source file converts a loan's balance, rate or opening amount with decimalToNumber", () => {
     const offenders = sourceFiles(SRC).flatMap((file) =>
       readFileSync(file, "utf8")
         .split("\n")
-        .flatMap((line, i) => (ZERO_FOR_UNKNOWN.test(line) ? [`${path.relative(SRC, file)}:${i + 1}`] : []))
+        .flatMap((line, i) =>
+          ZERO_FOR_UNKNOWN.test(line) && !ALLOWED.includes(line.trim()) ? [`${path.relative(SRC, file)}:${i + 1}`] : []
+        )
     );
     expect(offenders).toEqual([]);
   });

@@ -162,10 +162,9 @@ export const crmService = {
       },
       loans: loans.map((l) => ({
         ...l,
-        // Unknown shows as 0 here on purpose for now: the CRM view is not yet null-aware.
-        originalAmount: decimalOrNull(l.originalAmount) ?? 0,
-        currentBalance: decimalOrNull(l.currentBalance) ?? 0,
-        annualInterestRate: decimalOrNull(l.annualInterestRate) ?? 0,
+        originalAmount: decimalOrNull(l.originalAmount),
+        currentBalance: decimalOrNull(l.currentBalance),
+        annualInterestRate: decimalOrNull(l.annualInterestRate),
         monthlyPayment: num(l.monthlyPayment),
         earlyRepaymentFee: num(l.earlyRepaymentFee),
         closureCost: num(l.closureCost),

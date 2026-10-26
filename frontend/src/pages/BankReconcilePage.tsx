@@ -549,13 +549,14 @@ function LoanGroupCard({
           <Input
             label="תשלום חודשי"
             type="number"
+            required
             value={form.monthlyPayment}
             onChange={(e) => setForm({ ...form, monthlyPayment: e.target.value })}
           />
           <Button
             variant="primary"
             size="sm"
-            disabled={busy || !form.loanName}
+            disabled={busy || !form.loanName || !(Number(form.monthlyPayment) > 0)}
             onClick={() =>
               run(
                 () =>
@@ -565,7 +566,7 @@ function LoanGroupCard({
                     loanType: form.loanType,
                     originalAmount: form.originalAmount ? Number(form.originalAmount) : undefined,
                     annualInterestRate: form.annualInterestRate ? Number(form.annualInterestRate) : undefined,
-                    monthlyPayment: form.monthlyPayment ? Number(form.monthlyPayment) : 0,
+                    monthlyPayment: Number(form.monthlyPayment),
                   }),
                 "נוצרה הלוואה"
               )
