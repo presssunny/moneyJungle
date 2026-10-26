@@ -23,8 +23,8 @@ afterEach(async () => { await prisma.user.delete({ where: { id: userId } }); });
 afterAll(async () => { await prisma.$disconnect(); });
 
 /** A zip whose central directory claims one entry of `size` uncompressed bytes. */
-function zipClaiming(size: number): Buffer {
-  const name = Buffer.from("xl/workbook.xml");
+function zipClaiming(size: number, entry = "xl/workbook.xml"): Buffer {
+  const name = Buffer.from(entry);
   const local = Buffer.alloc(30); local.writeUInt32LE(0x04034b50, 0);
   const central = Buffer.alloc(46); central.writeUInt32LE(0x02014b50, 0); central.writeUInt32LE(size, 24); central.writeUInt16LE(name.length, 28);
   const end = Buffer.alloc(22); end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(1, 8); end.writeUInt16LE(1, 10);
@@ -37,6 +37,7 @@ const ATTACKS: Array<[string, Buffer, string]> = [
   ["an image renamed to .xlsx", PNG, "statement.xlsx"],
   ["an empty file", Buffer.alloc(0), "statement.csv"],
   ["a zip bomb", zipClaiming(0xfffffff0), "statement.xlsx"],
+  ["a zip bomb with a PDF marker in an entry name", zipClaiming(0xfffffff0, "%PDF-/workbook.xml"), "statement.xlsx"],
   ["an executable renamed to .pdf", Buffer.concat([Buffer.from("MZ"), Buffer.alloc(200)]), "statement.pdf"],
 ];
 
@@ -82,6 +83,10 @@ describe("real files keep passing", () => {
     const kind = fileKind(readFileSync(path.join(dir, name)));
     if (Array.isArray(expected)) expect(expected).toContain(kind);
     else expect(kind).toBe(expected);
+  });
+
+  it("a CSV saved as Unicode text (UTF-16 with its byte-order mark) is text", () => {
+    expect(fileKind(Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from("תאריך,סכום\n", "utf16le")]))).toBe("text");
   });
 
   it("a Hebrew CSV in windows-1255 and in UTF-8 is text", () => {

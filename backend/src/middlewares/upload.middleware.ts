@@ -49,7 +49,8 @@ function unzippedBytes(buf: Buffer): number | null {
 
 function decodes(bytes: Buffer, encoding: string): boolean {
   try {
-    new TextDecoder(encoding, { fatal: true }).decode(bytes);
+    // stream: a character cut in two at the end of the sniffed prefix is not an error.
+    new TextDecoder(encoding, { fatal: true }).decode(bytes, { stream: true });
     return true;
   } catch {
     return false;
@@ -58,18 +59,22 @@ function decodes(bytes: Buffer, encoding: string): boolean {
 
 export function fileKind(buf: Buffer): FileKind | null {
   if (buf.length === 0) return null;
-  if (buf.subarray(0, 1024).includes("%PDF-")) return "pdf";
+  // Container magic at offset 0 decides first: a zip may carry "%PDF-" in a file name,
+  // and the PDF marker may sit anywhere in the first 1 KB.
   if (buf.length >= 4 && buf.readUInt32LE(0) === ZIP_LOCAL) {
     const total = unzippedBytes(buf);
     return total !== null && total <= MAX_UNZIPPED_BYTES && total <= buf.length * MAX_ZIP_RATIO ? "zip" : null;
   }
   if (buf.subarray(0, 8).equals(OLE_MAGIC)) return "ole";
-  // CSV and HTML-as-xls have no magic number: text with no NUL byte. The sniff
-  // may cut a UTF-8 character in two, so only the whole prefix minus 3 bytes is decoded.
+  if (buf.subarray(0, 1024).includes("%PDF-")) return "pdf";
+  // A UTF-16 CSV (Excel's "Unicode text") starts with its byte-order mark and is full of NULs.
+  if (buf.length >= 2 && ((buf[0] === 0xff && buf[1] === 0xfe) || (buf[0] === 0xfe && buf[1] === 0xff))) {
+    return decodes(buf.subarray(0, TEXT_SNIFF_BYTES & ~1), buf[0] === 0xff ? "utf-16le" : "utf-16be") ? "text" : null;
+  }
+  // CSV and HTML-as-xls have no magic number: text with no NUL byte.
   const head = buf.subarray(0, TEXT_SNIFF_BYTES);
   if (head.includes(0)) return null;
-  const sample = buf.length > TEXT_SNIFF_BYTES ? head.subarray(0, TEXT_SNIFF_BYTES - 3) : head;
-  return decodes(sample, "utf-8") || decodes(sample, "windows-1255") ? "text" : null;
+  return decodes(head, "utf-8") || decodes(head, "windows-1255") ? "text" : null;
 }
 
 const KIND_LABEL: Record<FileKind, string> = { pdf: "PDF", zip: "Excel", ole: "Excel", text: "CSV" };
