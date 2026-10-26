@@ -17,7 +17,7 @@ async function mockApi(page:Page,{pending=false,coverageAcknowledged=true}={}){
   else if(path==='/api/journey/status')body=state();
   else if(path==='/api/journey/onboarding/defer'){profile={...profile,onboarding:'deferred'};body={ok:true};}
   else if(path==='/api/journey/onboarding/complete'){if(!session||session.status!=='completed')return route.fulfill({status:409,json:{error:{message:'יש להשלים את הקליטה'}}});profile={...profile,onboarding:'completed'};body=profile;}
-  else if(path==='/api/dashboard/summary')body={incomeTotal:0,expenseTotal:expense&&!removed?expense.amount:0,balance:0,creditTotal:0,bankReview:{pendingCount:0},bankMonth:{debtReduction:0,cardSettled:0,internalTransfer:0,loanDrawdown:0}};
+  else if(path==='/api/dashboard/summary')body={incomeTotal:0,expenseTotal:expense&&!removed?expense.amount:0,balance:0,creditTotal:0,bankReview:{pendingCount:0},bankMonth:{debtReduction:0,cardSettled:0,internalTransfer:0,loanDrawdown:0,financingNet:0}};
   else if(path==='/api/expenses/quick-add'){expense={id:7,amount:18,businessName:'קפה',categoryId:null,paymentMethodId:null,category:null,expenseDate:'2026-09-16',description:'נוסף בהקלדה מהירה',isRecurring:false};body={expense,parsed:{amount:18}};}
   else if(path==='/api/expenses/7'&&method==='PATCH'){expense={...expense,...req.postDataJSON()};body=expense;}
   else if(path==='/api/expenses/7'&&method==='DELETE'){removed=true;body={ok:true};}
@@ -403,4 +403,19 @@ test('Login guides the way in: disabled until filled, busy while checking, a cle
  if(info.project.name==='mobile')await expect(page.locator('.gate-points')).toBeHidden();
  else await expect(page.getByText('בלי חיבור לחשבון הבנק')).toBeVisible();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
+test('The month explanation names the financing interest, and a net credit as a credit',async({page})=>{
+ await mockApi(page);
+ let financingNet=120;
+ await page.route('**/api/journey/metrics/**',route=>route.fulfill({json:{name:'surplus',value:0,asOf:'2026-09-17',period:{from:'2026-09-01',to:'2026-09-30'},formula:'הכנסות פחות הוצאות',coverage:'לפי המקורות הרשומים',assumptions:[],missingData:[],components:[],sources:[],total:0,page:1,pageSize:50,dataVersion:'a'.repeat(64)}}));
+ await page.route('**/api/dashboard/summary**',route=>route.fulfill({json:{incomeTotal:0,expenseTotal:0,balance:0,creditTotal:0,bankReview:{pendingCount:0},bankMonth:{debtReduction:0,cardSettled:0,internalTransfer:0,loanDrawdown:0,financingNet}}}));
+ await page.goto('/');
+ await page.getByText('מה נכלל בסיכום החודש?').click();
+ const line=page.locator('p').filter({hasText:'ריבית בתוך החזרי הלוואה בלי פירוט אינה כלולה'});
+ await expect(line).toContainText(/מתוכן ריבית ועמלות מימון: .*120/);
+ financingNet=-35;await page.reload();
+ await page.getByText('מה נכלל בסיכום החודש?').click();
+ await expect(line).toContainText(/זיכוי ריבית נטו: .*35/);
+ await expect(line).not.toContainText('-');
 });
