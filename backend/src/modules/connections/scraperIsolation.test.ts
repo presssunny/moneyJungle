@@ -47,6 +47,9 @@ describe("redactLog", () => {
   it("drops URLs and account-like digits from worker stderr", () => {
     expect(redactLog("at https://online.fibi.co.il/x?token=abc acct 12-345-678901 by a.b@c.co line 42")).toBe("at <url> acct <num> by <email> line 42");
   });
+  it("drops her own credential values when a library error echoes them", () => {
+    expect(redactLog("login rejected for dana-k with Pw!x9 (id 1)", ["dana-k", "Pw!x9", ""])).toBe("login rejected for <secret> with <secret> (id 1)");
+  });
 });
 
 describe("resultShape", () => {

@@ -268,7 +268,7 @@ async function run(userId: number, connection: ConnectionRow, syncId: number, fa
     if (control.cancelled) return finish(syncId, "cancelled", failureMessage(provider, "CANCELLED", method), [], "CANCELLED");
     if (!result.success) {
       // The library's own reason, redacted: the stored message is for her, this line is for whoever debugs it.
-      console.warn(`[סנכרון] ${provider.name}: נכשל (${result.errorType ?? "לא ידוע"}) בשלב ${reached}: ${redactLog(result.errorMessage ?? "").replace(/\s+/g, " ").slice(0, 300)}`);
+      console.warn(`[סנכרון] ${provider.name}: נכשל (${result.errorType ?? "לא ידוע"}) בשלב ${reached}: ${redactLog(result.errorMessage ?? "", Object.values(credentials)).replace(/\s+/g, " ").slice(0, 300)}`);
       if (result.errorType === "CANCELLED") return finish(syncId, "cancelled", failureMessage(provider, "CANCELLED", method), [], "CANCELLED");
       // In the official window she types nothing of ours; a "wrong password" there is not a stored-credentials problem.
       if (method === "password" && (BLOCKING_ERRORS as readonly string[]).includes(result.errorType ?? "")) {

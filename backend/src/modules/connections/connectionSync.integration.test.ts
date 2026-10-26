@@ -584,3 +584,27 @@ describe("bank and card connections", () => {
     expect(rows.map((r) => (r.normalized as { name: string; date: string }).date + " " + (r.normalized as { name: string }).name)).toEqual(["2026-07-15 ספה", "2026-09-26 קפה"]);
   });
 });
+
+describe("what a sync writes to the server log (CLAUDE.md §7)", () => {
+  it("never logs her credentials, account number, email or a bank URL — on success or failure", async () => {
+    const planted = { username: "planted-user-7d1", password: "Pl4nted!Secret", id: "039876543", account: "12-345-678901", email: "planted@bank.test", url: "https://www.fibi.co.il/private/?t=tok-31c" };
+    const lines: string[] = [];
+    const capture = (...args: unknown[]) => { lines.push(args.map((arg) => (arg instanceof Error ? arg.message : String(arg))).join(" ")); };
+    const spies = (["log", "info", "warn", "error"] as const).map((level) => vi.spyOn(console, level).mockImplementation(capture));
+    try {
+      const failing = await legacyConnection("beinleumi", { username: planted.username, password: planted.password, id: planted.id });
+      await (await connectionSync.start(userId, failing.id, fakeFactory({ success: false, errorType: "GENERIC",
+        errorMessage: `login rejected for ${planted.username} ${planted.password} id ${planted.id} at ${planted.url} contact ${planted.email}` }).factory)).done;
+      await prisma.financialConnection.delete({ where: { id: failing.id } });
+
+      const working = await legacyConnection("beinleumi", { username: planted.username, password: planted.password, id: planted.id });
+      await (await connectionSync.start(userId, working.id, fakeFactory({ success: true, accounts: [{ accountNumber: planted.account, balance: 10, txns: [txn("שופרסל", -5)] }] }).factory)).done;
+    } finally {
+      spies.forEach((spy) => spy.mockRestore());
+    }
+    const logged = lines.join("\n");
+    expect(lines.length).toBeGreaterThan(0);
+    for (const value of Object.values(planted)) expect(logged, value).not.toContain(value);
+    expect(logged).not.toContain("tok-31c");
+  });
+});

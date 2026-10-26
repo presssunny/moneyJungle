@@ -35,9 +35,13 @@ export function workerEnv(source: NodeJS.ProcessEnv, { headed = false } = {}): R
   return env;
 }
 
-/** Worker stderr can carry bank URLs (with query tokens), emails or account digits from a stack trace. */
-export function redactLog(text: string): string {
-  return text.replace(/https?:\/\/\S+/g, "<url>").replace(/\S+@\S+/g, "<email>").replace(/\d[\d-]{2,}\d/g, "<num>").slice(0, STDERR_CAP);
+/**
+ * Worker stderr can carry bank URLs (with query tokens), emails or account digits from a stack trace,
+ * and a library error may echo what it was given — so her own credential values go first.
+ */
+export function redactLog(text: string, secrets: readonly string[] = []): string {
+  const hidden = secrets.filter((secret) => secret.length >= 3).reduce((out, secret) => out.split(secret).join("<secret>"), text);
+  return hidden.replace(/https?:\/\/\S+/g, "<url>").replace(/\S+@\S+/g, "<email>").replace(/\d[\d-]{2,}\d/g, "<num>").slice(0, STDERR_CAP);
 }
 
 function removeRun(...dirs: string[]) {
@@ -168,10 +172,11 @@ export function isolatedScraperFactory({ library = LIBRARY, officialLibrary = OF
       return;
     }
     let stderrBudget = STDERR_CAP;
+    let secrets: string[] = [];
     let partialLine = "";
     const logStderr = (text: string) => {
       if (!text.trim() || stderrBudget <= 0) return;
-      const line = redactLog(text).slice(0, stderrBudget);
+      const line = redactLog(text, secrets).slice(0, stderrBudget);
       stderrBudget -= line.length;
       console.warn(`[סנכרון] worker: ${line.trimEnd()}`);
     };
@@ -233,6 +238,7 @@ export function isolatedScraperFactory({ library = LIBRARY, officialLibrary = OF
           onProgress(listener) { progressListener = listener; },
           cancel() { settle(failed("CANCELLED", "cancelled by the user")); },
           scrape(credentials) {
+            secrets = Object.values(credentials);
             const command: WorkerCommand = { type: "scrape", credentials };
             if (!settled) child.send(command);
             return scrapeResult;
