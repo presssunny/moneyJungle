@@ -1,6 +1,6 @@
 import { Request, Response, Router } from "express";
-import multer from "multer";
 import { gateAuth } from "../../middlewares/gateAuth.middleware";
+import { SPREADSHEET_KINDS, uploadFile } from "../../middlewares/upload.middleware";
 import { validate } from "../../middlewares/validation.middleware";
 import { ApiError } from "../../utils/ApiError";
 import { asyncHandler } from "../../utils/asyncHandler";
@@ -16,11 +16,6 @@ import {
   updateCreditTransactionSchema,
   uploadImportSchema,
 } from "./credit.validation";
-
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 },
-});
 
 export const creditRoutes = Router();
 
@@ -59,7 +54,7 @@ creditRoutes.get(
 
 creditRoutes.post(
   "/imports",
-  upload.single("file"),
+  ...uploadFile(SPREADSHEET_KINDS),
   validate({ body: uploadImportSchema }),
   asyncHandler(async (req: Request, res: Response) => {
     if (!req.file) throw ApiError.badRequest("יש לצרף קובץ אקסל");

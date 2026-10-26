@@ -1,6 +1,6 @@
 import { Request, Response, Router } from "express";
-import multer from "multer";
 import { gateAuth } from "../../middlewares/gateAuth.middleware";
+import { STATEMENT_KINDS, uploadFile } from "../../middlewares/upload.middleware";
 import { validate } from "../../middlewares/validation.middleware";
 import { ApiError } from "../../utils/ApiError";
 import { asyncHandler } from "../../utils/asyncHandler";
@@ -25,11 +25,6 @@ import {
   setAnchorSchema,
   updateBankAccountSchema,
 } from "./bank.validation";
-
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 },
-});
 
 export const bankRoutes = Router();
 
@@ -126,7 +121,7 @@ bankRoutes.post(
 
 bankRoutes.post(
   "/accounts/:id/import",
-  upload.single("file"),
+  ...uploadFile(STATEMENT_KINDS),
   validate({ params: idParamSchema }),
   asyncHandler(async (req: Request, res: Response) => {
     if (!req.file) throw ApiError.badRequest("יש לצרף קובץ אקסל או PDF של דף החשבון");

@@ -1,6 +1,6 @@
 import { Request, Response, Router } from "express";
-import multer from "multer";
 import { gateAuth } from "../../middlewares/gateAuth.middleware";
+import { STATEMENT_KINDS, uploadFile } from "../../middlewares/upload.middleware";
 import { validate } from "../../middlewares/validation.middleware";
 import { ApiError } from "../../utils/ApiError";
 import { asyncHandler } from "../../utils/asyncHandler";
@@ -8,11 +8,6 @@ import { readAnswers } from "../assistant/assistant.types";
 import { MonthQuery, monthQuerySchema, resolveMonth } from "../../utils/validation.utils";
 import { stageLegacyImport } from "./legacyImportAdapter";
 import { detectStatement, type StatementKind } from "./statementDetector.service";
-
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 },
-});
 
 export const importsRoutes = Router();
 
@@ -30,7 +25,7 @@ function readForcedKind(value: unknown): StatementKind | undefined {
  */
 importsRoutes.post(
   "/detect",
-  upload.single("file"),
+  ...uploadFile(STATEMENT_KINDS),
   asyncHandler(async (req: Request, res: Response) => {
     if (!req.file) throw ApiError.badRequest("יש לצרף קובץ");
     const fileName = Buffer.from(req.file.originalname, "latin1").toString("utf8");
@@ -47,7 +42,7 @@ importsRoutes.post(
  */
 importsRoutes.post(
   "/smart",
-  upload.single("file"),
+  ...uploadFile(STATEMENT_KINDS),
   asyncHandler(async (req: Request, res: Response) => {
     if (!req.file) throw ApiError.badRequest("יש לצרף קובץ אקסל או PDF");
     const answers=readAnswers(req.body?.answers);
@@ -57,7 +52,7 @@ importsRoutes.post(
 
 importsRoutes.post(
   "/expenses",
-  upload.single("file"),
+  ...uploadFile(STATEMENT_KINDS),
   validate({ body: monthQuerySchema }),
   asyncHandler(async (req: Request, res: Response) => {
     if (!req.file) throw ApiError.badRequest("יש לצרף קובץ אקסל");
