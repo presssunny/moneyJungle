@@ -25,6 +25,7 @@ function counts(item: SyncOutcomeItem): string[] {
 function BalanceCheck({ item }: { item: SyncOutcomeItem }) {
   if (item.siteBalance == null) return null;
   const exact = (amount: number) => <span dir="ltr">{formatCurrency(amount, { exact: true })}</span>;
+  if (item.balanceUnknown) return <p className="text-muted">יתרה לפי אתר הבנק בזמן הרענון: {exact(item.siteBalance)}. לא ניתן להשוות — יתרת הפתיחה אצלנו לא ידועה. אפשר להזין את היתרה מהבנק במסך החשבון.</p>;
   if (item.ourBalance == null) return <p className="text-muted">יתרה לפי אתר הבנק בזמן הרענון: {exact(item.siteBalance)}</p>;
   const gap = Math.round((item.ourBalance - item.siteBalance) * 100) / 100;
   if (gap === 0) return <p className="text-muted">היתרה אצלנו תואמת את אתר הבנק: {exact(item.siteBalance)}</p>;

@@ -32,7 +32,7 @@ export default function DashboardPage(){
 
     {data.blockers.length>0?<><p className="financial-status">התמונה עדיין חלקית</p><p>אין כרגע מספיק מידע לאומדן יומי לאחר התחייבויות.</p><Link to="/data">מה חסר ואיך משלימים?</Link></>:<><p className="text-muted">אומדן לתכנון הוצאה יומית עד {formatDate(data.end)}</p><p className="financial-status mono">{formatCurrency(data.allowance.amount!)}</p>{!!data.allowance.shortfall&&<p>פער צפוי בכיסוי ההתחייבויות: {formatCurrency(data.allowance.shortfall)}</p>}</>}
     <p className="text-muted">נכון ל־{formatDate(data.today)} · {data.sources.length} פריטים בתמונה · {data.blockers.length ? "מידע חלקי" : "עדכניות אושרה"}</p>
-    <p>יתרות בנק רשומות: <strong>{data.balances.length&&data.balances.every(b=>b.anchor)?formatCurrency(data.allowance.cash):'לא ידוע'}</strong></p>
+    <p>יתרות בנק רשומות: <strong>{data.balances.length&&data.balances.every(b=>b.anchor)&&data.allowance.cash!==null?formatCurrency(data.allowance.cash):'לא ידוע'}</strong></p>
     <MetricExplanation metric="allowance" version={data.dataVersion}><p>{data.allowance.formula}</p><p>שמור בצד — כרית ביטחון, חיסכון וחיובי כרטיס של החודש הבא: {formatCurrency(data.allowance.reserves)} · הוצאות חיוניות שטרם נרשמו: {formatCurrency(data.allowance.essentialReserve)}</p><ul>{data.balances.map(b=><li key={b.id}>{b.name}: {b.explanation}</li>)}{data.allowance.assumptions.map(a=><li key={a}>{a}</li>)}{data.blockers.map(b=><li key={b}>{b}</li>)}</ul><Link to="/commitments">פירוט ההתחייבויות</Link></MetricExplanation>
     <MetricExplanation title="מאיפה מגיעות יתרות הבנק" metric="cash" version={data.dataVersion}/>
    </Card>

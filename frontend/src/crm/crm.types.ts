@@ -39,7 +39,8 @@ export interface CrmCustomerListItem {
   totalExpense: number;
   netCashflow: number;
   activeLoanBalance: number;
-  bankBalance: number;
+  /** null when one of the accounts has an unknown balance. */
+  bankBalance: number | null;
   lastActivityAt: string | null;
 }
 
@@ -120,9 +121,9 @@ export interface CrmBankAccount {
   id: number;
   bankName: string;
   accountName: string;
-  initialBalance: number;
-  currentBalance: number;
-  anchorBalance: number;
+  initialBalance: number | null;
+  currentBalance: number | null;
+  anchorBalance: number | null;
   anchorDate: string | null;
   transactionCount: number;
   statementCount: number;
@@ -244,7 +245,8 @@ export interface CrmCustomerDetail {
   loans: CrmLoan[];
   bank: {
     accounts: CrmBankAccount[];
-    totalBalance: number;
+    totalBalance: number | null;
+    unknownBalanceCount: number;
     recentTransactions: CrmBankTransaction[];
   };
   credit: {

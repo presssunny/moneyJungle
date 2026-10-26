@@ -302,9 +302,13 @@ export default function BankPage() {
               onClick={() => setSelectedId(account.id)}
             >
               <span className="bank-account-name">🏦 {account.bankName} · {account.accountName}</span>
-              <span className={`bank-account-balance mono ${Number(account.currentBalance) < 0 ? "text-danger" : "text-success"}`}>
-                {formatCurrency(Number(account.currentBalance))}
-              </span>
+              {account.currentBalance === null ? (
+                <span className="bank-account-balance text-muted">יתרה לא ידועה</span>
+              ) : (
+                <span className={`bank-account-balance mono ${Number(account.currentBalance) < 0 ? "text-danger" : "text-success"}`}>
+                  {formatCurrency(Number(account.currentBalance))}
+                </span>
+              )}
               <span className="text-muted">{account._count?.transactions ?? 0} תנועות</span>
               </button>
               <button type="button"
@@ -335,10 +339,10 @@ export default function BankPage() {
           {() => (
             <SummaryCard
               label="יתרה בחשבון הנבחר"
-              value={selected ? formatCurrency(Number(selected.currentBalance)) : "—"}
+              value={!selected ? "—" : selected.currentBalance === null ? "לא ידועה" : formatCurrency(Number(selected.currentBalance))}
               /* A balance nobody confirmed is an estimate, and is marked as one. */
               certainty={
-                !selected ? "unknown" : selected.balanceDetail?.basis === "statement" ? "measured" : "scenario"
+                !selected || selected.currentBalance === null ? "unknown" : selected.balanceDetail?.basis === "statement" ? "measured" : "scenario"
               }
               tone={selected && Number(selected.currentBalance) < 0 ? "danger" : "success"}
               sub={selected ? `${selected.bankName} · ${selected.accountName}` : "לא נבחר חשבון"}
@@ -374,10 +378,12 @@ export default function BankPage() {
 
       {/* A balance we could not tie to anything the bank stated is called out,
           with the one action that fixes it. */}
-      {selected?.balanceDetail?.basis === "accumulated" && (
-        <Card title="היתרה לא מאומתת">
+      {(selected?.balanceDetail?.basis === "accumulated" || selected?.balanceDetail?.basis === "unknown") && (
+        <Card title={selected.balanceDetail.basis === "unknown" ? "יתרה לא ידועה" : "היתרה לא מאומתת"}>
           <p className="settings-hint">
-            כדי לדייק, יש להזין את היתרה שמופיעה בבנק ואת התאריך שלה, או להעלות דוח הכולל יתרה.
+            {selected.balanceDetail.basis === "unknown"
+              ? "לא נמסרה יתרת פתיחה ואין דוח עם יתרה. כדי לראות יתרה, יש להזין את היתרה שמופיעה בבנק ואת התאריך שלה, או להעלות דוח הכולל יתרה."
+              : "כדי לדייק, יש להזין את היתרה שמופיעה בבנק ואת התאריך שלה, או להעלות דוח הכולל יתרה."}
           </p>
           <form className="form-inline" onSubmit={submitAnchor}>
             <Input

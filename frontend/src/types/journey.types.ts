@@ -7,9 +7,9 @@ export interface FinancialStatus {
  sources:Array<{key:string;name:string;kind:string;asOf:string|null;observedFrom:string|null;observedTo:string|null;limitation:string}>;
  hasActivity:boolean;
  today:string;end:string;dataVersion:string;profile:Profile;
- balances:Array<{id:number;name:string;balance:number;explanation:string;anchor:{coverageTo:string;fileName:string}|null}>;
+ balances:Array<{id:number;name:string;balance:number|null;explanation:string;anchor:{coverageTo:string;fileName:string}|null}>;
  cards:Array<{id:number;name:string}>;events:Commitment[];issues:ReviewItem[];blockers:string[];coverageAcknowledged:boolean;
- allowance:{amount:number|null;shortfall:number|null;state:string;cash:number;reserves:number;essentialReserve:number;formula:string;assumptions:string[]};
+ allowance:{amount:number|null;shortfall:number|null;state:string;cash:number|null;reserves:number;essentialReserve:number;formula:string;assumptions:string[]};
 }
 /** A fixed monthly debit found in a bank statement and not tracked yet. */
 export interface DetectedCommitment {key:string;kind:"loan"|"recurring";name:string;amount:number;dayOfMonth:number;months:number;lastDate:string;nextDate:string;loanNumber:string|null}

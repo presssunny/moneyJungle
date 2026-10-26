@@ -193,7 +193,7 @@ export default function CrmCustomerDetailPage() {
   const accountColumns: Column<CrmBankAccount>[] = [
     { key: "bank", header: "בנק", render: (r) => r.bankName },
     { key: "account", header: "שם חשבון", render: (r) => r.accountName },
-    { key: "balance", header: "יתרה", align: "left", render: (r) => <span className="mono">{formatCurrency(r.currentBalance)}</span> },
+    { key: "balance", header: "יתרה", align: "left", render: (r) => (r.currentBalance === null ? <MissingValue /> : <span className="mono">{formatCurrency(r.currentBalance)}</span>) },
     { key: "tx", header: "תנועות", render: (r) => String(r.transactionCount) },
     { key: "statements", header: "דפי בנק שיובאו", render: (r) => String(r.statementCount) },
   ];
@@ -334,7 +334,7 @@ export default function CrmCustomerDetailPage() {
             sub={activeLoans.some((l) => l.currentBalance === null) ? "לא כולל הלוואות ללא יתרה ידועה" : undefined}
             icon="📉"
           />
-          <SummaryCard label="יתרת חשבונות בנק" value={formatCurrency(data.bank.totalBalance)} icon="🏦" />
+          <SummaryCard label="יתרת חשבונות בנק" value={data.bank.totalBalance === null ? "לא זמין" : formatCurrency(data.bank.totalBalance)} sub={data.bank.unknownBalanceCount ? `${data.bank.unknownBalanceCount === 1 ? "חשבון אחד" : `${data.bank.unknownBalanceCount} חשבונות`} בלי יתרה ידועה` : undefined} icon="🏦" />
         </div>
       }
     >

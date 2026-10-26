@@ -280,8 +280,9 @@ export interface Settings {
  * up, which no statement has confirmed.
  */
 export interface BalanceDetail {
-  balance: number;
-  basis: "statement" | "accumulated";
+  /** null = unknown: no opening balance, printed balance or balance she stated. */
+  balance: number | null;
+  basis: "statement" | "accumulated" | "unknown";
   anchor: {
     statementId: number | null;
     fileName: string;
@@ -297,8 +298,9 @@ export interface BankAccount {
   id: number;
   bankName: string;
   accountName: string;
-  initialBalance: Money;
-  currentBalance: Money;
+  /** null = never stated — unknown, not an empty account. */
+  initialBalance: Money | null;
+  currentBalance: Money | null;
   balanceDetail?: BalanceDetail;
   _count?: { transactions: number };
 }
@@ -735,6 +737,8 @@ export interface SyncOutcomeItem {
   siteBalance?: number | null;
   /** Our balance for the account, given only once this import is approved — to check nothing is missing. */
   ourBalance?: number | null;
+  /** Our balance is unknown, so the site's balance cannot be compared with it. */
+  balanceUnknown?: boolean;
   note?: string;
   review: { status: string; counts: { included: number; duplicate: number; pending: number } } | null;
 }
