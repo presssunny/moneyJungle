@@ -1,6 +1,7 @@
 import { ApiError } from "../../utils/ApiError";
 import { decimalOrNull, decimalToNumber, sumDecimals } from "../../utils/money.utils";
 import { hashPassword } from "../../utils/password.utils";
+import { bankTotals } from "../bank/accountBalance.service";
 import { crmRepository } from "./crm.repository";
 import { CreateCustomerBody, UpdateCustomerBody } from "./crm.validation";
 
@@ -181,9 +182,7 @@ export const crmService = {
           transactionCount: a._count.transactions,
           statementCount: a._count.statements,
         })),
-        // A bank balance can be an overdraft: with one unknown, the rest is no lower bound.
-        totalBalance: bankAccounts.some((a) => a.currentBalance === null) ? null : sumDecimals(bankAccounts.map((a) => a.currentBalance)),
-        unknownBalanceCount: bankAccounts.filter((a) => a.currentBalance === null).length,
+        ...bankTotals(bankAccounts.map((a) => decimalOrNull(a.currentBalance))),
         recentTransactions: recentBankTransactions.map((t) => ({
           ...t,
           amount: num(t.amount),

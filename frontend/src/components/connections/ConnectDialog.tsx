@@ -63,7 +63,7 @@ function AccountPicker({ bankName, value, onChange }: { bankName: string; value:
     setBusy(true);
     setError("");
     try {
-      const account = await createBankAccount({ bankName, accountName: name.trim(), initialBalance: 0 });
+      const account = await createBankAccount({ bankName, accountName: name.trim() });
       accounts.setData((current: BankAccount[] | null) => [...(current ?? []).filter((a) => a.id !== account.id), account]);
       onChange(String(account.id));
       setAdding(false);

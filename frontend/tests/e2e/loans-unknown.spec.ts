@@ -27,7 +27,7 @@ async function mockApi(page:Page){
   if(path==='/api/gate/session')reply={user:{id:1,email:'test@example.test',displayName:'Test',role:'USER'},csrfToken:'x'};
   else if(path==='/api/settings')reply={theme:'light',currency:'ILS',notificationsJson:{}};
   else if(path==='/api/journey/profile')reply={onboarding:'completed'};
-  else if(path==='/api/bank/accounts')reply=[{id:1,bankName:'הבינלאומי',accountName:'עו״ש',currentBalance:'1000'}];
+  else if(path==='/api/bank/accounts')reply={accounts:[{id:1,bankName:'הבינלאומי',accountName:'עו״ש',currentBalance:'1000'}],totals:{totalBalance:1000,unknownBalanceCount:0}};
   else if(path==='/api/savings')reply={goals:[],summary:{savedTotal:0}};
   else if(path==='/api/loans')reply={loans:[known,fromStatement,noRate],summary,groups:[],events:[],fromStatement:null,totals};
   await route.fulfill({json:reply});

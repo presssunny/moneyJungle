@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "../../config/database";
+import { businessDate } from "../../utils/date.utils";
 import { crmService } from "../crm/crm.service";
 import { financialStatus } from "../journey/coverage.service";
 import { accountBalanceService } from "./accountBalance.service";
@@ -63,5 +64,24 @@ describe("a bank balance nobody stated", () => {
     expect(detail.bank.unknownBalanceCount).toBe(1);
     const listed = (await crmService.listCustomers()).find((c) => c.id === userId);
     expect(listed?.bankBalance).toBeNull();
+  });
+});
+
+describe("the balance she types when opening an account, and the accounts' total", () => {
+  it("a typed current balance is that day's stated balance, not an opening balance", async () => {
+    const created = await bankService.createAccount(userId, createBankAccountSchema.parse({ bankName: "הבינלאומי", accountName: "עו״ש", currentBalance: 2500 }));
+    expect(created.initialBalance).toBeNull();
+    expect(Number(created.anchorBalance)).toBe(2500);
+    expect(created.anchorDate?.toISOString().slice(0, 10)).toBe(businessDate());
+    expect((await accountBalanceService.derive(userId, created.id)).balance).toBe(2500);
+  });
+
+  it("the total is the server's, and unavailable while one balance is unknown", async () => {
+    await prisma.bankAccount.create({ data: { userId, bankName: "לאומי", accountName: "חיסכון", initialBalance: 300 } });
+    expect((await bankService.listAccounts(userId)).totals).toEqual({ totalBalance: 300, unknownBalanceCount: 0 });
+    await accountWithDeposit(null);
+    const { accounts, totals } = await bankService.listAccounts(userId);
+    expect(accounts).toHaveLength(2);
+    expect(totals).toEqual({ totalBalance: null, unknownBalanceCount: 1 });
   });
 });

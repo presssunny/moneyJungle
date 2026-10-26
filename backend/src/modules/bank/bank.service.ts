@@ -4,7 +4,8 @@ import { ApiError } from "../../utils/ApiError";
 import { round2 } from "../../utils/money.utils";
 import { buildRuleCategorizer } from "../categories/categorization.service";
 import { hashFile } from "../imports/statementDetector.service";
-import { accountBalanceService } from "./accountBalance.service";
+import { accountBalanceService, bankTotals } from "./accountBalance.service";
+import { businessDate } from "../../utils/date.utils";
 import {
   classifyBankLine,
   describeIngestionIssues,
@@ -38,12 +39,13 @@ export const bankService = {
       orderBy: { id: "asc" },
       include: { _count: { select: { transactions: true } } },
     });
-    return Promise.all(
+    const listed = await Promise.all(
       accounts.map(async (account) => {
         const derived = await accountBalanceService.recompute(userId, account.id);
         return { ...account, currentBalance: derived.balance, balanceDetail: derived };
       })
     );
+    return { accounts: listed, totals: bankTotals(listed.map((a) => a.currentBalance)) };
   },
 
   /** Every statement taken in for an account, newest period first. */
@@ -64,16 +66,19 @@ export const bankService = {
     return accountBalanceService.recompute(userId, accountId);
   },
 
-  createAccount(userId: number, body: CreateBankAccountBody) {
-    return prisma.bankAccount.create({
+  async createAccount(userId: number, body: CreateBankAccountBody) {
+    const stated = body.currentBalance ?? null;
+    const account = await prisma.bankAccount.create({
       data: {
         userId,
         bankName: body.bankName,
         accountName: body.accountName,
         initialBalance: body.initialBalance ?? null,
-        currentBalance: body.initialBalance ?? null,
+        ...(stated === null ? {} : { anchorBalance: stated, anchorDate: new Date(businessDate()) }),
       },
     });
+    await accountBalanceService.recompute(userId, account.id);
+    return prisma.bankAccount.findFirstOrThrow({ where: { id: account.id, userId } });
   },
 
   async updateAccount(userId: number, id: number, body: UpdateBankAccountBody) {

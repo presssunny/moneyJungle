@@ -305,6 +305,12 @@ export interface BankAccount {
   _count?: { transactions: number };
 }
 
+/** The server's total of the accounts: null while any balance is unknown (an overdraft makes "at least" false). */
+export interface BankTotals {
+  totalBalance: number | null;
+  unknownBalanceCount: number;
+}
+
 /** One imported statement: the period it covers and the balances it printed. */
 export interface BankStatementImport {
   id: number;

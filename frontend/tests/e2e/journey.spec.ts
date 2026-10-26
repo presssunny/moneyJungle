@@ -27,6 +27,7 @@ async function mockApi(page:Page,{pending=false,coverageAcknowledged=true}={}){
   else if(path==='/api/incomes')body={incomes:[],total:0};
   else if(path==='/api/savings')body={goals:[],summary:{savedTotal:0,targetTotal:0,setAsideCount:0,completion:null}};
   else if(path==='/api/loans')body={loans:[],totals:{totalBalance:0}};
+  else if(path==='/api/bank/accounts')body={accounts:[],totals:{totalBalance:0,unknownBalanceCount:0}};
   else if(path==='/api/imports/sessions'&&method==='POST'){
    session={id:'00000000-0000-4000-8000-000000000001',fileName:'expenses.csv',kind:'expense_sheet',status:'needs_input',version:0,answers:{},preview:{rows:[{name:'קפה',amount:18,date:null}],count:1,total:18,warnings:['השורות ללא תאריך יירשמו לפי החודש שנבחר'],questions:['נדרש חודש']},result:null};body=session;
   }else if(path.endsWith('/answers')){session={...session,answers:req.postDataJSON().answers,version:1,status:'ready_for_review',preview:{...session.preview,questions:[]}};body=session;}
@@ -370,7 +371,8 @@ test('With several accounts the household picks the spending account and confirm
  const overview=(spending:number|null,assigned:number|null)=>({accounts:[{id:1,name:'עו״ש'},{id:2,name:'משני'}],spendingAccountId:spending,savedReserve:500,savedReserveLocation:saved?.savedReserveLocation??null,sources:[{sourceKey:'credit:7',name:'ויזה',kind:'credit',assignedAccountId:assigned,suggestedAccountId:2,suggestionReason:'חיובי הכרטיס נפרעו רק מחשבון זה'}]});
  await page.route('**/api/journey/funding',async route=>{
   if(route.request().method()==='PUT'){saved=route.request().postDataJSON();return route.fulfill({json:overview(saved.spendingAccountId,saved.assignments?.[0]?.bankAccountId??null)});}
-  await route.fulfill({json:overview(null,null)});
+  // A refetch after saving must see what was saved, as the server would.
+  await route.fulfill({json:overview(saved?.spendingAccountId??null,saved?.assignments?.[0]?.bankAccountId??null)});
  });
  await page.goto('/accounts?tab=bank');
  await expect(page.getByRole('heading',{name:'תכנון יומי כשיש כמה חשבונות'})).toBeVisible();

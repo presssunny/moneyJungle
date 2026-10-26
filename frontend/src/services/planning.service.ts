@@ -9,6 +9,7 @@ import type {
   BalanceDetail,
   BankStatementImport,
   BankAccount,
+  BankTotals,
   BankTransaction,
   Category,
   CategoryRule,
@@ -84,12 +85,17 @@ export async function deletePaymentMethod(id: number): Promise<void> {
 export interface BankAccountInput {
   bankName: string;
   accountName: string;
-  initialBalance?: number;
+  /** What the bank shows today; left out when she does not know it. */
+  currentBalance?: number;
+}
+
+export async function listBankAccountsWithTotals(): Promise<{ accounts: BankAccount[]; totals: BankTotals }> {
+  const { data } = await api.get("/bank/accounts");
+  return data;
 }
 
 export async function listBankAccounts(): Promise<BankAccount[]> {
-  const { data } = await api.get("/bank/accounts");
-  return data;
+  return (await listBankAccountsWithTotals()).accounts;
 }
 
 export async function createBankAccount(input: BankAccountInput): Promise<BankAccount> {

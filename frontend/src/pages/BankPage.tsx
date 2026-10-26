@@ -50,7 +50,8 @@ export default function BankPage() {
   const { expenseCategories } = useLookups();
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [accountOpen, setAccountOpen] = useState(false);
-  const [accountForm, setAccountForm] = useState({ bankName: "", accountName: "", initialBalance: 0 });
+  // Blank balance = unknown; a typed one is what the bank shows today.
+  const [accountForm, setAccountForm] = useState({ bankName: "", accountName: "", currentBalance: "" });
   const [txOpen, setTxOpen] = useState(false);
   const [anchorForm, setAnchorForm] = useState({ balance: "", asOf: new Date().toISOString().slice(0, 10) });
   const [txForm, setTxForm] = useState({
@@ -111,9 +112,10 @@ export default function BankPage() {
     e.preventDefault();
     setError("");
     try {
-      const account = await createBankAccount(accountForm);
+      const { currentBalance, ...names } = accountForm;
+      const account = await createBankAccount(currentBalance.trim() === "" ? names : { ...names, currentBalance: Number(currentBalance) });
       setAccountOpen(false);
-      setAccountForm({ bankName: "", accountName: "", initialBalance: 0 });
+      setAccountForm({ bankName: "", accountName: "", currentBalance: "" });
       setSelectedId(account.id);
       // If the account was created off a dropped statement, import it now.
       if (pendingFile) {
@@ -179,7 +181,7 @@ export default function BankPage() {
       return;
     }
     setPendingFile(file);
-    setAccountForm({ bankName: "", accountName: "עו״ש", initialBalance: 0 });
+    setAccountForm({ bankName: "", accountName: "עו״ש", currentBalance: "" });
     setError("");
     setImportMsg("");
     setAccountOpen(true);
@@ -507,11 +509,11 @@ export default function BankPage() {
             <Input label="שם החשבון" required value={accountForm.accountName} onChange={(e) => setAccountForm({ ...accountForm, accountName: e.target.value })} />
           </div>
           <Input
-            label="יתרה נוכחית (₪)"
+            label="יתרה נוכחית בבנק (₪) — אפשר להשאיר ריק"
             type="number"
             step="0.01"
-            value={accountForm.initialBalance || ""}
-            onChange={(e) => setAccountForm({ ...accountForm, initialBalance: Number(e.target.value) })}
+            value={accountForm.currentBalance}
+            onChange={(e) => setAccountForm({ ...accountForm, currentBalance: e.target.value })}
           />
           <div className="modal-actions">
             <Button type="submit">הוספה</Button>

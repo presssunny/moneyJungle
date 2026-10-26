@@ -25,8 +25,8 @@ async function mockConnections(page:Page, script:Script, options:{after?:Row;ini
   if(path==='/api/gate/session')reply={user:{id:1,email:'test@example.test',displayName:'Test',role:'USER'},csrfToken:'x'};
   else if(path==='/api/settings')reply={theme:'light',currency:'ILS',notificationsJson:{}};
   else if(path==='/api/journey/profile')reply={onboarding:'completed'};
-  else if(path==='/api/bank/accounts'&&method==='POST'){accounts.push({id:41,currentBalance:'0',...body});reply=accounts.at(-1);}
-  else if(path==='/api/bank/accounts')reply=accounts;
+  else if(path==='/api/bank/accounts'&&method==='POST'){accounts.push({id:41,currentBalance:null,...body});reply=accounts.at(-1);}
+  else if(path==='/api/bank/accounts')reply={accounts,totals:{totalBalance:null,unknownBalanceCount:accounts.length}};
   else if(path==='/api/savings')reply={goals:[],summary:{savedTotal:0}};
   else if(path==='/api/loans')reply={loans:[],totals:{totalBalance:0}};
   else if(path==='/api/connections'&&method==='GET')reply={providers,connections};
@@ -114,7 +114,7 @@ test('With no bank account yet (after a data wipe) she is told why and creates o
  await dialog.getByRole('button',{name:'יצירת החשבון'}).click();
  await expect(dialog.getByLabel('התנועות ייכנסו לחשבון')).toHaveValue('41');
  await expect(dialog.getByText('עוד אין במערכת חשבון בנק')).toHaveCount(0);
- expect(requests.find(r=>r.method==='POST'&&r.path==='/api/bank/accounts')?.body).toEqual({bankName:'הבנק הבינלאומי',accountName:'עו״ש משותף',initialBalance:0});
+ expect(requests.find(r=>r.method==='POST'&&r.path==='/api/bank/accounts')?.body).toEqual({bankName:'הבנק הבינלאומי',accountName:'עו״ש משותף'});
  await dialog.getByRole('button',{name:'פתיחת חלון הבנק'}).click();
  await expect(dialog.getByRole('heading',{name:'מתחברים לבנק'})).toBeVisible();
  expect(requests.find(r=>r.method==='POST'&&r.path==='/api/connections')?.body).toEqual({provider:'beinleumi',bankAccountId:41,accountHint:''});

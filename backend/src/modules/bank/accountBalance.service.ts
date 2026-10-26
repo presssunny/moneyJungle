@@ -81,6 +81,15 @@ async function findAnchor(
   return fromUser.asOf >= fromStatement.asOf ? fromUser : fromStatement;
 }
 
+/**
+ * The accounts' total. One unknown balance makes it unknown — not "at least": a
+ * bank balance can be an overdraft, so the known part is no lower bound.
+ */
+export function bankTotals(balances: Array<number | null>): { totalBalance: number | null; unknownBalanceCount: number } {
+  const unknownBalanceCount = balances.filter((b) => b === null).length;
+  return { totalBalance: unknownBalanceCount ? null : round2(balances.reduce<number>((sum, b) => sum + (b ?? 0), 0)), unknownBalanceCount };
+}
+
 export const accountBalanceService = {
   /** Compute the balance from scratch. Pure read — nothing is written here. */
   async derive(userId: number, accountId: number): Promise<DerivedBalance> {

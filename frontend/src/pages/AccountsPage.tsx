@@ -5,7 +5,7 @@ import { UncertaintyBadge } from "../components/common/UncertaintyBadge";
 import { UNKNOWN_PLACEHOLDER } from "../utils/certainty";
 import { useAsync } from "../hooks/useAsync";
 import { listLoans } from "../services/finance.service";
-import { listBankAccounts, listSavingsGoals } from "../services/planning.service";
+import { listBankAccountsWithTotals, listSavingsGoals } from "../services/planning.service";
 import { formatCurrency } from "../utils/format";
 import AssetsPage from "./AssetsPage";
 import BankPage from "./BankPage";
@@ -31,6 +31,15 @@ interface ChipProps {
  */
 function OverviewChip({ label, amount, tone = "default", loading, missingNote }: ChipProps) {
   if (loading) return <span className="overview-chip overview-chip-loading" aria-hidden />;
+  if (missingNote && amount === null) {
+    return (
+      <span className="overview-chip state-unknown">
+        <span className="overview-chip-label">{label}</span>
+        <span className="overview-chip-value">לא זמין</span>
+        <span className="text-muted">{missingNote}</span>
+      </span>
+    );
+  }
   if (missingNote && amount !== null) {
     return (
       <span className="overview-chip state-unknown">
@@ -66,14 +75,16 @@ function OverviewChip({ label, amount, tone = "default", loading, missingNote }:
  * is re-implemented. Should consume `GET /accounts/overview` once it exists.
  */
 export default function AccountsPage() {
-  const banksRes = useAsync(() => listBankAccounts(), [], "לא הצלחנו לטעון את חשבונות הבנק", ["bank","imports","documents"]);
+  const banksRes = useAsync(() => listBankAccountsWithTotals(), [], "לא הצלחנו לטעון את חשבונות הבנק", ["bank","imports","documents"]);
   const savingsRes = useAsync(() => listSavingsGoals(), [], "לא הצלחנו לטעון את יעדי החיסכון", ["savings"]);
   const loansRes = useAsync(() => listLoans(), [], "לא הצלחנו לטעון את ההלוואות", ["loans","bank","imports","documents"]);
 
   const loading = banksRes.loading || savingsRes.loading || loansRes.loading;
 
-  const bankTotal =
-    banksRes.data === null ? null : banksRes.data.reduce((sum, a) => sum + Number(a.currentBalance), 0);
+  const bankTotal = banksRes.data?.totals.totalBalance ?? null;
+  const unknownBanks = banksRes.data?.totals.unknownBalanceCount ?? 0;
+  const banksNote =
+    unknownBanks === 0 ? undefined : `${unknownBanks === 1 ? "חשבון אחד" : `${unknownBanks} חשבונות`} בלי יתרה ידועה`;
   const savingsTotal = savingsRes.data?.summary.savedTotal ?? null;
   const debts = loansRes.data === null ? null : loansRes.data.totals.totalBalance;
   const unknownDebts = loansRes.data?.totals.unknownBalanceCount ?? 0;
@@ -88,7 +99,7 @@ export default function AccountsPage() {
       <TabbedHub
         overview={<div className="hub-overview">
       <div className="overview-strip" aria-label="סיכום נכסים וחובות">
-        <OverviewChip label="יתרות בנק רשומות" amount={assets} tone="success" loading={loading} />
+        <OverviewChip label="יתרות בנק רשומות" amount={assets} tone="success" loading={loading} missingNote={banksNote} />
         <OverviewChip label="חובות" amount={debts} tone="danger" loading={loading} missingNote={debtsNote} />
         <OverviewChip
           label="התקדמות ביעדי חיסכון (עשויה לחפוף לבנק)"

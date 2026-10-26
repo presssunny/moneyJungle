@@ -97,7 +97,7 @@ function ImportJourney(){
   });
  }
  async function createSource(){setBusy(true);setError('');try{
-   if((answers.kind??session?.kind)==='bank'){const {data}=await api.post('/bank/accounts',{bankName:newName,accountName:newName,initialBalance:0});setAnswers(old=>({...old,accountId:data.id}));}
+   if((answers.kind??session?.kind)==='bank'){const {data}=await api.post('/bank/accounts',{bankName:newName,accountName:newName});setAnswers(old=>({...old,accountId:data.id}));}
    else{const {data}=await api.post('/credit/cards',{name:newName,issuer:newName,lastFour});setAnswers(old=>({...old,cardId:data.id}));}
    setNewName('');sources.reload();
  }catch(e){setError(apiErrorMessage(e));}finally{setBusy(false);}}

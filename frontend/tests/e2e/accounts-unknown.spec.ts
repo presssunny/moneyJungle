@@ -13,7 +13,7 @@ async function mockApi(page:Page){
   if(path==='/api/gate/session')reply={user:{id:1,email:'test@example.test',displayName:'Test',role:'USER'},csrfToken:'x'};
   else if(path==='/api/settings')reply={theme:'light',currency:'ILS',notificationsJson:{}};
   else if(path==='/api/journey/profile')reply={onboarding:'completed'};
-  else if(path==='/api/bank/accounts')reply=[account];
+  else if(path==='/api/bank/accounts')reply={accounts:[account],totals:{totalBalance:null,unknownBalanceCount:1}};
   else if(path==='/api/journey/funding')reply={accounts:[{id:1,name:'עו״ש'}],spendingAccountId:null,savedReserve:0,savedReserveLocation:null,sources:[]};
   else if(path==='/api/savings')reply={goals:[],summary:{savedTotal:0}};
   else if(path==='/api/loans')reply={loans:[],summary:{activeCount:0},totals:{totalBalance:0,unknownBalanceCount:0}};
@@ -36,6 +36,11 @@ test('An account with no stated balance reads "unknown" — never 0 — and offe
  expect(await kpi.innerText()).not.toMatch(ZERO_AMOUNT);
  await expect(page.getByRole('heading',{name:'יתרה לא ידועה'})).toBeVisible();
  await expect(page.getByLabel('יתרה בבנק (₪)')).toBeVisible();
+ // The accounts' total is the server's, and says why it is missing rather than showing 0.
+ const chip=page.locator('.overview-chip').filter({hasText:'יתרות בנק רשומות'});
+ await expect(chip).toContainText('לא זמין');
+ await expect(chip).toContainText('חשבון אחד בלי יתרה ידועה');
+ expect(await chip.innerText()).not.toMatch(ZERO_AMOUNT);
 
  await page.screenshot({path:info.outputPath('accounts-unknown-360.png'),fullPage:true});
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
