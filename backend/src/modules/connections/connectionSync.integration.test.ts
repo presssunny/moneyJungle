@@ -607,6 +607,11 @@ describe("what a sync writes to the server log (CLAUDE.md §7)", () => {
         errorMessage: `login rejected for ${planted.username} ${planted.password} id ${planted.id} at ${planted.url} contact ${planted.email}` }).factory)).done;
       await prisma.financialConnection.delete({ where: { id: failing.id } });
 
+      const throwing = await legacyConnection("beinleumi", { username: planted.username, password: planted.password, id: planted.id });
+      const thrower: ScraperFactory = async () => ({ onProgress() {}, cancel() {}, async scrape() { throw new Error(`crashed for ${planted.username}/${planted.password} at ${planted.url}`); } });
+      await (await connectionSync.start(userId, throwing.id, thrower)).done;
+      await prisma.financialConnection.delete({ where: { id: throwing.id } });
+
       const working = await legacyConnection("beinleumi", { username: planted.username, password: planted.password, id: planted.id });
       await (await connectionSync.start(userId, working.id, fakeFactory({ success: true, accounts: [{ accountNumber: planted.account, balance: 10, txns: [txn("שופרסל", -5)] }] }).factory)).done;
     } finally {

@@ -237,9 +237,12 @@ async function run(userId: number, connection: ConnectionRow, syncId: number, fa
   // Chained so a late progress write can never overwrite the final status.
   let progress: Promise<unknown> = Promise.resolve();
   let reached: SyncPhase = "launching";
+  // Her own credential values, so a library or thrown error that echoes them is redacted in the log.
+  let secrets: string[] = [];
   try {
     if (method === "password" && !connection.credentials) throw ApiError.badRequest("חסרים פרטי כניסה לחיבור הזה");
     const credentials = method === "password" ? openCredentials(userId, connection.credentials!) : {};
+    secrets = Object.values(credentials);
     if (provider.kind === "bank" && !connection.bankAccountId) throw ApiError.badRequest("יש לבחור לאיזה חשבון בנק במערכת נכנסות התנועות");
     const cards = provider.kind === "card" ? await prisma.creditCard.findMany({ where: { userId }, select: { id: true, lastFour: true } }) : [];
     const known = provider.kind === "bank"
@@ -268,7 +271,7 @@ async function run(userId: number, connection: ConnectionRow, syncId: number, fa
     if (control.cancelled) return finish(syncId, "cancelled", failureMessage(provider, "CANCELLED", method), [], "CANCELLED");
     if (!result.success) {
       // The library's own reason, redacted: the stored message is for her, this line is for whoever debugs it.
-      console.warn(`[סנכרון] ${provider.name}: נכשל (${result.errorType ?? "לא ידוע"}) בשלב ${reached}: ${redactLog(result.errorMessage ?? "", Object.values(credentials)).replace(/\s+/g, " ").slice(0, 300)}`);
+      console.warn(`[סנכרון] ${provider.name}: נכשל (${result.errorType ?? "לא ידוע"}) בשלב ${reached}: ${redactLog(result.errorMessage ?? "", secrets).replace(/\s+/g, " ").slice(0, 300)}`);
       if (result.errorType === "CANCELLED") return finish(syncId, "cancelled", failureMessage(provider, "CANCELLED", method), [], "CANCELLED");
       // In the official window she types nothing of ours; a "wrong password" there is not a stored-credentials problem.
       if (method === "password" && (BLOCKING_ERRORS as readonly string[]).includes(result.errorType ?? "")) {
@@ -298,7 +301,7 @@ async function run(userId: number, connection: ConnectionRow, syncId: number, fa
   } catch (error) {
     await progress;
     const message = error instanceof ApiError ? error.message : failureMessage(provider, undefined, method, reached);
-    console.error(`[סנכרון] ${provider.name}: שגיאה`, error instanceof Error ? error.message : error);
+    console.error(`[סנכרון] ${provider.name}: שגיאה`, redactLog(error instanceof Error ? error.message : String(error), secrets));
     await finish(syncId, "failed", message, [], error instanceof ApiError ? "APP" : "GENERAL_ERROR");
   }
 }
@@ -346,7 +349,7 @@ export const connectionSync = {
       throw error;
     }
     const done = run(userId, locked, sync.id, factory, control)
-      .catch((error: unknown) => console.error("[סנכרון] כשל לא צפוי", error))
+      .catch((error: unknown) => console.error("[סנכרון] כשל לא צפוי", redactLog(error instanceof Error ? error.stack ?? error.message : String(error))))
       .finally(async () => {
         active.delete(connectionId);
         await releaseLock(connectionId, claimedAt).catch((error: unknown) => console.error("[סנכרון] שחרור נעילה נכשל", error));

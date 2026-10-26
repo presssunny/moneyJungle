@@ -148,8 +148,10 @@ describe("waitForSignIn", () => {
 });
 
 describe("connections source (CLAUDE.md §7)", () => {
-  // Anything that can act on a bank page: type, click, run code in it, navigate it, touch its cookies or headers.
-  const PAGE_ACTION = /\.(click|type|focus|select|tap|hover|press|evaluate|evaluateHandle|evaluateOnNewDocument|\$eval|\$\$eval|waitForFunction|goto|setContent|addScriptTag|addStyleTag|exposeFunction|setCookie|cookies|deleteCookie|uploadFile|setRequestInterception|setExtraHTTPHeaders|authenticate|setBypassCSP)\s*\(|\.(keyboard|mouse|touchscreen)\b/;
+  // Anything that can act on a bank page: type, click, run code in it, navigate it, copy what it shows
+  // (a QR code included), touch its cookies or headers, or reach Chrome's protocol directly.
+  const ACTIONS = "click|type|fill|focus|select|tap|hover|press|evaluate|evaluateHandle|evaluateOnNewDocument|\\$eval|\\$\\$eval|waitForFunction|goto|reload|goBack|goForward|setContent|content|screenshot|pdf|addScriptTag|addStyleTag|exposeFunction|setCookie|cookies|deleteCookie|uploadFile|setRequestInterception|setExtraHTTPHeaders|setUserAgent|setJavaScriptEnabled|authenticate|setBypassCSP|createCDPSession";
+  const PAGE_ACTION = new RegExp(`\\.(${ACTIONS})\\s*\\(|\\[\\s*["'\`](${ACTIONS})["'\`]\\s*\\]|\\.(keyboard|mouse|touchscreen)\\b`);
   // The two reads the official window needs, by content and once each:
   // the URL and document identity of her tab, and re-opening that same URL in the library's tab.
   const ALLOWED = new Map([
@@ -159,7 +161,8 @@ describe("connections source (CLAUDE.md §7)", () => {
 
   it("catches the patterns it is meant to catch", () => {
     for (const line of ['await page.goto("https://bank.test")', "await frame.evaluate(() => 1)", 'page.$eval("#id", (e) => e)', "await page.waitForFunction(() => true)",
-      'await page.type("#user", id)', "await page.setExtraHTTPHeaders({})", "page.keyboard.press('Enter')"]) {
+      'await page.type("#user", id)', "await page.setExtraHTTPHeaders({})", "page.keyboard.press('Enter')", 'await page.locator("#id").fill(id)',
+      "await page.screenshot()", "const cdp = await page.createCDPSession()", 'await page["click"]("#login")', "await page.content()", "await page.reload()"]) {
       expect(PAGE_ACTION.test(line), line).toBe(true);
     }
     expect(PAGE_ACTION.test("const pages = await page.browser().pages()")).toBe(false);
