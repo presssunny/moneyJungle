@@ -3,13 +3,15 @@ import { businessDate } from "../../utils/date.utils";
 
 export const bankTransactionTypes = ["deposit", "withdrawal", "transfer", "fee", "other"] as const;
 
-export const createBankAccountSchema = z.object({
+const accountFields = {
   bankName: z.string().min(1, "יש להזין שם בנק").max(120),
   accountName: z.string().min(1, "יש להזין שם חשבון").max(120),
-  initialBalance: z.coerce.number().default(0),
-});
+};
 
-export const updateBankAccountSchema = createBankAccountSchema.partial();
+export const createBankAccountSchema = z.object({ ...accountFields, initialBalance: z.coerce.number().default(0) });
+
+// Built without defaults: .partial() keeps them, and an edit of the name alone reset the opening balance to 0.
+export const updateBankAccountSchema = z.object({ ...accountFields, initialBalance: z.coerce.number() }).partial();
 
 export const createBankTransactionSchema = z.object({
   transactionDate: z.coerce.date(),
