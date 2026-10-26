@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import puppeteer, { type Browser, type Page } from "puppeteer";
 import { getCurrentUrl } from "israeli-bank-scrapers/lib/helpers/navigation";
@@ -147,11 +147,42 @@ describe("waitForSignIn", () => {
   }, 30_000);
 });
 
-describe("officialLogin source (CLAUDE.md §7)", () => {
-  it("only reads the bank's pages: no typing, clicking, focusing, injected scripts or cookie access", () => {
+describe("connections source (CLAUDE.md §7)", () => {
+  // Anything that can act on a bank page: type, click, run code in it, navigate it, touch its cookies or headers.
+  const PAGE_ACTION = /\.(click|type|focus|select|tap|hover|press|evaluate|evaluateHandle|evaluateOnNewDocument|\$eval|\$\$eval|waitForFunction|goto|setContent|addScriptTag|addStyleTag|exposeFunction|setCookie|cookies|deleteCookie|uploadFile|setRequestInterception|setExtraHTTPHeaders|authenticate|setBypassCSP)\s*\(|\.(keyboard|mouse|touchscreen)\b/;
+  // The two reads the official window needs, by content and once each:
+  // the URL and document identity of her tab, and re-opening that same URL in the library's tab.
+  const ALLOWED = new Map([
+    ["officialLogin.ts", ["const value: unknown = await page.evaluate(DOCUMENT);", "await page.goto(tab.url());"]],
+  ]);
+  const sources = readdirSync(__dirname).filter((name) => name.endsWith(".ts") && !name.endsWith(".test.ts"));
+
+  it("catches the patterns it is meant to catch", () => {
+    for (const line of ['await page.goto("https://bank.test")', "await frame.evaluate(() => 1)", 'page.$eval("#id", (e) => e)', "await page.waitForFunction(() => true)",
+      'await page.type("#user", id)', "await page.setExtraHTTPHeaders({})", "page.keyboard.press('Enter')"]) {
+      expect(PAGE_ACTION.test(line), line).toBe(true);
+    }
+    expect(PAGE_ACTION.test("const pages = await page.browser().pages()")).toBe(false);
+  });
+
+  it("no connection file acts on a bank page beyond the two allowed reads", () => {
+    const found: string[] = [];
+    const allowedSeen = new Map<string, number>();
+    for (const name of sources) {
+      readFileSync(path.join(__dirname, name), "utf8").split("\n").forEach((line, i) => {
+        if (!PAGE_ACTION.test(line)) return;
+        const text = line.trim();
+        if (ALLOWED.get(name)?.includes(text)) allowedSeen.set(text, (allowedSeen.get(text) ?? 0) + 1);
+        else found.push(`${name}:${i + 1}: ${text}`);
+      });
+    }
+    expect(found).toEqual([]);
+    expect([...allowedSeen.values()].every((count) => count === 1)).toBe(true);
+  });
+
+  it("the document read is a read: the URL and the document's identity, nothing else", () => {
     const source = readFileSync(path.join(__dirname, "officialLogin.ts"), "utf8");
-    const actions = /\.(click|type|focus|select|tap|hover|press|keyboard|mouse|touchscreen|evaluateOnNewDocument|addScriptTag|exposeFunction|setCookie|cookies|deleteCookie|uploadFile)\s*\(|\.(keyboard|mouse|touchscreen)\b/;
-    expect(source).not.toMatch(actions);
+    expect(source).toContain('const DOCUMENT = "[location.href, performance.timeOrigin]";');
   });
 });
 
