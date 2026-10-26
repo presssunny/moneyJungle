@@ -75,7 +75,8 @@ export async function financialMetric(userId: number, name: MetricName, month: s
     metric.value = state.balances.length && state.allowance.cash !== null ? round2(state.allowance.cash) : null;
     if (state.balances.some(b => b.balance === null)) metric.missingData = [...metric.missingData, "יש חשבון בלי יתרה ידועה — הסכום אינו זמין עד שתוזן היתרה מהבנק"];
     metric.formula = "סכום יתרות החשבונות: עוגן אחרון ועוד תנועות מאוחרות ממנו";
-    components=state.balances.flatMap(b=>[
+    // An unknown balance has no anchor and no "after" to show — one line that says so.
+    components=state.balances.flatMap((b):MetricComponent[]=>b.balance===null?[{key:`unknown:${b.id}`,label:`${b.name} — יתרה לא ידועה`,value:null,detail:b.explanation,to:"/accounts?tab=bank"}]:[
       {key:`anchor:${b.id}`,label:`${b.name} — ${b.anchor?.fileName??"ללא עוגן מאומת"}`,value:b.anchor?.closingBalance??(b.balance===null?null:round2(b.balance-b.afterAnchorNet)),date:b.anchor?.coverageTo,detail:b.explanation,to:"/accounts?tab=bank"},
       {key:`after:${b.id}`,label:`${b.name} — ${b.afterAnchorCount} תנועות אחרי העוגן`,value:b.afterAnchorNet,to:"/accounts?tab=bank"},
     ]);

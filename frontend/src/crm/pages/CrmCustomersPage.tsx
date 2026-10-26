@@ -6,6 +6,7 @@ import { Card } from "../../components/common/Card";
 import { EmptyState } from "../../components/common/EmptyState";
 import { ErrorMessage } from "../../components/common/ErrorMessage";
 import { Input } from "../../components/common/Input";
+import { MissingValue } from "../../components/common/MissingValue";
 import { Modal } from "../../components/common/Modal";
 import { PageShell } from "../../components/common/PageShell";
 import { Select } from "../../components/common/Select";
@@ -111,7 +112,8 @@ export default function CrmCustomersPage() {
   const withActivity = rows.filter((c) => c.hasActivity).length;
   const totalIncome = rows.reduce((sum, c) => sum + c.totalIncome, 0);
   const totalExpense = rows.reduce((sum, c) => sum + c.totalExpense, 0);
-  const totalLoanBalance = rows.reduce((sum, c) => sum + c.activeLoanBalance, 0);
+  const totalLoanBalance = rows.reduce((sum, c) => sum + (c.activeLoanBalance ?? 0), 0);
+  const unknownLoanCustomers = rows.filter((c) => c.activeLoanBalance === null).length;
 
   const columns: Column<CrmCustomerListItem>[] = [
     {
@@ -181,7 +183,7 @@ export default function CrmCustomersPage() {
       key: "loans",
       header: "יתרת הלוואות",
       align: "left",
-      render: (row) => <span className="mono">{formatCurrency(row.activeLoanBalance)}</span>,
+      render: (row) => (row.activeLoanBalance === null ? <MissingValue /> : <span className="mono">{formatCurrency(row.activeLoanBalance)}</span>),
     },
     { key: "created", header: "נוצר", render: (row) => formatDate(row.createdAt) },
     {
@@ -234,7 +236,7 @@ export default function CrmCustomersPage() {
                 icon="💸"
                 tone={totalExpense > totalIncome ? "danger" : "default"}
               />
-              <SummaryCard label="יתרת הלוואות פעילות" value={formatCurrency(totalLoanBalance)} icon="📉" />
+              <SummaryCard label="יתרת הלוואות פעילות" value={`${unknownLoanCustomers ? "לפחות " : ""}${formatCurrency(totalLoanBalance)}`} sub={unknownLoanCustomers ? `לא כולל הלוואות בלי יתרה ידועה אצל ${unknownLoanCustomers} לקוחות` : undefined} icon="📉" />
             </div>
           )}
         </AsyncSection>

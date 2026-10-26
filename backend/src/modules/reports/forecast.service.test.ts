@@ -63,6 +63,10 @@ describe("registered payments per month", () => {
       expect(result.commitments[0]).toMatchObject({ monthKey: "2027-01", total: { knownTotal: 100, unknownCount: 1 } });
       expect(result.commitments[1]).toMatchObject({ monthKey: "2027-02", total: { knownTotal: 0, unknownCount: 1 } });
       expect(result.heaviest).toEqual({ monthKey: "2027-01", total: { knownTotal: 100, unknownCount: 1 } });
+
+      mocks.buildUpcoming.mockResolvedValue({ events: [{ date: "2027-02-05T00:00:00.000Z", kind: "reminder", name: "fee", amount: null, icon: "🔔" }],
+        months: [{ monthKey: "2027-02", total: { knownTotal: 0, unknownCount: 1 } }] });
+      expect((await getForecast(1, scenario, [])).heaviest).toEqual({ monthKey: "2027-02", total: { knownTotal: 0, unknownCount: 1 } });
     } finally { vi.useRealTimers(); }
   });
 });

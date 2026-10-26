@@ -35,6 +35,7 @@ export const crmService = {
     const incomeMap = toSumMap(incomeSums, "amount");
     const expenseMap = toSumMap(expenseSums, "amount");
     const loanMap = toSumMap(loanSums, "currentBalance");
+    const loanUnknown = new Set(loanSums.filter((g) => g._count._all > g._count.currentBalance).map((g) => g.userId));
     const bankMap = toSumMap(bankSums, "currentBalance");
     // SUM skips NULL: a user with an unknown balance would show the rest as the whole.
     const bankUnknown = new Set(bankSums.filter((g) => g._count._all > g._count.currentBalance).map((g) => g.userId));
@@ -68,7 +69,7 @@ export const crmService = {
         totalIncome,
         totalExpense,
         netCashflow: sumDecimals([totalIncome, -totalExpense]),
-        activeLoanBalance: loanMap.get(user.id) ?? 0,
+        activeLoanBalance: loanUnknown.has(user.id) ? null : loanMap.get(user.id) ?? 0,
         bankBalance: bankUnknown.has(user.id) ? null : bankMap.get(user.id) ?? 0,
         lastActivityAt: lastActivityMap.get(user.id) ?? null,
       };
@@ -169,8 +170,8 @@ export const crmService = {
         currentBalance: decimalOrNull(l.currentBalance),
         annualInterestRate: decimalOrNull(l.annualInterestRate),
         monthlyPayment: num(l.monthlyPayment),
-        earlyRepaymentFee: num(l.earlyRepaymentFee),
-        closureCost: num(l.closureCost),
+        earlyRepaymentFee: decimalOrNull(l.earlyRepaymentFee),
+        closureCost: decimalOrNull(l.closureCost),
         scheduleEntryCount: l._count.schedule,
       })),
       bank: {

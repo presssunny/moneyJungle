@@ -11,7 +11,7 @@ import { useMonth } from "../context/MonthContext";
 import { useAsync } from "../hooks/useAsync";
 import { listReminders } from "../services/reminders.service";
 import { listRecurring, listSubscriptions } from "../services/planning.service";
-import { formatCurrency } from "../utils/format";
+import { formatCurrency, formatKnownSum, sumKnown } from "../utils/format";
 
 interface CalendarEvent {
   key: string;
@@ -111,7 +111,7 @@ export default function CalendarPage() {
 
   const today = new Date();
   const isCurrentMonth = today.getFullYear() === year && today.getMonth() + 1 === month;
-  const monthTotal = [...eventsByDay.values()].flat().reduce((sum, e) => sum + (e.amount ?? 0), 0);
+  const monthTotal = sumKnown([...eventsByDay.values()].flat().map((e) => e.amount));
 
   const cells: Array<{ day: number | null }> = [
     ...Array.from({ length: firstWeekday }, () => ({ day: null })),
@@ -120,8 +120,8 @@ export default function CalendarPage() {
 
   // The heaviest day of the month — the one worth planning around.
   const heaviest = [...eventsByDay.entries()]
-    .map(([day, events]) => ({ day, total: events.reduce((sum, e) => sum + (e.amount ?? 0), 0) }))
-    .sort((a, b) => b.total - a.total)[0];
+    .map(([day, events]) => ({ day, total: sumKnown(events.map((e) => e.amount)) }))
+    .sort((a, b) => b.total.knownTotal - a.total.knownTotal || b.total.unknownCount - a.total.unknownCount)[0];
   const eventCount = [...eventsByDay.values()].flat().length;
 
   return (
@@ -137,7 +137,7 @@ export default function CalendarPage() {
             <div className="kpi-row">
               <SummaryCard
                 label="צפוי לצאת החודש"
-                value={formatCurrency(monthTotal)}
+                value={formatKnownSum(monthTotal)}
                 icon="📅"
                 tone="danger"
                 sub={`${eventCount} אירועים`}
@@ -147,7 +147,7 @@ export default function CalendarPage() {
                 value={heaviest ? `${heaviest.day} בחודש` : "—"}
                 icon="⚠️"
                 tone={heaviest ? "warning" : "default"}
-                sub={heaviest ? formatCurrency(heaviest.total) : undefined}
+                sub={heaviest ? formatKnownSum(heaviest.total) : undefined}
               />
               <SummaryCard
                 label="ימים עם תשלומים"

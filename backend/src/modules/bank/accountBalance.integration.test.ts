@@ -62,8 +62,12 @@ describe("a bank balance nobody stated", () => {
     expect(detail.bank.accounts.map((a) => a.currentBalance).sort()).toEqual([300, null]);
     expect(detail.bank.totalBalance).toBeNull();
     expect(detail.bank.unknownBalanceCount).toBe(1);
+    await prisma.loan.create({ data: { userId, loanName: "הלוואה", loanType: "bank", monthlyPayment: 900, startDate: new Date("2026-01-01"), currentBalance: null, scheduleSource: "statement" } });
     const listed = (await crmService.listCustomers()).find((c) => c.id === userId);
     expect(listed?.bankBalance).toBeNull();
+    expect(listed?.activeLoanBalance).toBeNull();
+    const loan = (await crmService.getCustomerDetail(userId)).loans[0];
+    expect(loan).toMatchObject({ currentBalance: null, earlyRepaymentFee: null, closureCost: null });
   });
 });
 

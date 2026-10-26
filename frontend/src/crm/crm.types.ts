@@ -38,7 +38,8 @@ export interface CrmCustomerListItem {
   totalIncome: number;
   totalExpense: number;
   netCashflow: number;
-  activeLoanBalance: number;
+  /** null when an active loan's balance is unknown. */
+  activeLoanBalance: number | null;
   /** null when one of the accounts has an unknown balance. */
   bankBalance: number | null;
   lastActivityAt: string | null;
@@ -111,7 +112,7 @@ export interface CrmLoan {
   trackNumber: string | null;
   closedAt: string | null;
   closureReason: string | null;
-  closureCost: number;
+  closureCost: number | null;
   scheduleEntryCount: number;
   createdAt: string;
   updatedAt: string;

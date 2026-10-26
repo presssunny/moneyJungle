@@ -92,6 +92,7 @@ export const crmRepository = {
       by: ["userId"],
       where: { status: "active" },
       _sum: { currentBalance: true },
+      _count: { _all: true, currentBalance: true },
     });
   },
 

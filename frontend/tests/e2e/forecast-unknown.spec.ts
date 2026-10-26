@@ -47,3 +47,23 @@ test('A registered payment without an amount is unknown, and the month total is 
  const violations=(await new AxeBuilder({page}).include('main').analyze()).violations.filter(v=>['serious','critical'].includes(v.impact??''));
  expect(violations.map(v=>`${v.id}: ${v.nodes.map(n=>n.target.join(' ')).join(', ')}`)).toEqual([]);
 });
+
+test('The calendar counts a reminder without an amount as unknown, not 0',async({page})=>{
+ const now=new Date();const day=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-15`;
+ await page.route('**/api/**',async route=>{
+  const path=new URL(route.request().url()).pathname;
+  let reply:unknown=[];
+  if(path==='/api/gate/session')reply={user:{id:1,email:'test@example.test',displayName:'Test',role:'USER'},csrfToken:'x'};
+  else if(path==='/api/settings')reply={theme:'light',currency:'ILS',notificationsJson:{}};
+  else if(path==='/api/journey/profile')reply={onboarding:'completed'};
+  else if(path==='/api/reminders')reply=[{id:1,title:'חידוש רישיון',eventDate:day,estimatedAmount:null,type:'expected_expense',icon:null,isActive:true}];
+  else if(path==='/api/recurring')reply={items:[{id:2,name:'שכר דירה',amount:'1200',frequency:'monthly',nextPaymentDate:day}],monthlyTotal:1200};
+  else if(path==='/api/subscriptions')reply={items:[],monthlyTotal:0,annualTotal:0,activeCount:0};
+  await route.fulfill({json:reply});
+ });
+ await page.goto('/commitments?tab=calendar');
+ const total=page.locator('.summary-card').filter({hasText:'צפוי לצאת החודש'});
+ await expect(total).toContainText('לפחות',{timeout:15000});
+ await expect(total).toContainText('עוד 1 בלי סכום');
+ await expect(page.locator('.summary-card').filter({hasText:'היום העמוס'})).toContainText('לפחות');
+});

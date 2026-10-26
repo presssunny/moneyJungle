@@ -48,6 +48,12 @@ export function shiftMonthKey(monthKey: string, delta: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
+/** Same rule as the server's sumKnown: an unknown amount is counted, never added as 0. */
+export function sumKnown(values: Array<number | null>): KnownSum {
+  const known = values.filter((v): v is number => v !== null);
+  return { knownTotal: Math.round(known.reduce((sum, v) => sum + v, 0) * 100) / 100, unknownCount: values.length - known.length };
+}
+
 export function formatKnownSum({ knownTotal, unknownCount }: KnownSum): string {
   if (!unknownCount) return formatCurrency(knownTotal);
   const missing = `${unknownCount} בלי סכום`;

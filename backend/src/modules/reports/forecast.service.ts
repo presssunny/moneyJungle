@@ -52,7 +52,8 @@ export async function getForecast(userId: number, scenario: ForecastScenario, ex
     const total = upcoming.months.find((row) => row.monthKey === month.monthKey)?.total ?? { knownTotal: 0, unknownCount: 0 };
     return { monthKey: month.monthKey, events, total };
   });
-  const heaviest = commitments.reduce((max, row) => row.total.knownTotal > max.total.knownTotal ? row : max, commitments[0]);
-  return { ...result, commitments, heaviest: heaviest.total.knownTotal > 0 ? { monthKey: heaviest.monthKey, total: heaviest.total } : null,
+  // Known amount first; a month whose payments are all without an amount still has payments.
+  const heaviest = commitments.reduce((max, row) => row.total.knownTotal > max.total.knownTotal || (row.total.knownTotal === max.total.knownTotal && row.total.unknownCount > max.total.unknownCount) ? row : max, commitments[0]);
+  return { ...result, commitments, heaviest: heaviest.total.knownTotal > 0 || heaviest.total.unknownCount > 0 ? { monthKey: heaviest.monthKey, total: heaviest.total } : null,
     generatedAt: now.toISOString(), anchorMonth: anchor.toISOString().slice(0, 7) };
 }
