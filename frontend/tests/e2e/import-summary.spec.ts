@@ -48,7 +48,7 @@ test('A verified 117-row report needs one approval and keeps optional details cl
  await page.screenshot({path:info.outputPath('import-summary.png'),fullPage:true});
  await page.getByRole('button',{name:'הוספת התנועות',exact:true}).click();
  await expect(page.getByText('הייבוא הושלם.')).toBeVisible();
- expect(mocked.requests).toEqual([{action:'commit',payload:{version:4}},{action:'complete',payload:{version:5}}]);
+ expect(mocked.requests).toEqual([{action:'commit',payload:{version:4,skipCommitments:[]}},{action:'complete',payload:{version:5}}]);
  await expect(page.getByRole('link',{name:'דוחות ואפשרות ביטול הייבוא'})).toBeVisible();
 });
 
