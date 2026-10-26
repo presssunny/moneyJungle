@@ -1,4 +1,7 @@
 import { Prisma } from "../../generated/prisma/client";
+import type { KnownSum } from "../types/money.types";
+
+export type { KnownSum };
 
 /** Round to 2 decimal places (money). */
 export function round2(value: number): number {
@@ -23,11 +26,6 @@ export function decimalOrNull(value: Prisma.Decimal | number | null | undefined)
 /** Sum an array of Prisma Decimals into a rounded number. */
 export function sumDecimals(values: Array<Prisma.Decimal | number | null | undefined>): number {
   return round2(values.reduce<number>((acc, v) => acc + decimalToNumber(v), 0));
-}
-
-export interface KnownSum {
-  knownTotal: number;
-  unknownCount: number;
 }
 
 /** An unknown amount is counted, never added as 0 — the known part is only a lower bound. */

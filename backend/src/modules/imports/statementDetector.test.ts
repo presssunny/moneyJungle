@@ -85,10 +85,11 @@ describe("detectStatement", () => {
 
 describe("a PDF is held back as a schedule only on a schedule's own markers", () => {
   const pdfs: FixtureName[] = ["bankStatementPdf", "bankStatementDailyPdf", "bankStatementDailyStartPdf"];
-  it.each(pdfs)("the real bank statement %s is not taken for a schedule", async (name) => {
-    if (!hasFixture(name)) return;
-    expect(isScheduleText(await readPdfText(readFileSync(fixturePath(name))))).toBe(false);
-  });
+  for (const name of pdfs) {
+    it.skipIf(!hasFixture(name))(`the real bank statement ${name} is not taken for a schedule`, async () => {
+      expect(isScheduleText(await readPdfText(readFileSync(fixturePath(name))))).toBe(false);
+    });
+  }
 
   it("a balance column alone does not make a schedule", () => {
     expect(isScheduleText("תאריך תיאור חובה זכות יתרה")).toBe(false);

@@ -14,7 +14,7 @@ const openingBalance = z.number().finite().min(-9999999999).max(9999999999).null
 // currentBalance is what the bank shows today — a stated balance (anchor), not an opening one.
 export const createBankAccountSchema = z.object({ ...accountFields, initialBalance: openingBalance.optional(), currentBalance: openingBalance.optional() });
 
-// Built without defaults: .partial() keeps them, and an edit of the name alone reset the opening balance to 0.
+// Built without defaults: .partial() keeps them, so an edit that leaves a field out would overwrite it.
 export const updateBankAccountSchema = z.object({ ...accountFields, initialBalance: openingBalance }).partial();
 
 export const createBankTransactionSchema = z.object({

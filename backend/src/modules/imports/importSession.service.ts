@@ -47,7 +47,7 @@ async function prepare(userId: number, buffer: Buffer, fileName: string, answers
   const isPdf = /\.pdf$/i.test(fileName) || buffer.subarray(0,5).toString() === "%PDF-";
   let kind: string = answers.kind ?? (isPdf ? "unknown" : detected.kind);
   let detectedBank: ParsedBankStatement | undefined;
-  // Whatever kind was chosen: a schedule read as a statement wrote years of future "transactions" once.
+  // Whatever kind was chosen: a schedule read as a statement turns its future payments into transactions.
   if (isPdf && isScheduleText(await readPdfText(buffer).catch(() => ""))) {
     const preview: ImportPreview = { rows: [], total: 0, count: 0, warnings: [], questions: [],
       blockingIssues: ["לוח סילוקין נקלט כרגע רק מקובץ Excel. אפשר להוריד מהבנק את הלוח כקובץ Excel ולהעלות אותו כאן."] };
