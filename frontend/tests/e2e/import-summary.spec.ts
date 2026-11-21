@@ -48,7 +48,7 @@ test('A verified 117-row report needs one approval and keeps optional details cl
  await page.screenshot({path:info.outputPath('import-summary.png'),fullPage:true});
  await page.getByRole('button',{name:'הוספת התנועות',exact:true}).click();
  await expect(page.getByText('הייבוא הושלם.')).toBeVisible();
- expect(mocked.requests).toEqual([{action:'commit',payload:{version:4,skipCommitments:[]}},{action:'complete',payload:{version:5}}]);
+ expect(mocked.requests).toEqual([{action:'commit',payload:{version:4,acceptCommitments:[]}},{action:'complete',payload:{version:5}}]);
  await expect(page.getByRole('link',{name:'דוחות ואפשרות ביטול הייבוא'})).toBeVisible();
 });
 
@@ -100,4 +100,21 @@ test('Credit keeps its dedicated transaction approval and is never completed aut
  await expect(page.getByRole('heading',{name:'אישור עסקאות האשראי'})).toBeVisible();
  await expect(page.getByRole('link',{name:'פתיחת התנועות שנוספו'})).toHaveAttribute('href',/tab=credit&importId=8/);
  expect(mocked.requests.map(r=>r.action)).toEqual(['commit']);
+});
+
+test('Detected fixed debits are offered unmarked, and only the marked one is sent with the approval',async({page})=>{
+ const initial=readySession();
+ initial.preview.commitments=[
+  {key:'loan:108:16',kind:'loan',name:'הלוואה 108',amount:1226.29,dayOfMonth:16,months:2,lastDate:'2026-10-16',nextDate:'2026-11-16',loanNumber:'108'},
+  {key:'recurring:שיק:4500',kind:'recurring',name:'משיכת שיק',amount:4500,dayOfMonth:10,months:3,lastDate:'2026-10-10',nextDate:'2026-11-10',loanNumber:null},
+ ];
+ const mocked=await mockImport(page,{initial});await page.goto('/imports?session=summary-test');
+ const boxes=page.getByRole('checkbox');
+ await expect(boxes).toHaveCount(2);
+ for(const box of await boxes.all())await expect(box).not.toBeChecked();
+ await expect(page.getByText(/מה שלא יסומן לא יתווסף עכשיו/)).toBeVisible();
+ await page.getByRole('checkbox',{name:/הלוואה/}).check();
+ await page.getByRole('button',{name:'הוספת התנועות',exact:true}).click();
+ await expect(page.getByText('הייבוא הושלם.')).toBeVisible();
+ expect(mocked.requests[0]).toEqual({action:'commit',payload:{version:4,acceptCommitments:['loan:108:16']}});
 });

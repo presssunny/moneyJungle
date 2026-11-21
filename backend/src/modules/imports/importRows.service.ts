@@ -112,7 +112,8 @@ export const importRows = {
   async edit(userId:number,sessionId:string,rowNumber:number,input:unknown) {
     const body=rowEditSchema.parse(input);
     const session=await prisma.importSession.findFirst({where:{id:sessionId,userId}});
-    if(!session||session.version!==body.version||!["ready_for_review","needs_input"].includes(session.status)) throw ApiError.conflict("הייבוא השתנה או כבר הוסיף תנועות — יש לרענן");
+    if(!session) throw ApiError.notFound("הייבוא לא נמצא");
+    if(session.version!==body.version||!["ready_for_review","needs_input"].includes(session.status)) throw ApiError.conflict("הייבוא השתנה או כבר הוסיף תנועות — יש לרענן");
     const row=await prisma.importRow.findUnique({where:{sessionId_rowNumber:{sessionId,rowNumber}}});
     if(!row) throw ApiError.notFound("השורה לא נמצאה");
     const current=row.normalized as unknown as PreviewRow;

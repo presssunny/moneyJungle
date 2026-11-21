@@ -17,7 +17,7 @@ async function mockApi(page:Page,{pending=false,coverageAcknowledged=true}={}){
   else if(path==='/api/journey/status')body=state();
   else if(path==='/api/journey/onboarding/defer'){profile={...profile,onboarding:'deferred'};body={ok:true};}
   else if(path==='/api/journey/onboarding/complete'){if(!session||session.status!=='completed')return route.fulfill({status:409,json:{error:{message:'יש להשלים את הקליטה'}}});profile={...profile,onboarding:'completed'};body=profile;}
-  else if(path==='/api/dashboard/summary')body={incomeTotal:0,expenseTotal:expense&&!removed?expense.amount:0,balance:0,creditTotal:0,bankReview:{pendingCount:0},bankMonth:{debtReduction:0,cardSettled:0,internalTransfer:0,loanDrawdown:0,financingNet:0}};
+  else if(path==='/api/dashboard/summary')body={incomeTotal:0,expenseTotal:expense&&!removed?expense.amount:0,balance:0,creditTotal:0,bankReview:{pendingCount:0},bankMonth:{debtReduction:0,cardSettled:0,internalTransfer:0,loanDrawdown:0,financingNet:0},coverage:{state:'unknown'}};
   else if(path==='/api/expenses/quick-add'){expense={id:7,amount:18,businessName:'קפה',categoryId:null,paymentMethodId:null,category:null,expenseDate:'2026-09-16',description:'נוסף בהקלדה מהירה',isRecurring:false};body={expense,parsed:{amount:18}};}
   else if(path==='/api/expenses/7'&&method==='PATCH'){expense={...expense,...req.postDataJSON()};body=expense;}
   else if(path==='/api/expenses/7'&&method==='DELETE'){removed=true;body={ok:true};}
@@ -41,6 +41,13 @@ async function mockApi(page:Page,{pending=false,coverageAcknowledged=true}={}){
   else if(path==='/api/activity')body=new URL(req.url()).searchParams.get('before')==='2'?{items:[{id:1,domain:'loans',action:'delete',entityId:'4',summary:'הלוואה — נמחק (#4)',createdAt:'2026-09-15T08:00:00Z'}],nextCursor:null}:{items:[{id:3,domain:'expenses',action:'create',entityId:'7',summary:'הוצאה — נוסף: קפה · ₪18',createdAt:'2026-09-17T08:00:00Z'},{id:2,domain:'imports',action:'commit',entityId:null,summary:'ייבוא — נקלט: report.xlsx',createdAt:'2026-09-16T08:00:00Z'}],nextCursor:2};
   else if(path==='/api/reminders'&&method==='POST'){const input=req.postDataJSON();reminders.push({id:reminders.length+1,isActive:true,icon:null,description:null,...input});body=reminders.at(-1);}
   else if(path==='/api/reminders')body=reminders;
+  else if(path==='/api/journey/commitments/month'){
+   // The server's month list: here, only the reminders saved in this test.
+   const month=new URL(req.url()).searchParams.get('month')??'';
+   const events=reminders.filter((r:any)=>String(r.eventDate).startsWith(month)).map((r:any)=>({key:`reminder:${r.id}`,date:r.eventDate,name:r.title,amount:r.estimatedAmount??null,kind:'reminder',basis:'estimate',fingerprint:'f',decision:null,note:null,to:'/commitments?tab=calendar'}));
+   const knownTotal=events.reduce((s:number,e:any)=>s+(e.amount??0),0);
+   body={month,events,total:{knownTotal,unknownCount:events.filter((e:any)=>e.amount===null).length},heaviestDay:null,possibleCardOverlap:false};
+  }
   else if(path==='/api/recurring')body={items:[],monthlyTotal:0};
   else if(path==='/api/subscriptions')body={items:[],monthlyTotal:0,annualTotal:0};
   else if(path==='/api/journey/check-in'&&method==='POST'){draft={id:'checkin-test',step:0};body=draft;}
@@ -411,9 +418,11 @@ test('The month explanation names the financing interest, and a net credit as a 
  await mockApi(page);
  let financingNet=120;
  await page.route('**/api/journey/metrics/**',route=>route.fulfill({json:{name:'surplus',value:0,asOf:'2026-09-17',period:{from:'2026-09-01',to:'2026-09-30'},formula:'הכנסות פחות הוצאות',coverage:'לפי המקורות הרשומים',assumptions:[],missingData:[],components:[],sources:[],total:0,page:1,pageSize:50,dataVersion:'a'.repeat(64)}}));
- await page.route('**/api/dashboard/summary**',route=>route.fulfill({json:{incomeTotal:0,expenseTotal:0,balance:0,creditTotal:0,bankReview:{pendingCount:0},bankMonth:{debtReduction:0,cardSettled:0,internalTransfer:0,loanDrawdown:0,financingNet}}}));
+ await page.route('**/api/dashboard/summary**',route=>route.fulfill({json:{incomeTotal:0,expenseTotal:0,balance:0,creditTotal:0,bankReview:{pendingCount:0},bankMonth:{debtReduction:0,cardSettled:0,internalTransfer:0,loanDrawdown:0,financingNet},coverage:{state:'partial',from:'2026-07-26',to:'2026-07-31'}}}));
  await page.goto('/');
  await page.getByText('מה נכלל בסיכום החודש?').click();
+ // A month the statements cover only in part says so above its figures.
+ await expect(page.getByRole('note').filter({hasText:'החודש מכוסה חלקית בדוחות הבנק'})).toContainText('26.07.2026–31.07.2026');
  const line=page.locator('p').filter({hasText:'ריבית בתוך החזרי הלוואה בלי פירוט אינה כלולה'});
  await expect(line).toContainText(/מתוכן ריבית ועמלות מימון: .*120/);
  financingNet=-35;await page.reload();

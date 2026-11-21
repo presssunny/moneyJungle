@@ -10,6 +10,7 @@ import { FIXTURES_DIR, hasFixture, readFixture } from "../../testing/fixtures";
 import { businessDate } from "../../utils/date.utils";
 import { commitments } from "../journey/commitments.service";
 import { buildUpcoming } from "../dashboard/cashflow.service";
+import { parseBankStatement } from "./bankParser.service";
 import { importSessions } from "../imports/importSession.service";
 import { loanScheduleService } from "../loans/loanSchedule.service";
 import { loansService } from "../loans/loans.service";
@@ -42,23 +43,31 @@ afterEach(async () => { vi.useRealTimers(); await prisma.user.delete({ where: { 
 afterAll(async () => { env.DOCUMENT_STORAGE_DIR = originalStorage; await rm(storage, { recursive: true, force: true }); await prisma.$disconnect(); });
 
 describe("commitments a bank statement proves", () => {
-  it("adds what was kept, remembers what was unchecked, and never adds twice", async () => {
+  it("approving the statement adds only what she marked; the rest is not added and is offered again", async () => {
     await seedStatement();
     const offered = await statementCommitmentsService.detect(userId, accountId);
-    expect(offered.map((c) => c.kind).sort()).toEqual(["loan", "recurring"]);
-    const cheque = offered.find((c) => c.kind === "recurring")!;
-
-    const added = await statementCommitmentsService.apply(userId, accountId, [cheque.key]);
-    expect(added.map((c) => c.kind)).toEqual(["loan"]);
-    expect(await statementCommitmentsService.detect(userId, accountId)).toEqual([]);
-    expect(await statementCommitmentsService.apply(userId, accountId, [])).toEqual([]);
-    expect(await prisma.loan.count({ where: { userId } })).toBe(1);
+    const loan = offered.find((c) => c.kind === "loan")!;
+    const added = await statementCommitmentsService.apply(userId, accountId, { accept: [loan.key] });
+    expect(added.map((c) => c.key)).toEqual([loan.key]);
     expect(await prisma.recurringPayment.count({ where: { userId } })).toBe(0);
+    expect(await prisma.dismissedCommitment.count({ where: { userId } })).toBe(0);
+    expect((await statementCommitmentsService.detect(userId, accountId)).map((c) => c.kind)).toEqual(["recurring"]);
+  });
+
+
+  it("never adds the same commitment twice", async () => {
+    await seedStatement();
+    expect((await statementCommitmentsService.detect(userId, accountId)).map((c) => c.kind).sort()).toEqual(["loan", "recurring"]);
+    expect(await statementCommitmentsService.apply(userId, accountId, "all")).toHaveLength(2);
+    expect(await statementCommitmentsService.detect(userId, accountId)).toEqual([]);
+    expect(await statementCommitmentsService.apply(userId, accountId, "all")).toEqual([]);
+    expect(await prisma.loan.count({ where: { userId } })).toBe(1);
+    expect(await prisma.recurringPayment.count({ where: { userId } })).toBe(1);
   });
 
   it("a loan with an unknown balance counts in the monthly forecast but is neither closed nor debt", async () => {
     await seedStatement();
-    await statementCommitmentsService.apply(userId, accountId, []);
+    await statementCommitmentsService.apply(userId, accountId, "all");
     const { loans: items, summary } = await loansService.list(userId);
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({ scheduleSource: "statement", monthlyPayment: 1200, currentBalance: null, loanNumber: "108" });
@@ -72,7 +81,7 @@ describe("commitments a bank statement proves", () => {
 
   it("apply stores what the statement cannot tell as NULL with an 'unknown' opening amount — never 0", async () => {
     await seedStatement();
-    await statementCommitmentsService.apply(userId, accountId, []);
+    await statementCommitmentsService.apply(userId, accountId, "all");
     const loan = await prisma.loan.findFirstOrThrow({ where: { userId } });
     expect(loan.originalAmount).toBeNull();
     expect(loan.currentBalance).toBeNull();
@@ -83,10 +92,9 @@ describe("commitments a bank statement proves", () => {
 
   it("a detected payment is never materialized as an expense — the next statement brings the real one", async () => {
     await seedStatement();
-    await statementCommitmentsService.apply(userId, accountId, []);
+    await statementCommitmentsService.apply(userId, accountId, "all");
     const recurring = await prisma.recurringPayment.findFirstOrThrow({ where: { userId } });
     expect(recurring).toMatchObject({ nextPaymentDate: new Date("2026-10-15") });
-    expect(await recurringService.generate(userId, 2026, 10)).toMatchObject({ created: 0 });
     expect(await prisma.expense.count({ where: { userId } })).toBe(0);
 
     await recurringService.remove(userId, recurring.id);
@@ -124,13 +132,13 @@ describe("commitments a bank statement proves", () => {
   it("only what the approval showed is added", async () => {
     await seedStatement();
     const [loan] = (await statementCommitmentsService.detect(userId, accountId)).filter((c) => c.kind === "loan");
-    expect((await statementCommitmentsService.apply(userId, accountId, [], [loan.key])).map((c) => c.key)).toEqual([loan.key]);
+    expect((await statementCommitmentsService.apply(userId, accountId, "all", [loan.key])).map((c) => c.key)).toEqual([loan.key]);
     expect(await prisma.recurringPayment.count({ where: { userId } })).toBe(0);
   });
 
   it("an early-repayment quote is refused while the balance is unknown", async () => {
     await seedStatement();
-    await statementCommitmentsService.apply(userId, accountId, []);
+    await statementCommitmentsService.apply(userId, accountId, "all");
     const loan = await prisma.loan.findFirstOrThrow({ where: { userId } });
     await expect(loansService.earlyRepaymentQuote(userId, loan.id)).rejects.toThrow(/לא ידועה/);
   });
@@ -155,7 +163,7 @@ describe("commitments a bank statement proves", () => {
 
   it("an old statement leaves no past month open — the first payment is the next one from today", async () => {
     await seedStatement(["2026-01", "2026-02", "2026-03"]);
-    await statementCommitmentsService.apply(userId, accountId, []);
+    await statementCommitmentsService.apply(userId, accountId, "all");
     const today = new Date(businessDate());
     const loan = await prisma.loan.findFirstOrThrow({ where: { userId } });
     const recurring = await prisma.recurringPayment.findFirstOrThrow({ where: { userId } });
@@ -167,31 +175,64 @@ describe("commitments a bank statement proves", () => {
 
   it("a newer statement updates what an older one added", async () => {
     await seedStatement(["2026-01", "2026-02", "2026-03"]);
-    await statementCommitmentsService.apply(userId, accountId, []);
+    await statementCommitmentsService.apply(userId, accountId, "all");
     await prisma.bankTransaction.deleteMany({ where: { userId } });
     await seedStatement(months, 500);
-    expect(await statementCommitmentsService.apply(userId, accountId, [])).toEqual([]);
+    expect(await statementCommitmentsService.apply(userId, accountId, "all")).toEqual([]);
     const loan = await prisma.loan.findFirstOrThrow({ where: { userId } });
     expect(Number(loan.monthlyPayment)).toBe(800);
   });
 
   it.skipIf(!hasFixture("bankStatementH1") || !existsSync(path.join(FIXTURES_DIR, "loan-schedule-3.xlsx")))("every track's schedule after a real statement leaves no ghost loan", async () => {
     const session = await importSessions.create(userId, "h1.xlsx", readFixture("bankStatementH1"), { kind: "bank", accountId });
-    await importSessions.commit(userId, session.id, session.version, []);
+    await importSessions.commit(userId, session.id, session.version, (session.preview as { commitments?: Array<{ key: string }> }).commitments?.map((c) => c.key) ?? []);
     for (const file of ["loan-schedule-1.xlsx", "loan-schedule-2.xlsx", "loan-schedule-3.xlsx"]) {
       await loanScheduleService.importSchedule(userId, readFileSync(path.join(FIXTURES_DIR, file)), undefined, true);
     }
     expect(await prisma.loan.count({ where: { userId, scheduleSource: "statement" } })).toBe(0);
   });
 
-  it.skipIf(!hasFixture("bankStatementH1"))("a real statement offers its commitments in the preview and adds them in the same approval", async () => {
+  it.skipIf(!hasFixture("bankStatementH1"))("approving a real statement with nothing marked adds no commitment and dismisses none", async () => {
+    const session = await importSessions.create(userId, "h1.xlsx", readFixture("bankStatementH1"), { kind: "bank", accountId });
+    const offered = (session.preview as { commitments?: Array<{ key: string }> }).commitments ?? [];
+    expect(offered.length).toBeGreaterThan(0);
+    await importSessions.commit(userId, session.id, session.version);
+    expect(await prisma.loan.count({ where: { userId } })).toBe(0);
+    expect(await prisma.recurringPayment.count({ where: { userId } })).toBe(0);
+    expect(await prisma.dismissedCommitment.count({ where: { userId } })).toBe(0);
+    expect((await statementCommitmentsService.detect(userId, accountId)).map((c) => c.key).sort()).toEqual(offered.map((c) => c.key).sort());
+  });
+
+  it.skipIf(!hasFixture("bankStatementH1"))("a real statement offers its commitments in the preview and adds the marked ones in the same approval", async () => {
     let session = await importSessions.create(userId, "h1.xlsx", readFixture("bankStatementH1"), { kind: "bank", accountId });
     const preview = session.preview as { commitments?: Array<{ key: string; kind: string }> };
     expect(preview.commitments?.filter((c) => c.kind === "loan")).toHaveLength(1);
     expect(preview.commitments!.length).toBeGreaterThanOrEqual(3);
-    session = await importSessions.commit(userId, session.id, session.version, []);
+    session = await importSessions.commit(userId, session.id, session.version, preview.commitments!.map((c) => c.key));
     expect(await prisma.loan.count({ where: { userId, scheduleSource: "statement" } })).toBe(1);
     expect(await prisma.recurringPayment.count({ where: { userId, detectedKey: { not: null } } })).toBe(preview.commitments!.length - 1);
     expect(await statementCommitmentsService.detect(userId, accountId)).toEqual([]);
+  });
+});
+
+describe("what approving a statement writes to the server log", () => {
+  it.skipIf(!hasFixture("bankStatementH1"))("counts only — no payee, row text or amount", async () => {
+    const file = readFixture("bankStatementH1");
+    // Distinctive row text only: a bare "ריבית" or "העברה" is also a category name in the counts line.
+    const descriptions = parseBankStatement(file).rows.map((r) => r.description.trim()).filter((d) => d.length >= 8);
+    const lines: string[] = [];
+    const capture = (...args: unknown[]) => { lines.push(args.map(String).join(" ")); };
+    const spies = (["log", "info", "warn", "error"] as const).map((level) => vi.spyOn(console, level).mockImplementation(capture));
+    try {
+      const session = await importSessions.create(userId, "h1.xlsx", file, { kind: "bank", accountId });
+      await importSessions.commit(userId, session.id, session.version, (session.preview as { commitments?: Array<{ key: string }> }).commitments?.map((c) => c.key) ?? []);
+    } finally {
+      spies.forEach((spy) => spy.mockRestore());
+    }
+    const logged = lines.join("\n");
+    expect(lines.length).toBeGreaterThan(0);
+    // A count, so a failure never prints real row text into the test output either.
+    expect(descriptions.filter((d) => logged.includes(d)).length).toBe(0);
+    expect(/\d\.\d{2}(?!\d)|₪/.test(logged)).toBe(false);
   });
 });

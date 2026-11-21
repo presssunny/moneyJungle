@@ -6,6 +6,7 @@ import { Button } from "../components/common/Button";
 import { DropZone } from "../components/common/DropZone";
 import { Input } from "../components/common/Input";
 import { Select } from "../components/common/Select";
+import { CARD_ISSUER_OPTIONS } from "../types/models";
 import { ImportRowsReview } from "../components/common/ImportRowsReview";
 import { AddedCommitments, DetectedCommitments } from "../components/common/DetectedCommitments";
 import { AsyncSection } from "../components/common/AsyncSection";
@@ -76,10 +77,10 @@ function ImportJourney(){
  const [params,setParams]=useSearchParams();const id=params.get('session');
  const [session,setSession]=useState<ImportSession|null>(null);const [busy,setBusy]=useState(Boolean(id));const [error,setError]=useState('');const [pendingCount,setPendingCount]=useState<number|null>(null);const [editedCount,setEditedCount]=useState(0);
  const onRowsSummary=useCallback((pending:number,edited:number)=>{setPendingCount(pending);setEditedCount(edited);},[]);
- const [answers,setAnswers]=useState<Record<string,string|number>>({});const [newName,setNewName]=useState('');const [lastFour,setLastFour]=useState('');const [skippedCommitments,setSkippedCommitments]=useState<Set<string>>(new Set());
- const toggleCommitment=(key:string)=>setSkippedCommitments(old=>{const next=new Set(old);if(next.has(key))next.delete(key);else next.add(key);return next;});
+ const [answers,setAnswers]=useState<Record<string,string|number>>({});const [newName,setNewName]=useState('');const [lastFour,setLastFour]=useState('');const [cardIssuer,setCardIssuer]=useState('');const [acceptedCommitments,setAcceptedCommitments]=useState<Set<string>>(new Set());
+ const toggleCommitment=(key:string)=>setAcceptedCommitments(old=>{const next=new Set(old);if(next.has(key))next.delete(key);else next.add(key);return next;});
  const sources=useAsync(getFinancialStatus,[]);const loans=useAsync(async()=> (await api.get('/loans')).data.loans as Array<{id:number;loanName:string}>,[]);
- useEffect(()=>{setSkippedCommitments(new Set());},[id]);
+ useEffect(()=>{setAcceptedCommitments(new Set());},[id]);
  useEffect(()=>{let alive=true;if(id){getImportSession(id).then(s=>{if(alive){setSession(s);setAnswers(s.answers??{});}}).catch(e=>{if(alive)setError(apiErrorMessage(e));}).finally(()=>{if(alive)setBusy(false);});}return()=>{alive=false;};},[id]);
  async function run(action:()=>Promise<ImportSession>){setBusy(true);setError('');try{const next=await action();setSession(next);setAnswers(next.answers??{});setPendingCount(null);if(id!==next.id)setParams({session:next.id});}catch(e){setError(apiErrorMessage(e));}finally{setBusy(false);}}
  function inputNumber(key:string,value:string){setAnswers(old=>({...old,[key]:value?Number(value):''}));}
@@ -87,7 +88,7 @@ function ImportJourney(){
  async function commit(){
   if(!session)return;
   await run(async()=>{
-   const committed=await actOnSession(session,'commit',{skipCommitments:[...skippedCommitments]});
+   const committed=await actOnSession(session,'commit',{acceptCommitments:[...acceptedCommitments]});
    setSession(committed);
    if(['bank','expense_sheet','loan_schedule'].includes(committed.kind)&&committed.status==='review'){
     try{return await actOnSession(committed,'complete');}
@@ -98,7 +99,7 @@ function ImportJourney(){
  }
  async function createSource(){setBusy(true);setError('');try{
    if((answers.kind??session?.kind)==='bank'){const {data}=await api.post('/bank/accounts',{bankName:newName,accountName:newName});setAnswers(old=>({...old,accountId:data.id}));}
-   else{const {data}=await api.post('/credit/cards',{name:newName,issuer:newName,lastFour});setAnswers(old=>({...old,cardId:data.id}));}
+   else{const {data}=await api.post('/credit/cards',{name:newName,issuer:cardIssuer,lastFour});setAnswers(old=>({...old,cardId:data.id}));}
    setNewName('');sources.reload();
  }catch(e){setError(apiErrorMessage(e));}finally{setBusy(false);}}
  const kind=String(answers.kind??session?.kind??'');
@@ -128,7 +129,7 @@ function ImportJourney(){
     <AsyncSection resource={sources} errorTitle="לא ניתן לטעון חשבונות וכרטיסים" skeleton={<Loading/>}>{data=><>
      {kind==='bank'&&<Select label="חשבון בנק" value={answers.accountId??''} placeholder="בחירת חשבון" options={data.balances.map(a=>({value:a.id,label:a.name}))} onChange={e=>inputNumber('accountId',e.target.value)}/>}
      {kind==='credit'&&<Select label="כרטיס אשראי" value={answers.cardId??''} placeholder="בחירת כרטיס" options={data.cards.map(c=>({value:c.id,label:c.name}))} onChange={e=>inputNumber('cardId',e.target.value)}/>}
-     {['bank','credit'].includes(kind)&&<details><summary>{kind==='bank'?'החשבון לא ברשימה? הוספת חשבון':'הכרטיס לא ברשימה? הוספת כרטיס'}</summary><Input label={kind==='bank'?'שם החשבון (למשל: עו״ש משפחתי)':'שם הכרטיס (למשל: ויזה כאל)'} value={newName} onChange={e=>setNewName(e.target.value)}/>{kind==='credit'&&<Input label="4 הספרות האחרונות של הכרטיס" inputMode="numeric" maxLength={4} value={lastFour} onChange={e=>setLastFour(e.target.value)}/>}<Button disabled={busy||!newName||(kind==='credit'&&!/^\d{4}$/.test(lastFour))} onClick={createSource}>הוספה</Button></details>}
+     {['bank','credit'].includes(kind)&&<details><summary>{kind==='bank'?'החשבון לא ברשימה? הוספת חשבון':'הכרטיס לא ברשימה? הוספת כרטיס'}</summary><Input label={kind==='bank'?'שם החשבון (למשל: עו״ש משפחתי)':'שם הכרטיס (למשל: ויזה כאל)'} value={newName} onChange={e=>setNewName(e.target.value)}/>{kind==='credit'&&<><Input label="4 הספרות האחרונות של הכרטיס" inputMode="numeric" maxLength={4} value={lastFour} onChange={e=>setLastFour(e.target.value)}/><Select label="חברת האשראי" placeholder="בחירת חברה" value={cardIssuer} onChange={e=>setCardIssuer(e.target.value)} options={[...CARD_ISSUER_OPTIONS.map(name=>({value:name,label:name==='אחר'?'אחרת — החיוב בבנק לא יותאם לכרטיס':name}))]}/></>}<Button disabled={busy||!newName||(kind==='credit'&&(!/^\d{4}$/.test(lastFour)||!cardIssuer))} onClick={createSource}>הוספה</Button></details>}
     </>}</AsyncSection>
     {kind==='loan_schedule'&&<Select label="לאיזו הלוואה שייך הלוח?" value={answers.loanId??''} placeholder="זיהוי אוטומטי לפי מספר ההלוואה" options={(loans.data??[]).map(l=>({value:l.id,label:l.loanName}))} onChange={e=>inputNumber('loanId',e.target.value)}/>}
     {kind==='expense_sheet'&&<Input label="לאיזה חודש לשייך שורות בלי תאריך?" type="month" value={answers.month??''} onChange={e=>setAnswers(old=>({...old,month:e.target.value}))}/>}
@@ -150,7 +151,7 @@ function ImportJourney(){
    {session.status==='ready_for_review'&&<Card title="אישור והוספה"><p>אין צורך לעבור על כל שורה. אפשר לפתוח את הפירוט לפי הצורך.</p>
     {pendingCount!==null&&pendingCount>0&&<p role="status">נשאר להחליט על {pendingCount} תנועות שעשויות להיות כפולות.</p>}
     {answersChanged&&<p role="status">פרטי הקובץ השתנו. יש להפעיל בדיקה מחדש לפני ההוספה.</p>}
-    <DetectedCommitments items={session.preview?.commitments??[]} skipped={skippedCommitments} onToggle={toggleCommitment} disabled={busy}/>
+    <DetectedCommitments items={session.preview?.commitments??[]} accepted={acceptedCommitments} onToggle={toggleCommitment} disabled={busy}/>
     <Button disabled={busy||pendingCount!==0||answersChanged} onClick={commit}>{busy?'מוסיף…':'הוספת התנועות'}</Button>
    </Card>}
    {session.status==='review'&&<Card title={session.kind==='credit'?'אישור עסקאות האשראי':'התנועות נוספו'}><p>{session.kind==='credit'?'נשאר לאשר את עסקאות האשראי במסך הכרטיס, ואז לסיים כאן.':'התנועות נשמרו. אפשר להשלים את הסיום בלי להוסיף אותן שוב.'}</p><div className="row-actions">

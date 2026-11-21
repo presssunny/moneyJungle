@@ -17,7 +17,7 @@ importSessionRoutes.post("/",...uploadFile(STATEMENT_KINDS),asyncHandler(async(r
 }));
 importSessionRoutes.get("/:id",asyncHandler(async(req,res)=>{res.json(await importSessions.get(req.userId!,id(req.params.id)));}));
 importSessionRoutes.patch("/:id/answers",asyncHandler(async(req,res)=>{const body=z.object({version:z.number().int().nonnegative(),answers:z.unknown()}).parse(req.body);res.json(await importSessions.answer(req.userId!,id(req.params.id),body.version,body.answers));}));
-importSessionRoutes.post("/:id/commit",asyncHandler(async(req,res)=>{const body=z.object({version:z.number().int().nonnegative(),skipCommitments:z.array(z.string().max(160)).max(200).default([])}).parse(req.body);res.json(await importSessions.commit(req.userId!,id(req.params.id),body.version,body.skipCommitments));}));
+importSessionRoutes.post("/:id/commit",asyncHandler(async(req,res)=>{const body=z.object({version:z.number().int().nonnegative(),acceptCommitments:z.array(z.string().max(160)).max(200).default([])}).parse(req.body);res.json(await importSessions.commit(req.userId!,id(req.params.id),body.version,body.acceptCommitments));}));
 importSessionRoutes.post("/:id/complete",asyncHandler(async(req,res)=>{res.json(await importSessions.finish(req.userId!,id(req.params.id)));}));
 importSessionRoutes.post("/:id/cancel",asyncHandler(async(req,res)=>{res.json(await importSessions.cancel(req.userId!,id(req.params.id)));}));
 

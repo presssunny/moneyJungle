@@ -5,7 +5,7 @@ import { ApiError } from "../../utils/ApiError";
 import { documentStorage } from "../documents/documentStorage.service";
 import { documentsService } from "../documents/documents.service";
 import { bankService } from "../bank/bank.service";
-import { describeIngestionIssues, describeIngestionReport, parseBankStatement, parseBankStatementPdf, readPdfText, type ParsedBankStatement } from "../bank/bankParser.service";
+import { describeIngestionIssueCounts, describeIngestionIssues, describeIngestionReport, parseBankStatement, parseBankStatementPdf, readPdfText, type ParsedBankStatement } from "../bank/bankParser.service";
 import { creditService } from "../credit/credit.service";
 import { parseCreditFile } from "../credit/creditParser.service";
 import { loanScheduleService } from "../loans/loanSchedule.service";
@@ -77,14 +77,16 @@ async function prepare(userId: number, buffer: Buffer, fileName: string, answers
     // Each mismatch already names the row, so its paired reading issue would repeat it.
     preview.details = describeIngestionIssues({ rejected, balanceMismatches, review: balanceMismatches.length ? [] : readingIssues });
     console.log(`[תצוגת ייבוא בנק] ${describeIngestionReport(parsed.report)}`);
-    for (const line of preview.details) console.warn(`[תצוגת ייבוא בנק] ${line}`);
+    const issueCounts = describeIngestionIssueCounts(parsed.report);
+    if (issueCounts) console.warn(`[תצוגת ייבוא בנק] ${issueCounts} — הפירוט במסך הייבוא`);
     if (classificationIssues.length) preview.warnings.push(`נמצאו ${classificationIssues.length} זיכויים המתוארים כתשלומי קרן או הלוואה. הם לא ייספרו כהחזרי הלוואה.`);
     preview.validation = {
       balanceChecked: parsed.rows.length > 0 && !rejected.length && !readingIssues.length && parsed.rows.every(row => row.balanceCheck === "printed" || row.balanceCheck === "chain"),
       balanceMismatchCount: balanceMismatches.length, rejectedRowCount: rejected.length,
       reviewRowCount: review.length, balanceMode: parsed.report.balanceMode,
     };
-    preview.warnings.push("היתרה בחשבון תחושב מהדף. אם יימצאו תנועות דומות לאלו שכבר קיימות, נבקש החלטה רק לגביהן.");
+    // A file with no running balance (a bank sync, some exports) proves nothing about completeness.
+    preview.warnings.push(`${preview.validation.balanceChecked ? "היתרה בחשבון תחושב מהדף." : "בדף אין יתרה רצה — שלמות התנועות לא נבדקה, והוא לא מאמת את יתרת החשבון."} אם יימצאו תנועות דומות לאלו שכבר קיימות, נבקש החלטה רק לגביהן.`);
   } else if (kind === "credit") {
     const rows = parseCreditFile(buffer);
     preview.rows = rows.map(r=>({ date:r.transactionDate.toISOString().slice(0,10), name:r.businessName, amount:r.amount, chargeDate:r.chargeDate?.toISOString().slice(0,10)??null, installment:r.installmentNumber }));
@@ -100,6 +102,10 @@ async function prepare(userId: number, buffer: Buffer, fileName: string, answers
     if (!answers.loanId && !parsed.loanNumber) preview.questions.push("בלוח לא מופיע מספר הלוואה — יש לבחור לאיזו הלוואה הוא שייך");
     if (parsed.originalAmountSource === "reconstructed") preview.warnings.push("סכום ההלוואה המקורי חושב מהלוח ואינו לקוח מהחוזה");
     preview.warnings.push("הלוח ייצור את ההלוואה או יעדכן את לוח התשלומים שלה. הוא לא מוסיף תנועות לחשבון.");
+  } else if (detected.kind === "credit") {
+    // Card rows that enter as plain expenses are not card rows: the bank's card debit stays "not itemized" and counts again.
+    preview.blockingIssues!.push("זה פירוט כרטיס אשראי — יש לייבא אותו כפירוט אשראי, כדי שהחיוב המרוכז בבנק לא ייספר פעמיים.");
+    return { kind, preview };
   } else {
     const rows = parseExpensesFile(buffer);
     preview.rows = rows.map(r=>({date:r.date?.toISOString().slice(0,10) ?? null,name:r.name,amount:r.amount}));
@@ -148,7 +154,8 @@ export const importSessions = {
       return processSession(userId,id,answers);
     });
   },
-  async commit(userId:number,id:string,version:number,skipCommitments:string[]=[]) {
+  /** Detected commitments are opt-in: only the keys she marked are added; nothing is added by default. */
+  async commit(userId:number,id:string,version:number,acceptCommitments:string[]=[]) {
     return withFinancialTransaction(userId,async()=>{
       const session=await owned(userId,id);
       if(["completed","review"].includes(session.status)) {
@@ -177,7 +184,7 @@ export const importSessions = {
       if(session.kind==="bank") {
         const imported=await bankService.importStatement(userId,answers.accountId!,buffer,session.fileName,included.map(r=>r.rowNumber));
         const offered=((session.preview as ImportPreview|null)?.commitments??[]).map(c=>c.key);
-        const commitments=await statementCommitmentsService.apply(userId,answers.accountId!,skipCommitments,offered);
+        const commitments=await statementCommitmentsService.apply(userId,answers.accountId!,{accept:acceptCommitments},offered);
         result={...imported,commitments}; statementImportId=imported.statementImportId;
       } else if(session.kind==="credit") {
         const parsed=parseCreditFile(buffer);
@@ -247,6 +254,7 @@ export const importSessions = {
     });
   },
   async cancel(userId:number,id:string) {
+    await owned(userId,id); // another household's import is "not found", never a conflict that admits it exists
     const changed=await prisma.importSession.updateMany({where:{id,userId,status:{in:["uploaded","processing","failed","needs_input","ready_for_review"]}},data:{status:"cancelled",version:{increment:1}}});
     if(!changed.count) throw ApiError.conflict("אי אפשר לבטל כאן ייבוא שכבר הוסיף תנועות. אפשר לבטל אותו ממסך המסמכים.");
     return owned(userId,id);

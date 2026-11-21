@@ -14,6 +14,8 @@ import { documentStorage } from "../documents/documentStorage.service";
 import { documentsService } from "../documents/documents.service";
 import { creditService } from "../credit/credit.service";
 import { csrfForSession, sessionCookieName } from "../gate/sessionCookie";
+import { bankWorkbook } from "../connections/scrapeWorkbook";
+import { hasFixture, readFixture } from "../../testing/fixtures";
 let userId:number;let storage:string;let token:string;
 const originalStorage=env.DOCUMENT_STORAGE_DIR;
 const sheet=(rows:unknown[][])=>{const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),'Data');return XLSX.write(wb,{type:'buffer',bookType:'xlsx'}) as Buffer;};
@@ -218,5 +220,40 @@ describe('staged import lifecycle',()=>{
   await importSessions.commit(userId,schedule.id,schedule.version);
   expect((await importSessions.finish(userId,schedule.id)).status).toBe('completed');
   expect((await importRows.list(userId,schedule.id)).items.every(r=>r.outputRef!==null)).toBe(true);
+ });
+});
+
+describe('a statement with no running balance',()=>{
+ it('says the rows were not checked against a balance, never that the balance is computed from it',async()=>{
+  const account=await prisma.bankAccount.create({data:{userId,bankName:'test',accountName:'Synced'}});
+  const txn=(description:string,chargedAmount:number,date:string)=>({type:'normal' as const,date,processedDate:date,originalAmount:chargedAmount,originalCurrency:'ILS',chargedAmount,chargedCurrency:'ILS',description,status:'completed' as const});
+  const session=await importSessions.create(userId,'sync.xlsx',bankWorkbook([txn('משכורת',7000,'2026-09-09T21:00:00.000Z'),txn('סופר',-120,'2026-09-10T21:00:00.000Z')]).buffer,{kind:'bank',accountId:account.id});
+  const preview=session.preview as {warnings:string[];validation:{balanceChecked:boolean}};
+  expect(preview.validation.balanceChecked).toBe(false);
+  expect(preview.warnings.join(' ')).not.toMatch(/תחושב מהדף/);
+  expect(preview.warnings.join(' ')).toMatch(/אין יתרה רצה — שלמות התנועות לא נבדקה/);
+ });
+});
+
+describe('another household\'s import',()=>{
+ it('is not found for every action — not even a conflict that says it exists',async()=>{
+  const session=await importSessions.create(userId,'expenses.xlsx',expenseFile(),{kind:'expense_sheet'});
+  const other=(await prisma.user.create({data:{name:'__staged_import_other',email:`${crypto.randomUUID()}@example.test`}})).id;
+  try{
+   for(const act of [()=>importSessions.get(other,session.id),()=>importSessions.answer(other,session.id,session.version,{}),()=>importSessions.commit(other,session.id,session.version),
+     ()=>importSessions.finish(other,session.id),()=>importSessions.cancel(other,session.id),()=>importRows.list(other,session.id),()=>importRows.edit(other,session.id,1,{version:session.version,resolution:'include'})])
+    await expect(act()).rejects.toMatchObject({statusCode:404});
+   expect((await importSessions.get(userId,session.id)).status).toBe(session.status);
+  }finally{await prisma.user.delete({where:{id:other}});}
+ });
+});
+
+describe('a card statement sent as an expense sheet',()=>{
+ it.skipIf(!hasFixture('creditStatement'))('is stopped: card rows enter only as a card file, or the bank debit counts them twice',async()=>{
+  const session=await importSessions.create(userId,'card.xlsx',readFixture('creditStatement'),{kind:'expense_sheet'});
+  expect(session.status).toBe('failed');
+  expect(JSON.stringify(session.preview)).toContain('זה פירוט כרטיס אשראי');
+  await expect(importSessions.commit(userId,session.id,session.version)).rejects.toThrow();
+  expect(await prisma.expense.count({where:{userId}})).toBe(0);
  });
 });

@@ -110,23 +110,20 @@ export const statementCommitmentsService = {
   },
 
   /**
-   * Add what the user kept checked; remember what they unchecked so the next
-   * overlapping statement does not offer it again.
+   * Add what she marked. What she left unmarked is not added and not dismissed — "not now",
+   * offered again by the next statement (only deleting an added item dismisses it).
    */
-  async apply(userId: number, accountId: number, skipKeys: string[], offeredKeys?: string[]) {
+  async apply(userId: number, accountId: number, choice: { accept: string[] } | "all", offeredKeys?: string[]) {
     // Only what the approval screen showed — a commitment the user never saw is never added.
     const offered = offeredKeys && new Set(offeredKeys);
     const all = await this.found(userId, accountId);
     await this.refresh(userId, all);
     const found = (await untracked(userId, all)).filter((c) => !offered || offered.has(c.key));
-    const skip = new Set(skipKeys);
+    const accept = choice === "all" ? null : new Set(choice.accept);
     const account = await prisma.bankAccount.findFirst({ where: { id: accountId, userId }, select: { bankName: true } });
     const added: DetectedCommitment[] = [];
     for (const c of found) {
-      if (skip.has(c.key)) {
-        await this.dismiss(userId, c.key);
-        continue;
-      }
+      if (accept && !accept.has(c.key)) continue;
       if (c.kind === "loan") {
         await prisma.loan.create({
           data: {
@@ -144,7 +141,7 @@ export const statementCommitmentsService = {
       }
       added.push(c);
     }
-    if (added.length) console.log(`[קליטת דוח בנק] נוספו ${added.length} התחייבויות קבועות שזוהו בדוח: ${added.map((c) => `${c.name} ${c.amount} ₪`).join(", ")}`);
+    if (added.length) console.log(`[קליטת דוח בנק] נוספו ${added.length} התחייבויות קבועות שזוהו בדוח`);
     return added;
   },
 

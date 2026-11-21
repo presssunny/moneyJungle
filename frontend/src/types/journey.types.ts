@@ -1,6 +1,11 @@
+import type { AmountBasis, KnownSum } from "./models";
 import type { FinancialPicture, Situation } from "./picture.types";
 export interface ReviewItem {key:string;title:string;to:string;blocking:boolean;fingerprint:string}
-export interface Commitment {key:string;date:string;name:string;amount:number|null;kind:string;fingerprint:string;decision:string|null;note:string|null;to:string}
+export interface Commitment {key:string;date:string;name:string;amount:number|null;kind:string;fingerprint:string;decision:string|null;note:string|null;to:string;basis?:AmountBasis}
+/** One calendar month of the agenda list, with the server's totals. */
+export interface CommitmentsMonth {month:string;events:Commitment[];total:KnownSum;heaviestDay:{date:string;count:number;total:KnownSum}|null;
+ /** A fixed payment charged to a card may also be inside a card bill this month — nothing links them yet. */
+ possibleCardOverlap:boolean}
 export interface Profile {situation?:Situation|null;onboarding:string;scope:{accountsListed:boolean;cardsListed:boolean;commitmentsListed:boolean;manualOnly:boolean}|null;cashBuffer:string;essentialReserve:string;savedReserve:string}
 export interface FinancialStatus {
  picture?:FinancialPicture;quietSourceKeys?:string[];

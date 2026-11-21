@@ -10,21 +10,21 @@ function describe(c: DetectedCommitment): string {
 
 interface Props {
   items: DetectedCommitment[];
-  skipped: Set<string>;
+  accepted: Set<string>;
   onToggle: (key: string) => void;
   disabled?: boolean;
 }
 
-/** Offered pre-checked: the statement already proves them, the user only removes what is wrong. */
-export function DetectedCommitments({ items, skipped, onToggle, disabled }: Props) {
+/** Offered unmarked: approving the statement adds only what she marks; the rest waits for the next statement. */
+export function DetectedCommitments({ items, accepted, onToggle, disabled }: Props) {
   if (!items.length) return null;
   const hasLoan = items.some((c) => c.kind === "loan");
   return (
     <fieldset className="detected-commitments">
-      <legend>זיהינו בדוח {items.length} חיובים קבועים. הם יתווספו להתחייבויות יחד עם התנועות</legend>
+      <legend>זיהינו בדוח {items.length} חיובים קבועים. סמני את מה שלהוסיף להתחייבויות — מה שלא יסומן לא יתווסף עכשיו, ויוצע שוב בדוח הבא.</legend>
       {items.map((c) => (
         <label key={c.key} className="household-consent">
-          <input type="checkbox" checked={!skipped.has(c.key)} disabled={disabled} onChange={() => onToggle(c.key)} />
+          <input type="checkbox" checked={accepted.has(c.key)} disabled={disabled} onChange={() => onToggle(c.key)} />
           {describe(c)}
         </label>
       ))}
