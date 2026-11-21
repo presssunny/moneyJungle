@@ -8,9 +8,8 @@ import { accountBalanceService, bankTotals } from "./accountBalance.service";
 import { businessDate } from "../../utils/date.utils";
 import {
   classifyBankLine,
-  describeIngestionIssues,
+  describeIngestionIssueCounts,
   describeIngestionReport,
-  describeMonthlyConditions,
   parseBankStatement,
   parseBankStatementPdf,
 } from "./bankParser.service";
@@ -136,22 +135,14 @@ export const bankService = {
     const isPdf = /\.pdf$/i.test(fileName) || buffer.subarray(0, 5).toString("latin1") === "%PDF-";
     const statement = isPdf ? await parseBankStatementPdf(buffer) : parseBankStatement(buffer);
     const { rows, report } = statement;
-    // Ingestion log (Hebrew): which parser ran, what it found and what it could
-    // not read. Rows we are unsure about are listed — never silently dropped.
+    // Ingestion log (Hebrew): which parser ran and how many rows went where. Counts only —
+    // payees, row text and amounts stay in the app; the import screen lists each row.
     console.log(`[קליטת דוח בנק] ${describeIngestionReport(report)}`);
-    for (const line of describeIngestionIssues(report)) console.warn(`[קליטת דוח בנק] ${line}`);
-    for (const pair of report.roundTrips) {
-      console.warn(
-        `[קליטת דוח בנק] סבב כספים אפשרי: ${pair.amount} יצא ב-${pair.withdrawalDate} (${pair.withdrawalDescription}) ` +
-          `וחזר ב-${pair.depositDate} (${pair.depositDescription}), הפרש ${pair.daysApart} ימים — מוחרג מההכנסה עד אישור ידני`
-      );
-    }
-    for (const candidate of report.salaryCandidates) {
-      console.log(`[קליטת דוח בנק] תקבול לאישור: ${candidate.line} — ${candidate.reason}`);
-    }
-    for (const line of describeMonthlyConditions(report)) {
-      console.log(`[קליטת דוח בנק] תנאי הפקדת שכר ${line}`);
-    }
+    const issues = describeIngestionIssueCounts(report);
+    if (issues) console.warn(`[קליטת דוח בנק] ${issues} — הפירוט במסך הייבוא`);
+    if (report.roundTrips.length) console.warn(`[קליטת דוח בנק] ${report.roundTrips.length} סבבי כספים אפשריים — מוחרגים מההכנסה עד אישור ידני`);
+    if (report.salaryCandidates.length) console.log(`[קליטת דוח בנק] ${report.salaryCandidates.length} תקבולים לאישור`);
+    if (report.monthlyConditions.length) console.log(`[קליטת דוח בנק] תנאי הפקדת שכר נבדק ב־${report.monthlyConditions.length} חודשים`);
     const categorize = await buildRuleCategorizer(userId);
 
     // Build a dedup key set from existing transactions in the file's date range.
@@ -233,7 +224,7 @@ export const bankService = {
     // Full recomputation — there is no increment path left that could drift.
     const balance = await accountBalanceService.recompute(userId, accountId);
     console.log(
-      `[קליטת דוח בנק] יתרת החשבון: ${balance.balance ?? "לא ידועה"} — ${balance.explanation}` +
+      `[קליטת דוח בנק] יתרת החשבון ${balance.balance === null ? "לא ידועה" : "חושבה"} — ${balance.explanation}` +
         (report.closingBalance === null
           ? " (הקובץ הזה אינו כולל עמודת יתרה, ולכן אינו יכול לעגן את היתרה)"
           : "")

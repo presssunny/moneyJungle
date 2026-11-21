@@ -430,6 +430,28 @@ export interface CreditCardRef {
 
 const CARD_ISSUER_PATTERN = new RegExp(`${ISSUER_EDGE}(${ISSUER_NAMES})${ISSUER_TAIL}`);
 
+export type CardCompany = "cal" | "max" | "isracard" | "amex" | "diners";
+
+// Banker 2026-10-27. "ויזה" or "מאסטרקארד" alone is a brand several companies issue — no company.
+const CARD_COMPANY_NAMES: Array<[CardCompany, string]> = [
+  ["cal", "ויזה\\s*כאל|כאל|cal"],
+  ["max", "לאומי\\s*קארד|leumi\\s*card|מקס|max"],
+  ["isracard", "ישראכרט|isracard"],
+  ["amex", "אמריקן\\s*אקספרס|american\\s*express|amex"],
+  ["diners", "דיינרס|diners"],
+];
+const CARD_COMPANY_PATTERNS = CARD_COMPANY_NAMES.map(([company, names]) => [company, new RegExp(`${ISSUER_EDGE}(?:${names})${ISSUER_TAIL}`, "i")] as const);
+
+/** What she may pick as a card's company: each one cardCompanyOf knows, or "אחר" (then no line is matched to it). */
+export const CARD_ISSUER_CHOICES = ["כאל", "מקס", "ישראכרט", "אמריקן אקספרס", "דיינרס", "אחר"] as const;
+
+/** The card company a bank line or a card's stated issuer names — null when none, or more than one. */
+export function cardCompanyOf(text: string | null): CardCompany | null {
+  const clean = (text ?? "").replace(/\s+/g, " ").trim();
+  const found = CARD_COMPANY_PATTERNS.filter(([, pattern]) => pattern.test(clean)).map(([company]) => company);
+  return found.length === 1 ? found[0]! : null;
+}
+
 export function creditCardRefOf(description: string | null): CreditCardRef {
   const text = (description ?? "").replace(/\s+/g, " ").trim();
   // Take the LAST 4-digit group: issuer codes and branch numbers come first.
@@ -1458,6 +1480,27 @@ const CONDITION_LABEL: Record<BankConditionState, string> = {
   unknown: "לא ידוע",
 };
 
+// Rejection reasons that are fixed text. Any other reason may quote the row, so the log counts it, never prints it.
+const FIXED_REJECT_REASONS = new Set(["שורה עם תאריך אך ללא סכום", "סכום אפס או לא תקין", "לא נמצא סכום בעמודת חובה/זכות/סכום"]);
+
+/** Why rows need a look, for the server log (CLAUDE.md §1): counts per reason, never a row's text (§7). */
+export function describeIngestionIssueCounts(report: Pick<BankIngestionReport, "rejected" | "review" | "balanceMismatches">): string | null {
+  const byReason = new Map<string, number>();
+  for (const issue of report.rejected) {
+    const reason = FIXED_REJECT_REASONS.has(issue.reason) ? issue.reason : "סיבה אחרת";
+    byReason.set(reason, (byReason.get(reason) ?? 0) + 1);
+  }
+  const reading = report.review.filter((issue) => issue.kind === "reading").length;
+  const classification = report.review.filter((issue) => issue.kind === "classification").length;
+  const parts = [
+    ...[...byReason].map(([reason, count]) => `נדחו ${count} × ${reason}`),
+    reading ? `${reading} שורות שהקריאה שלהן לא אומתה` : "",
+    classification ? `${classification} זיכויים שמתוארים כתשלום הלוואה` : "",
+    report.balanceMismatches.length ? `${report.balanceMismatches.length} אי־התאמות יתרה` : "",
+  ].filter(Boolean);
+  return parts.length ? parts.join(" · ") : null;
+}
+
 export function describeIngestionIssues(report: Pick<BankIngestionReport, "rejected" | "review" | "balanceMismatches">): string[] {
   return [
     ...report.rejected.map(issue => `נדחתה שורה (עמ' ${issue.page ?? "-"}): ${issue.line} — ${issue.reason}`),
@@ -1472,21 +1515,13 @@ export function describeIngestionReport(report: BankIngestionReport): string {
     .filter(([, count]) => count > 0)
     .map(([kind, count]) => `${kind}=${count}`)
     .join(", ");
-  const m = report.money;
   return [
     `פרסר: ${report.parserLabel}`,
     `זוהו ${report.rowsDetected} תנועות`,
     `נדחו ${report.rowsRejected}`,
     `לבדיקה ${report.review.length}`,
     `אי-התאמות יתרה ${report.balanceMismatches.length}`,
-    `יתרה סופית ${report.closingBalance ?? "לא ידועה"}`,
-    `${BANK_MONEY_LABELS.income} ${m.income.toFixed(2)}`,
-    `${BANK_MONEY_LABELS.currentSpend} ${m.currentSpend.toFixed(2)}`,
-    `${BANK_MONEY_LABELS.financingCharged} ${m.financingCharged.toFixed(2)}`,
-    `${BANK_MONEY_LABELS.financingRefunded} ${m.financingRefunded.toFixed(2)}`,
-    `${BANK_MONEY_LABELS.financingNet} ${m.financingNet.toFixed(2)}`,
-    `${BANK_MONEY_LABELS.principal} ${m.principal.toFixed(2)}`,
-    `${BANK_MONEY_LABELS.mixed} ${m.mixed.toFixed(2)}`,
+    `יתרה סופית ${report.closingBalance === null ? "לא ידועה" : "מודפסת"}`,
     kinds ? `סוגי שורות: ${kinds}` : "",
   ]
     .filter(Boolean)

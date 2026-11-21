@@ -1,6 +1,6 @@
 import { prisma } from "../../config/database";
 import { decimalToNumber, round2 } from "../../utils/money.utils";
-import { creditCardRefOf } from "./bankParser.service";
+import { cardCompanyOf, creditCardRefOf, type CardCompany } from "./bankParser.service";
 
 /**
  * Is a card settlement already itemized in the credit module? It cuts both ways:
@@ -80,15 +80,18 @@ export async function buildCreditCoverage(userId: number): Promise<CreditCoverag
       chargeDate: true,
       transactionType: true,
       rawData: true,
+      card: { select: { issuer: true } },
     },
   });
 
   const byCard = new Map<string, CardFacts>();
-  const allChargeDays: string[] = [];
+  // Issuer-only lines are matched per card company, never against any card's charge day.
+  const chargeDaysByCompany = new Map<CardCompany, string[]>();
   for (const row of rows) {
     const label = cardLabelOf(row.rawData);
     const last4 = label ? creditCardRefOf(label).last4 : null;
-    if (row.chargeDate) allChargeDays.push(dayKey(row.chargeDate));
+    const company = cardCompanyOf(row.card?.issuer ?? null);
+    if (row.chargeDate && company) chargeDaysByCompany.set(company, [...(chargeDaysByCompany.get(company) ?? []), dayKey(row.chargeDate)]);
     if (last4 === null) continue;
     let facts = byCard.get(last4);
     if (!facts) {
@@ -154,9 +157,13 @@ export async function buildCreditCoverage(userId: number): Promise<CreditCoverag
               reason: `לכרטיס ${facts.label} אין עסקאות מיובאות בחודש ${monthKeyOf(row.transactionDate)} — החיוב נספר כהוצאה`,
             };
       }
-      // The line names no card (e.g. "עפ״י הרשאה כאל"): accept it as settled only
-      // when a card statement really was charged within a day or two.
-      const covered = withinDays(allChargeDays, row.transactionDate, ISSUER_ONLY_MATCH_DAYS);
+      // The line names no card (e.g. "עפ״י הרשאה כאל"): settled only when a confirmed file of
+      // that same company was charged within a day or two. An unclear company is counted, not hidden.
+      const company = cardCompanyOf(row.description);
+      if (!company) {
+        return { covered: false, cardLabel: ref.issuer, reason: "חיוב אשראי בלי מספר כרטיס, וחברת הכרטיס לא זוהתה בוודאות — נספר כהוצאה" };
+      }
+      const covered = withinDays(chargeDaysByCompany.get(company) ?? [], row.transactionDate, ISSUER_ONLY_MATCH_DAYS);
       return covered
         ? {
             covered: true,

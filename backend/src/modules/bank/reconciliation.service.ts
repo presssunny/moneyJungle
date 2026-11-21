@@ -1134,20 +1134,20 @@ async function applyTarget(userId: number, row: ResolverRow, target: ResolutionT
 /** One-line Hebrew summary of a resolve pass, for the import log. */
 export function describeResolveResult(result: ResolveResult): string {
   const parts = [
-    `הכנסות ${result.income.total.toFixed(2)} (${result.income.count})`,
-    `הוצאות שוטפות ${result.spend.total.toFixed(2)} (${result.spend.count})`,
-    `ריבית ${result.financingCharged.total.toFixed(2)} (${result.financingCharged.count})`,
-    `זיכויי ריבית ${result.financingCredited.total.toFixed(2)} (${result.financingCredited.count})`,
-    `קרן/הקטנת חוב ${result.debtReduction.total.toFixed(2)} (${result.debtReduction.count})`,
-    `תשלומי הלוואה ללא פירוט ${result.loanUnsplit.total.toFixed(2)} (${result.loanUnsplit.count})`,
-    `קבלת הלוואה ${result.loanDrawdown.total.toFixed(2)} (${result.loanDrawdown.count})`,
-    `חיובי אשראי מפורטים ${result.cardSettled.total.toFixed(2)} (${result.cardSettled.count})`,
-    `חיובי אשראי ללא פירוט ${result.cardUnitemized.total.toFixed(2)} (${result.cardUnitemized.count})`,
-    `העברות פנימיות ${result.internalTransfer.total.toFixed(2)} (${result.internalTransfer.count})`,
+    `הכנסות ${result.income.count}`,
+    `הוצאות שוטפות ${result.spend.count}`,
+    `ריבית ${result.financingCharged.count}`,
+    `זיכויי ריבית ${result.financingCredited.count}`,
+    `קרן/הקטנת חוב ${result.debtReduction.count}`,
+    `תשלומי הלוואה ללא פירוט ${result.loanUnsplit.count}`,
+    `קבלת הלוואה ${result.loanDrawdown.count}`,
+    `חיובי אשראי מפורטים ${result.cardSettled.count}`,
+    `חיובי אשראי ללא פירוט ${result.cardUnitemized.count}`,
+    `העברות פנימיות ${result.internalTransfer.count}`,
   ];
   const tail =
     result.unresolved.count > 0
-      ? ` · ⚠ ללא סיווג: ${result.unresolved.count} שורות (${result.unresolved.total.toFixed(2)})`
+      ? ` · ⚠ ללא סיווג: ${result.unresolved.count} שורות`
       : " · אין שורות ללא סיווג";
   return `${result.changed} שורות עודכנו · ${parts.join(" · ")}${tail}`;
 }

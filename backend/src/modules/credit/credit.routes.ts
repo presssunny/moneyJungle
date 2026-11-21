@@ -8,6 +8,7 @@ import { IdParam, idParamSchema, validatedBody, validatedParams } from "../../ut
 import { stageLegacyImport } from "../imports/legacyImportAdapter";
 import { creditService } from "./credit.service";
 import { z } from "zod";
+import { CARD_ISSUER_CHOICES } from "../bank/bankParser.service";
 import { walletService } from "./wallet.service";
 import { monthQuerySchema, resolveMonth, validatedQuery, type MonthQuery } from "../../utils/validation.utils";
 import {
@@ -21,7 +22,8 @@ export const creditRoutes = Router();
 
 creditRoutes.use(gateAuth);
 
-const cardSchema = z.object({ name: z.string().trim().min(1).max(80), issuer: z.string().trim().min(1).max(80),
+// A fixed list: a free-text company (or the card's own name) matches no bank line, and its bill would count twice.
+const cardSchema = z.object({ name: z.string().trim().min(1).max(80), issuer: z.enum(CARD_ISSUER_CHOICES),
   lastFour: z.string().regex(/^\d{4}$/), billingDay: z.number().int().min(1).max(31).nullable().optional() });
 const assignmentSchema = z.object({ cardId: z.number().int().positive().nullable() });
 

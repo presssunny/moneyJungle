@@ -12,7 +12,7 @@ import { SummaryCard } from "../dashboard/SummaryCard";
 import { useAsync } from "../../hooks/useAsync";
 import { getWallet, createCreditCard, updateCreditCard, assignCreditCard, assignTransactionCard } from "../../services/future.service";
 import { apiErrorMessage } from "../../services/api";
-import type { CreditCardInput, CreditImport } from "../../types/models";
+import { CARD_ISSUER_OPTIONS, type CreditCardInput, type CreditImport } from "../../types/models";
 import { formatCurrency, formatDate, formatMonthKey } from "../../utils/format";
 import "../../styles/future.css";
 
@@ -49,7 +49,8 @@ export function CreditWallet({ monthKey, revision, imports, onChanged, onImport 
     {formOpen && <Card title={editingId === null ? "כרטיס חדש" : "עריכת כרטיס"}><form onSubmit={(e) => { e.preventDefault(); void mutate(async () => { const card = editingId === null ? await createCreditCard(draft) : await updateCreditCard(editingId, draft); setDraft(blank); setFormOpen(false); selectCard(String(card.id)); }, "פרטי הכרטיס נשמרו. אפשר לשייך אליו דוח או עסקאות."); }}>
       <div className="future-form">
         <Input label="שם הכרטיס" maxLength={80} required value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="למשל: הכרטיס הביתי" />
-        <Input label="חברת אשראי" maxLength={80} required value={draft.issuer} onChange={(e) => setDraft({ ...draft, issuer: e.target.value })} />
+        <Select label="חברת האשראי" required placeholder="בחירת חברה" value={draft.issuer} onChange={(e) => setDraft({ ...draft, issuer: e.target.value })}
+          options={[...CARD_ISSUER_OPTIONS.map((name) => ({ value: name, label: name === "אחר" ? "אחרת — החיוב בבנק לא יותאם לכרטיס" : name }))]} />
         <Input label="ארבע ספרות אחרונות" inputMode="numeric" pattern="[0-9]{4}" maxLength={4} required value={draft.lastFour} onChange={(e) => setDraft({ ...draft, lastFour: e.target.value })} />
         <Input label="יום חיוב בחודש (אופציונלי)" type="number" min={1} max={31} value={draft.billingDay ?? ""} onChange={(e) => setDraft({ ...draft, billingDay: e.target.value ? Number(e.target.value) : null })} />
       </div><Button type="submit" disabled={busy}>שמירת כרטיס</Button>

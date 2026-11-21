@@ -499,6 +499,23 @@ export interface ForecastScenario {
   oneTimeMonth: number;
 }
 
+/**
+ * The card companies a bank line can name (server: CARD_ISSUER_CHOICES). Free text would match no
+ * bank debit, so the card's bill would count twice; "אחר" says so openly.
+ */
+export const CARD_ISSUER_OPTIONS = ["כאל", "מקס", "ישראכרט", "אמריקן אקספרס", "דיינרס", "אחר"] as const;
+
+/** Where a future amount comes from (server): only "schedule" and "stated" are figures she or the bank gave. */
+export type AmountBasis = "schedule" | "stated" | "last_debit" | "estimate";
+
+export interface UpcomingEventView {
+  date: string;
+  name: string;
+  amount: number | null;
+  kind: string;
+  basis: AmountBasis;
+}
+
 /** A sum where an unknown amount is counted, not added as 0: the known part is a lower bound. */
 export interface KnownSum {
   knownTotal: number;
@@ -515,8 +532,10 @@ export interface ForecastResponse {
   months: Array<{ monthKey: string; incomeTotal: number | null; expenseTotal: number | null; balance: number | null; scenarioBalance: number | null }>;
   annualBalance: number | null;
   scenarioAnnualBalance: number | null;
-  commitments: Array<{ monthKey: string; total: KnownSum; events: Array<{ date: string; name: string; amount: number | null; kind: string }> }>;
+  commitments: Array<{ monthKey: string; total: KnownSum; events: UpcomingEventView[] }>;
   heaviest: { monthKey: string; total: KnownSum } | null;
+  /** Months the bank statements cover only in part — left out of the baseline by the server. */
+  partialMonths: Array<{ monthKey: string; from: string | null; to: string | null }>;
 }
 
 export interface WalletTransaction {
@@ -544,6 +563,7 @@ export interface WalletSummary {
 
 export interface CreditCardInput {
   name: string;
+  /** One of CARD_ISSUER_OPTIONS — the company a bank debit line names. */
   issuer: string;
   lastFour: string;
   billingDay: number | null;
@@ -728,6 +748,14 @@ export interface ForeignRef {
   chargedCurrency: string | null;
 }
 
+/** The site's balance at sync time against ours as of the last day the sync covered (server-side). */
+export interface BalanceCheck {
+  status: "match" | "gap" | "unknown" | "circular";
+  ourBalance: number | null;
+  gap: number | null;
+  asOf: string;
+}
+
 export interface SyncOutcomeItem {
   key: string;
   importSessionId: string | null;
@@ -741,10 +769,8 @@ export interface SyncOutcomeItem {
   pending: Array<{ date: string; description: string; amount: number }>;
   foreign?: ForeignRef[];
   siteBalance?: number | null;
-  /** Our balance for the account, given only once this import is approved — to check nothing is missing. */
-  ourBalance?: number | null;
-  /** Our balance is unknown, so the site's balance cannot be compared with it. */
-  balanceUnknown?: boolean;
+  /** Computed by the server once this import is approved; null before. */
+  balanceCheck?: BalanceCheck | null;
   note?: string;
   review: { status: string; counts: { included: number; duplicate: number; pending: number } } | null;
 }
