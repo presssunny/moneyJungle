@@ -165,6 +165,8 @@ test('All eight themes keep the product identity and persist selection',async({p
 });
 
 test('Login uses the same name for every saved theme',async({page})=>{
+ // Sixteen full page loads of the dev server: about 4s each on /mnt/c, past the 30s default.
+ test.slow();
  await mockApi(page);
  await page.route('**/api/gate/session',route=>route.fulfill({status:401,json:{error:{message:'נדרש חיבור'}}}));
  for(const theme of ['neon-purple','dark-luxury','red-cyan','ocean','forest','sunset','rose-gold','light']){

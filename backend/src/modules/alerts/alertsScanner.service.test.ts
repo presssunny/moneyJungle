@@ -4,7 +4,7 @@
  * month does not raise it again (dedupe key: type|title). Skips when the
  * database is down.
  */
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "../../config/database";
 import { monthRange } from "../../utils/date.utils";
 import { buildUpcoming } from "../dashboard/cashflow.service";
@@ -359,6 +359,15 @@ describe("high_credit_charge", () => {
 });
 
 describe("duplicate_transaction", () => {
+  // The duplicate scan stops at today, so before the 15th these mid-month rows were in the future: the
+  // alert went missing and every "no alert" case passed for nothing. Pinned past the 15th, same real month.
+  beforeEach(() => {
+    const realNow = new Date();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(Date.UTC(realNow.getUTCFullYear(), realNow.getUTCMonth(), 20, 12)));
+  });
+  afterEach(() => { vi.useRealTimers(); });
+
   it("מתריע כששתי הוצאות ידניות זהות (סכום, תאריך ושם עסק) נרשמות", async ({ skip }) => {
     if (!dbUp) skip("MariaDB אינו זמין — יש להריץ bash backend/start-db.sh");
     const userId = await createUser("dupmanual");
