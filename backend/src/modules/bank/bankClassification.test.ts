@@ -4,7 +4,15 @@
  * statements on disk do not: drawdowns, principal reversals, false-friend names.
  */
 import { describe, expect, it } from "vitest";
-import { classifyBankLine, creditCardRefOf } from "./bankParser.service";
+import * as XLSX from "xlsx";
+import {
+  classifyBankLine,
+  creditCardRefOf,
+  describeIngestionIssueCounts,
+  DIRECT_DEBIT_REVIEW_REASON,
+  parseBankStatement,
+  reclassifyStoredLine,
+} from "./bankParser.service";
 
 type Kind = "deposit" | "withdrawal";
 
@@ -61,6 +69,32 @@ const creditCardCases: Case[] = [
     why: "חיוב כרטיס — נבדק מול דוח האשראי",
   },
   { description: 'עפ"י הרשאה כאל', type: "withdrawal", expected: "credit_card_payment", why: "הרשאה לחיוב לחברת אשראי" },
+  {
+    description: "כרטיסי אשראי לי - 1234",
+    type: "withdrawal",
+    expected: "credit_card_payment",
+    why: "המילים כרטיסי אשראי מספיקות",
+  },
+];
+
+/**
+ * A direct debit names its payee, not a card (banker 2026-11-14): only an issuer
+ * or "כרטיס אשראי" makes it a card settlement. Otherwise it is spending.
+ */
+const directDebitCases: Case[] = [
+  {
+    description: "הרשאה לחיוב הראל ביטוח",
+    type: "withdrawal",
+    expected: "standard",
+    why: "הוראת קבע לביטוח היא הוצאה, לא חיוב כרטיס",
+  },
+  {
+    description: "עפ״י הרשאה חברת חשמל",
+    type: "withdrawal",
+    expected: "standard",
+    why: "הוראת קבע לחשמל היא הוצאה, לא חיוב כרטיס",
+  },
+  { description: "הרשאה לחיוב החזר", type: "deposit", expected: "standard", why: "זיכוי לפי עמודת הזכות — לא מושפע" },
 ];
 
 const standardCases: Case[] = [
@@ -124,6 +158,7 @@ runCases("קבלת הלוואה", drawdownCases);
 runCases("ריבית וזיכויי ריבית", financingCases);
 runCases("החזרי הלוואה", repaymentCases);
 runCases("חיובי כרטיס אשראי", creditCardCases);
+runCases("הרשאות לחיוב שאינן כרטיס", directDebitCases);
 runCases("תנועות רגילות", standardCases);
 runCases("שמות שמכילים שם חברת אשראי", falseFriendCases);
 runCases("עמלות פירעון מוקדם", earlyPayoffFeeCases);
@@ -202,5 +237,52 @@ describe("העמודה הפיזית קובעת — לא הטקסט", () => {
   it("תיאור ריבית בזכות אינו הופך להוצאת ריבית", () => {
     expect(classifyBankLine("הלוואה - תשלום ריבית 00000", "deposit").lineKind).toBe("interest_credit");
     expect(classifyBankLine("הלוואה - תשלום ריבית 00000", "withdrawal").lineKind).toBe("loan_interest");
+  });
+});
+
+/**
+ * Re-running the rules over stored rows must not move her past money: a row stored
+ * as a card settlement that the new rule calls a direct debit waits for her approval.
+ */
+describe("סיווג מחדש של שורות שמורות", () => {
+  it("חיוב כרטיס שמור שהוא רק הרשאה לחיוב נשאר כפי שנשמר", () => {
+    expect(reclassifyStoredLine("credit_card_payment", "הרשאה לחיוב הראל ביטוח", "withdrawal")).toEqual({
+      lineKind: "credit_card_payment",
+      loanRef: null,
+      heldForApproval: true,
+    });
+  });
+
+  it("כל שינוי אחר עדיין מתעדכן", () => {
+    expect(reclassifyStoredLine("standard", "הלוואה - תשלום קרן 108", "withdrawal")).toEqual({
+      lineKind: "loan_principal",
+      loanRef: "108",
+      heldForApproval: false,
+    });
+    expect(reclassifyStoredLine("credit_card_payment", 'עפ"י הרשאה כאל', "withdrawal").heldForApproval).toBe(false);
+  });
+});
+
+function statement(lines: Array<[string, string, number | null, number | null, number]>): Buffer {
+  const sheet = XLSX.utils.aoa_to_sheet([["תאריך", "תיאור", "חובה", "זכות", "יתרה"], ...lines]);
+  const book = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(book, sheet, "דף");
+  return XLSX.write(book, { type: "buffer", bookType: "xlsx" }) as Buffer;
+}
+
+describe("הרשאה לחיוב בלי חברת כרטיס — לאישור שלה", () => {
+  it("נספרת כהוצאה ומסומנת לבדיקת סיווג; הרשאה לכאל אינה מסומנת", () => {
+    const { rows, report } = parseBankStatement(
+      statement([
+        ["01/07/2026", "משכורת", null, 10000, 10000],
+        ["05/07/2026", "הרשאה לחיוב הראל ביטוח", 300, null, 9700],
+        ["10/07/2026", 'עפ"י הרשאה כאל', 1500, null, 8200],
+      ])
+    );
+    expect(rows.map((r) => classifyBankLine(r.description, r.type).lineKind)).toEqual(["standard", "standard", "credit_card_payment"]);
+    const classification = report.review.filter((issue) => issue.kind === "classification");
+    expect(classification).toHaveLength(1);
+    expect(classification[0]!.reason).toBe(DIRECT_DEBIT_REVIEW_REASON);
+    expect(describeIngestionIssueCounts(report)).toBe("1 הרשאות לחיוב בלי חברת כרטיס — נספרו כהוצאה");
   });
 });

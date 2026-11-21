@@ -385,8 +385,18 @@ const ISSUER_NAMES = "כאל|ויזה|ישראכרט|מאסטרקארד|לאומ
 const ISSUER_TAIL = "(?=$|[\\s\\-–־\"״'`)\\],.:]|\\d)";
 
 const CREDIT_CARD_PAYMENT_PATTERN = new RegExp(
-  `כרטיס(?:י)?\\s*אשראי|עפ["״'\`]?י\\s*הרשאה|הרשאה\\s*לחיוב|${ISSUER_EDGE}(?:${ISSUER_NAMES})${ISSUER_TAIL}`
+  `כרטיס(?:י)?\\s*אשראי|${ISSUER_EDGE}(?:${ISSUER_NAMES})${ISSUER_TAIL}`
 );
+
+// A direct debit names its payee, not a card: "הרשאה לחיוב הראל ביטוח" is spending.
+// Only a card wording or an issuer above makes one a settlement (banker 2026-11-14).
+const DIRECT_DEBIT_PATTERN = /עפ["״'`]?י\s*הרשאה|הרשאה\s*לחיוב/;
+
+export const DIRECT_DEBIT_REVIEW_REASON = "הרשאה לחיוב בלי חברת כרטיס — נספרה כהוצאה. אם זה חיוב של כרטיס אשראי, אפשר להחריג אותה במסך ההתאמה";
+
+function isUnnamedDirectDebit(text: string, lineKind: ReconcileLineKind): boolean {
+  return lineKind === "standard" && DIRECT_DEBIT_PATTERN.test(text);
+}
 
 /**
  * Money RECEIVED from a loan — a new liability, never income (CLAUDE.md §5).
@@ -416,6 +426,24 @@ export function classifyBankLine(
     return { lineKind: "credit_card_payment", loanRef: null };
   }
   return base;
+}
+
+/**
+ * What a stored row becomes when the rules are re-run. A stored card settlement
+ * that the rule now calls a direct debit keeps its kind: moving it into spending
+ * would change months she already saw, which waits for her approval.
+ */
+export function reclassifyStoredLine(
+  storedLineKind: string,
+  description: string | null,
+  type: BankTransactionKind
+): { lineKind: string; loanRef: string | null; heldForApproval: boolean } {
+  const next = classifyBankLine(description, type);
+  const text = (description ?? "").replace(/\s+/g, " ").trim();
+  if (storedLineKind === "credit_card_payment" && type === "withdrawal" && isUnnamedDirectDebit(text, next.lineKind)) {
+    return { lineKind: storedLineKind, loanRef: null, heldForApproval: true };
+  }
+  return { ...next, heldForApproval: false };
 }
 
 /**
@@ -851,6 +879,14 @@ function buildStatement(
         page: typeof row.raw.page === "number" ? row.raw.page : null,
         line: `${dayKey(row.date)} ${row.description} ${row.amount}`,
         reason: "שורת קרן/תשלום הלוואה בכיוון זכות — לא נספרה כהחזר, דורשת בדיקה ידנית",
+      });
+    }
+    if (row.type === "withdrawal" && isUnnamedDirectDebit(row.description.replace(/\s+/g, " "), classifyBankLine(row.description, row.type).lineKind)) {
+      review.push({
+        kind: "classification",
+        page: typeof row.raw.page === "number" ? row.raw.page : null,
+        line: `${dayKey(row.date)} ${row.description} ${row.amount}`,
+        reason: DIRECT_DEBIT_REVIEW_REASON,
       });
     }
     if (row.confidence < REVIEW_THRESHOLD) {
@@ -1483,6 +1519,10 @@ const CONDITION_LABEL: Record<BankConditionState, string> = {
 // Rejection reasons that are fixed text. Any other reason may quote the row, so the log counts it, never prints it.
 const FIXED_REJECT_REASONS = new Set(["שורה עם תאריך אך ללא סכום", "סכום אפס או לא תקין", "לא נמצא סכום בעמודת חובה/זכות/סכום"]);
 
+export function isDirectDebitIssue(issue: BankRowIssue): boolean {
+  return issue.kind === "classification" && issue.reason === DIRECT_DEBIT_REVIEW_REASON;
+}
+
 /** Why rows need a look, for the server log (CLAUDE.md §1): counts per reason, never a row's text (§7). */
 export function describeIngestionIssueCounts(report: Pick<BankIngestionReport, "rejected" | "review" | "balanceMismatches">): string | null {
   const byReason = new Map<string, number>();
@@ -1491,11 +1531,13 @@ export function describeIngestionIssueCounts(report: Pick<BankIngestionReport, "
     byReason.set(reason, (byReason.get(reason) ?? 0) + 1);
   }
   const reading = report.review.filter((issue) => issue.kind === "reading").length;
-  const classification = report.review.filter((issue) => issue.kind === "classification").length;
+  const directDebits = report.review.filter(isDirectDebitIssue).length;
+  const loanCredits = report.review.filter((issue) => issue.kind === "classification").length - directDebits;
   const parts = [
     ...[...byReason].map(([reason, count]) => `נדחו ${count} × ${reason}`),
     reading ? `${reading} שורות שהקריאה שלהן לא אומתה` : "",
-    classification ? `${classification} זיכויים שמתוארים כתשלום הלוואה` : "",
+    loanCredits ? `${loanCredits} זיכויים שמתוארים כתשלום הלוואה` : "",
+    directDebits ? `${directDebits} הרשאות לחיוב בלי חברת כרטיס — נספרו כהוצאה` : "",
     report.balanceMismatches.length ? `${report.balanceMismatches.length} אי־התאמות יתרה` : "",
   ].filter(Boolean);
   return parts.length ? parts.join(" · ") : null;

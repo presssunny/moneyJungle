@@ -2,7 +2,7 @@ import { prisma } from "../../config/database";
 import { ApiError } from "../../utils/ApiError";
 import { decimalToNumber, round2 } from "../../utils/money.utils";
 import { buildRuleCategorizer } from "../categories/categorization.service";
-import { classifyBankLine } from "./bankParser.service";
+import { reclassifyStoredLine } from "./bankParser.service";
 import {
   BankResolution,
   DEBT_RESOLUTIONS,
@@ -344,13 +344,21 @@ export const reconciliationService = {
       select: { id: true, description: true, type: true, lineKind: true, loanRef: true },
     });
     let updated = 0;
+    let held = 0;
     for (const r of rows) {
       const type = r.type === "deposit" ? "deposit" : "withdrawal";
-      const { lineKind, loanRef } = classifyBankLine(r.description, type);
+      const { lineKind, loanRef, heldForApproval } = reclassifyStoredLine(r.lineKind, r.description, type);
+      if (heldForApproval) {
+        held += 1;
+        continue;
+      }
       if (lineKind !== r.lineKind || (loanRef ?? null) !== (r.loanRef ?? null)) {
         await prisma.bankTransaction.update({ where: { id: r.id }, data: { lineKind, loanRef } });
         updated += 1;
       }
+    }
+    if (held > 0) {
+      console.log(`[סיווג תנועות בנק] ${held} הרשאות לחיוב שנשמרו כחיוב כרטיס נשארו כך — העברתן להוצאות ממתינה לאישור`);
     }
     return updated;
   },
