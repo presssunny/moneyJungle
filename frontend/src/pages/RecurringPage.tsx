@@ -110,7 +110,19 @@ export default function RecurringPage() {
 
 
   const columns: Column<RecurringPayment>[] = [
-    { key: "name", header: "שם", render: (row) => <strong>{row.name}</strong> },
+    {
+      key: "name",
+      header: "שם",
+      render: (row) => (
+        <>
+          <strong>{row.name}</strong>
+          {row.verifiedSource === "bank_site" && (
+            <span className="source-tag" title={row.verifiedAt ? `נבדק מול רשימת הוראות הקבע באתר הבנק ב־${formatDate(row.verifiedAt)}` : undefined}>אומת באתר הבנק</span>
+          )}
+          {row.bankStatus === "inactive" && <span className="source-tag source-tag-warn">לא פעילה בבנק</span>}
+        </>
+      ),
+    },
     {
       key: "amount",
       header: "סכום",

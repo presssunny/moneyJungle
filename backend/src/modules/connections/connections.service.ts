@@ -2,6 +2,7 @@ import { prisma } from "../../config/database";
 import { ApiError } from "../../utils/ApiError";
 import { PROVIDERS, providerInfo, type ProviderInfo } from "./providers";
 import { retryBlock } from "./syncPolicy";
+import { presentStages, stagesIncomplete } from "./syncStageStatus";
 import { importRows } from "../imports/importRows.service";
 import { accountBalanceService } from "../bank/accountBalance.service";
 import type { BalanceCheck, SyncOutcomeItem } from "../../types/connections.types";
@@ -40,7 +41,7 @@ const outcomeOf = (connection: PublicConnection) => (Array.isArray(connection.sy
  * this same sync proves nothing about it (banker 2026-10-27).
  */
 async function balanceCheck(userId: number, connection: PublicConnection, item: SyncOutcomeItem, status: string | undefined, statementImportId: number | null): Promise<BalanceCheck | null> {
-  if (connection.kind !== "bank" || !connection.bankAccountId || item.siteBalance == null || status !== "completed" || statementImportId === null) return null;
+  if (connection.kind !== "bank" || (item.kind ?? "account") !== "account" || !connection.bankAccountId || item.siteBalance == null || status !== "completed" || statementImportId === null) return null;
   const covered = await prisma.bankStatementImport.findFirst({ where: { id: statementImportId, userId }, select: { coverageFrom: true, coverageTo: true } });
   if (!covered) return null;
   const derived = await accountBalanceService.derive(userId, connection.bankAccountId, covered.coverageTo);
@@ -55,8 +56,8 @@ async function balanceCheck(userId: number, connection: PublicConnection, item: 
 }
 
 /**
- * Adds what the page needs and must not compute itself: the retry rule start() enforces, and each
- * import's own counts from the import screen — never SyncOutcomeItem.rows, which includes the overlap.
+ * Adds what the page needs and must not compute itself: the retry rule start() enforces, each stage's
+ * status, and each import's own counts from the import screen — never SyncOutcomeItem.rows, which includes the overlap.
  */
 async function present(userId: number, connections: PublicConnection[]) {
   const ids = connections.flatMap((c) => outcomeOf(c).map((item) => item.importSessionId).filter((id): id is string => !!id));
@@ -68,9 +69,12 @@ async function present(userId: number, connections: PublicConnection[]) {
     const outcome = await Promise.all(outcomeOf(connection).map(async (item) => {
       const itemReview = item.importSessionId ? review.get(item.importSessionId) ?? null : null;
       const statementImportId = item.importSessionId ? statementOf.get(item.importSessionId) ?? null : null;
-      return { ...item, review: itemReview, balanceCheck: await balanceCheck(userId, connection, item, itemReview?.status, statementImportId) };
+      const stages = Array.isArray(item.stages) ? presentStages(item.stages) : undefined;
+      return { ...item, stages, review: itemReview, balanceCheck: await balanceCheck(userId, connection, item, itemReview?.status, statementImportId) };
     }));
-    const syncs = connection.syncs.map((sync, index) => (index > 0 ? sync : { ...sync, outcome }));
+    const incomplete = outcome.some((item) => !!item.stages && stagesIncomplete(item.stages));
+    // PUBLIC_FIELDS takes the latest sync only, and outcomeOf read that one.
+    const syncs = connection.syncs.slice(0, 1).map((sync) => ({ ...sync, outcome, incomplete }));
     return { ...connection, syncs, retryBlockedReason: block?.reason ?? null, retryMessage: block?.message ?? null, retryAvailableAt: block?.until ?? null };
   }));
 }

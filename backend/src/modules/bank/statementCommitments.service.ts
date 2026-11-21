@@ -5,10 +5,10 @@ import { businessDate } from "../../utils/date.utils";
 import { isTrackLeftover } from "../loans/loanCalculator.service";
 import type { ParsedBankRow } from "./bankParser.service";
 import { detectStatementCommitments, samePayee } from "./statementCommitments.detector";
-import type { DetectedCommitment, StatementDebit } from "../../types/commitments.types";
+import type { DebitEvidence, DetectedCommitment, StatementDebit } from "../../types/commitments.types";
 
 const SAME_PAYMENT_DAYS = 3;
-const SAME_PAYMENT_RATIO = 0.05;
+export const SAME_PAYMENT_RATIO = 0.05;
 
 /**
  * Stored rows plus the rows of a statement not yet imported. Statements overlap,
@@ -27,13 +27,13 @@ function mergeRows(stored: StatementDebit[], incoming: StatementDebit[]): Statem
   return [...stored, ...extra];
 }
 
-function sameDay(a: number, b: number): boolean {
+export function sameDay(a: number, b: number): boolean {
   const d = Math.abs(a - b);
   return Math.min(d, 31 - d) <= SAME_PAYMENT_DAYS;
 }
 
 /** What the household already tracks: by key, or by amount + day + payee. */
-async function untracked(userId: number, found: DetectedCommitment[]): Promise<DetectedCommitment[]> {
+export async function untracked(userId: number, found: DetectedCommitment[]): Promise<DetectedCommitment[]> {
   const [dismissed, recurrings, subscriptions, loans] = await Promise.all([
     prisma.dismissedCommitment.findMany({ where: { userId }, select: { key: true } }),
     prisma.recurringPayment.findMany({ where: { userId }, select: { detectedKey: true, name: true, amount: true, nextPaymentDate: true } }),
@@ -59,24 +59,47 @@ async function untracked(userId: number, found: DetectedCommitment[]): Promise<D
   });
 }
 
+/** The one way a detected recurring debit becomes a RecurringPayment; `extra` may only add labels. */
+export function createDetectedRecurring(userId: number, c: DetectedCommitment, extra: Pick<Prisma.RecurringPaymentUncheckedCreateInput, "verifiedAt" | "verifiedSource" | "debitKind" | "bankStatus" | "bankReference"> = {}) {
+  return prisma.recurringPayment.create({
+    data: { userId, name: c.name, amount: c.amount, frequency: "monthly", nextPaymentDate: new Date(c.nextDate), detectedKey: c.key, detectedThrough: new Date(c.lastDate), ...extra },
+  });
+}
+
 function toDebit(row: { transactionDate: Date; description: string | null; amount: Prisma.Decimal; lineKind: string; loanRef: string | null }): StatementDebit {
   return { date: row.transactionDate, description: row.description ?? "", amount: decimalToNumber(row.amount), lineKind: row.lineKind, loanRef: row.loanRef };
+}
+
+/**
+ * The stored debits plus incoming ones. `newerOnly` keeps only incoming rows after the last stored
+ * day: a site's wording differs from a file's, so the exact-text merge would count such a row twice.
+ */
+export async function accountEvidence(
+  userId: number, accountId: number, incoming: StatementDebit[], incomingDays: Date[], { newerOnly = false } = {}
+): Promise<DebitEvidence | null> {
+  const stored = await prisma.bankTransaction.findMany({
+    where: { userId, bankAccountId: accountId },
+    select: { transactionDate: true, description: true, amount: true, lineKind: true, loanRef: true, type: true },
+  });
+  const storedDays = stored.map((r) => r.transactionDate.getTime());
+  const storedEnd = storedDays.length ? Math.max(...storedDays) : -Infinity;
+  const fresh = (date: Date) => !newerOnly || date.getTime() > storedEnd;
+  const debits = mergeRows(stored.filter((r) => r.type === "withdrawal").map(toDebit), incoming.filter((d) => fresh(d.date)));
+  const days = [...storedDays, ...incomingDays.filter(fresh).map((d) => d.getTime())];
+  if (!days.length) return null;
+  return { debits, first: new Date(Math.min(...days)), last: new Date(Math.max(...days)) };
 }
 
 export const statementCommitmentsService = {
   /** Every commitment the account's statements prove, tracked or not. */
   async found(userId: number, accountId: number, incoming: ParsedBankRow[] = []): Promise<DetectedCommitment[]> {
-    const stored = await prisma.bankTransaction.findMany({
-      where: { userId, bankAccountId: accountId },
-      select: { transactionDate: true, description: true, amount: true, lineKind: true, loanRef: true, type: true },
-    });
-    const debits = mergeRows(
-      stored.filter((r) => r.type === "withdrawal").map(toDebit),
-      incoming.filter((r) => r.type === "withdrawal").map((r) => ({ date: r.date, description: r.description, amount: r.amount, lineKind: r.lineKind, loanRef: r.loanRef }))
+    const evidence = await accountEvidence(
+      userId, accountId,
+      incoming.filter((r) => r.type === "withdrawal").map((r) => ({ date: r.date, description: r.description, amount: r.amount, lineKind: r.lineKind, loanRef: r.loanRef })),
+      incoming.map((r) => r.date)
     );
-    const dates = [...stored.map((r) => r.transactionDate.getTime()), ...incoming.map((r) => r.date.getTime())];
-    if (!dates.length) return [];
-    return detectStatementCommitments(debits, new Date(Math.max(...dates)), new Date(businessDate()));
+    if (!evidence) return [];
+    return detectStatementCommitments(evidence.debits, evidence.last, new Date(businessDate()));
   },
 
   /** Commitments the account's statements prove and the household does not track yet. */
@@ -96,6 +119,8 @@ export const statementCommitmentsService = {
       const older = { OR: [{ detectedThrough: null }, { detectedThrough: { lt: through } }] };
       if (c.kind === "recurring") {
         await prisma.recurringPayment.updateMany({ where: { userId, detectedKey: c.key, ...older }, data: { amount: c.amount, nextPaymentDate: next, detectedThrough: through } });
+        // A debit after the day the bank's page listed it as inactive outranks that page.
+        await prisma.recurringPayment.updateMany({ where: { userId, detectedKey: c.key, bankStatus: "inactive", verifiedAt: { lt: through } }, data: { bankStatus: null } });
         continue;
       }
       const loan = await prisma.loan.findFirst({ where: { userId, detectedKey: c.key, scheduleSource: "statement", ...older } });
@@ -135,9 +160,7 @@ export const statementCommitmentsService = {
           },
         });
       } else {
-        await prisma.recurringPayment.create({
-          data: { userId, name: c.name, amount: c.amount, frequency: "monthly", nextPaymentDate: new Date(c.nextDate), detectedKey: c.key, detectedThrough: new Date(c.lastDate) },
-        });
+        await createDetectedRecurring(userId, c);
       }
       added.push(c);
     }

@@ -1,8 +1,12 @@
+import crypto from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { parseBankStatement } from "../bank/bankParser.service";
 import { parseCreditFile } from "../credit/creditParser.service";
-import type { ScrapedTransaction } from "../../types/connections.types";
-import { bankWorkbook, cardWorkbook, FOREIGN_LIST_CAP, freshTransactions, israelDay, purchaseDay } from "./scrapeWorkbook";
+import { parseLoanSchedule } from "../loans/loanSchedule.parser";
+import type { ScrapedLoan, ScrapedTransaction } from "../../types/connections.types";
+import { STUB_LOAN } from "../../testing/scraperStub";
+import { STUB_LOAN_DIGITS, STUB_LOANS_TRACKS } from "../../testing/fakeLoanDetails";
+import { bankWorkbook, cardWorkbook, FOREIGN_LIST_CAP, freshTransactions, israelDay, loanScheduleWorkbook, purchaseDay } from "./scrapeWorkbook";
 
 const txn = (overrides: Partial<ScrapedTransaction>): ScrapedTransaction => ({
   type: "normal", date: "2026-09-30T21:00:00.000Z", processedDate: "2026-11-01T22:00:00.000Z",
@@ -115,5 +119,56 @@ describe("freshTransactions", () => {
     ];
     expect(freshTransactions(rows, isNew).map((t) => t.description)).toEqual(["חדש", "עדיין בקליטה"]);
     expect(bankWorkbook(freshTransactions(rows, isNew)).pending).toEqual([{ date: "2026-09-21", description: "עדיין בקליטה", amount: -100 }]);
+  });
+});
+
+describe("loanScheduleWorkbook → schedule parser", () => {
+  const built = (loan: ScrapedLoan) => {
+    const workbook = loanScheduleWorkbook(loan);
+    if ("skip" in workbook) throw new Error(`skipped: ${workbook.skip}`);
+    return workbook;
+  };
+
+  it("round-trips a track: its numbers, its rows, and Σ principal = the balance", () => {
+    const parsed = parseLoanSchedule(built(STUB_LOAN_DIGITS).buffer);
+    expect(parsed).toMatchObject({ loanNumber: "90001", trackNumber: "301", trackName: "הלוואה לדוגמה", currentBalance: 3000, paymentsMade: 3, totalPayments: 6 });
+    expect(parsed.rows).toEqual(STUB_LOAN_DIGITS.schedule.map((row) => ({
+      paymentNumber: row.paymentNumber, paymentDate: row.date, principal: row.principal, interest: row.interest, total: row.total, balanceAfter: row.balanceAfter,
+    })));
+    expect(parsed.checks.principalSumMatchesBalance).toBe(true);
+    expect(parsed.checks.principalSum).toBe(STUB_LOAN_DIGITS.principalBalance);
+  });
+
+  it("dates the file by the bank's asOf, never today, so the same loan is the same bytes", () => {
+    expect(parseLoanSchedule(built(STUB_LOAN_DIGITS).buffer).exportedAt).toBe("2026-10-31");
+    const hash = (loan: ScrapedLoan) => crypto.createHash("sha256").update(built(loan).buffer).digest("hex");
+    expect(hash(STUB_LOAN_DIGITS)).toBe(hash(structuredClone(STUB_LOAN_DIGITS)));
+    expect(hash({ ...STUB_LOAN_DIGITS, asOf: "2026-11-30" })).not.toBe(hash(STUB_LOAN_DIGITS));
+  });
+
+  it("keeps each track of a loan apart", () => {
+    expect(STUB_LOANS_TRACKS.map((loan) => { const p = parseLoanSchedule(built(loan).buffer); return [p.loanNumber, p.trackNumber, p.currentBalance]; }))
+      .toEqual(STUB_LOANS_TRACKS.map((loan) => [loan.loanNumber, loan.trackNumber, loan.principalBalance]));
+  });
+
+  // The parser's header regexes are \d+; CPI linkage has no column there and needs banker sign-off (§5).
+  it.each<[string, ScrapedLoan, string]>([
+    ["a loan number with letters", STUB_LOAN as ScrapedLoan, "IDENTIFIER_UNREADABLE"],
+    ["no track number", { ...STUB_LOAN_DIGITS, trackNumber: null }, "IDENTIFIER_UNREADABLE"],
+    ["a snapshot with no rows", { ...STUB_LOAN_DIGITS, schedule: [] }, "NO_SCHEDULE"],
+    ["a row the bank left without interest", { ...STUB_LOAN_DIGITS, schedule: STUB_LOAN_DIGITS.schedule.map((r, i) => (i ? r : { ...r, interest: null })) }, "SCHEDULE_INCOMPLETE"],
+    ["a row without principal", { ...STUB_LOAN_DIGITS, schedule: STUB_LOAN_DIGITS.schedule.map((r, i) => (i ? r : { ...r, principal: null })) }, "SCHEDULE_INCOMPLETE"],
+    ["a row without the balance after it", { ...STUB_LOAN_DIGITS, schedule: STUB_LOAN_DIGITS.schedule.map((r, i) => (i ? r : { ...r, balanceAfter: null })) }, "SCHEDULE_INCOMPLETE"],
+    ["a linkage difference", { ...STUB_LOAN_DIGITS, schedule: STUB_LOAN_DIGITS.schedule.map((r, i) => (i ? r : { ...r, linkage: 3.2 })) }, "INDEX_LINKED"],
+    ["a CPI-linked track", { ...STUB_LOAN_DIGITS, indexLinked: true }, "INDEX_LINKED"],
+  ])("skips %s instead of building a file", (_case, loan, skip) => {
+    expect(loanScheduleWorkbook(loan)).toEqual({ skip });
+  });
+
+  it("builds a track whose linkage the bank left blank or printed as zero", () => {
+    for (const linkage of [null, 0]) {
+      const loan = { ...STUB_LOAN_DIGITS, schedule: STUB_LOAN_DIGITS.schedule.map((r) => ({ ...r, linkage })) };
+      expect(parseLoanSchedule(built(loan).buffer).rows).toHaveLength(3);
+    }
   });
 });

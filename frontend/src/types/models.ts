@@ -127,6 +127,8 @@ export interface Loan {
   scheduleSource: "bank_file" | "computed" | "statement";
   originalAmountSource: "contract" | "reconstructed" | "manual" | "unknown";
   scheduleImportedAt: string | null;
+  /** Set when an approved bank-site snapshot filled some of these figures; cleared once she edits one. */
+  siteSnapshotAsOf: string | null;
   /** null while the balance or the rate is unknown. */
   computed: LoanComputed | null;
   progress: LoanProgress;
@@ -346,6 +348,12 @@ export interface RecurringPayment {
   nextPaymentDate: string;
   category?: Category | null;
   paymentMethod?: PaymentMethod | null;
+  /** Labels from an approved bank-site list; amount and dates stay the checking debit's. */
+  verifiedAt?: string | null;
+  verifiedSource?: "bank_site" | null;
+  debitKind?: "standing_order" | "direct_debit" | null;
+  bankStatus?: "active" | "inactive" | null;
+  bankReference?: string | null;
 }
 
 export interface Subscription {
@@ -773,7 +781,78 @@ export interface SyncOutcomeItem {
   balanceCheck?: BalanceCheck | null;
   note?: string;
   review: { status: string; counts: { included: number; duplicate: number; pending: number } } | null;
+  /** Absent = an account item (rows already stored keep working). */
+  kind?: "account" | "loan_schedule" | "loan_details" | "standing_orders";
+  /** Only on a bank sync's account item: the sync-wide stage list. */
+  stages?: SyncStage[];
 }
+
+/** What the bank's own pages showed after her sign-in (CLAUDE.md §7 A2) — mirrors backend/src/types/siteSnapshot.types.ts. */
+export type SnapshotLoanField = "currentBalance" | "annualInterestRate" | "endDate" | "totalPayments" | "paymentsMade" | "trackNumber" | "isIndexLinked";
+export type SnapshotLoanValue = number | string | boolean;
+
+export interface LoanDetailsPreviewItem {
+  key: string;
+  loanNumberLast4: string;
+  trackNumber: string | null;
+  name: string | null;
+  principalBalance: number | null;
+  annualInterestRate: number | null;
+  nextPaymentAmount: number | null;
+  nextPaymentDate: string | null;
+  paymentsMade: number | null;
+  paymentsTotal: number | null;
+  endDate: string | null;
+  interestType: "fixed" | "prime" | "variable" | null;
+  indexLinked: boolean | null;
+  indexedBalance: number | null;
+  asOf: string;
+  /** Field names the page did not show — "לא הופיע בדף", never 0. */
+  missing: string[];
+  match: { loanId: number | null; loanName: string | null; checkingLines: number; reason: "matched" | "no_loan" | "ambiguous" };
+  /** What approving writes into the matched loan. */
+  fills: Array<{ field: SnapshotLoanField; value: SnapshotLoanValue }>;
+  /** Shown, never written. */
+  notes: string[];
+}
+
+export interface StandingOrderPreviewItem {
+  key: string;
+  payee: string;
+  amount: number | null;
+  dayOfMonth: number | null;
+  kind: "standing_order" | "direct_debit" | null;
+  status: "active" | "inactive" | null;
+  match: {
+    detectedKey: string | null;
+    name: string | null;
+    lastDebitDate: string | null;
+    reason: "matched" | "no_checking_debit" | "ambiguous";
+    recurringPaymentId: number | null;
+    canAdd: boolean;
+  };
+}
+
+export type SiteSnapshotPreview = { kind: "loan_details"; loans: LoanDetailsPreviewItem[] } | { kind: "standing_orders"; orders: StandingOrderPreviewItem[] };
+
+/** In the server's order. */
+export type SyncStageName = "checking" | "loan_detection" | "loans_department" | "loan_details" | "loan_schedule_import"
+  | "standing_orders_detection" | "standing_orders_verification" | "bank_documents";
+/** done=complete · partial=some · skipped=by design/nothing to do · blocked=policy · failed=tried and failed. */
+export type SyncStageState = "done" | "partial" | "skipped" | "blocked" | "failed";
+export interface SyncStage {
+  stage: SyncStageName;
+  state: SyncStageState;
+  /** Machine code: a DepartmentStop, NOT_APPROVED, DISABLED, NOT_NEEDED, NOT_OFFICIAL_WINDOW, NO_LOAN_LINES, SCHEDULE_INCOMPLETE, INDEX_LINKED, IDENTIFIER_UNREADABLE, AMBIGUOUS, ROWS_UNRECOGNIZED, EXTRAS_INVALID, INFERRED, NO_RECURRING, WINDOW_TOO_SHORT… */
+  code: string | null;
+  /** Counts only (no amount, rate or loan number). */
+  count?: number;
+  /** With ROWS_UNRECOGNIZED: rows of the bank's table that were not recognised (a count only). */
+  rejected?: number;
+  /** The server's one rule (syncStageStatus.ts); never derived here from state/code. */
+  status: SyncStageStatus;
+}
+export type SyncStageStatus = "done" | "not_needed" | "failed" | "unavailable" | "blocked" | "awaiting_approval";
 
 export interface ConnectionSync {
   id: number;
@@ -783,6 +862,8 @@ export interface ConnectionSync {
   errorType: string | null;
   message: string | null;
   outcome: SyncOutcomeItem[] | null;
+  /** Server-computed: some stage was not collected (failed, unavailable or blocked) — the same stages its message lists. */
+  incomplete: boolean;
   /** End of the wait we allow for the login — not a deadline the bank announced. */
   deadlineAt: string | null;
   startedAt: string;

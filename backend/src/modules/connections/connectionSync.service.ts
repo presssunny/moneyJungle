@@ -2,14 +2,18 @@ import { prisma } from "../../config/database";
 import { ApiError } from "../../utils/ApiError";
 import { json } from "../journey/journey.utils";
 import { importSessions } from "../imports/importSession.service";
-import type { LoginMethod, PendingRef, ScrapedAccount, ScrapedTransaction, ScrapeResult, SyncOutcomeItem, SyncPhase, SyncStatus } from "../../types/connections.types";
+import type { LoginMethod, PendingRef, ScrapedAccount, ScrapedTransaction, ScrapeResult, SyncOutcomeItem, SyncPhase, SyncStage, SyncStatus } from "../../types/connections.types";
 import { openCredentials } from "./credentialsCipher";
+import { cancelUnapproved, decideLoanFollowUp, followUpStages, importLoanDetails, importScrapedLoans, loanDetectionStage, SYNC_FILE_PREFIX } from "./loanSync.service";
+import { importStandingOrders, standingOrdersStages, standingOrdersVerificationStage } from "./standingOrdersSync.service";
+import { departmentReadList } from "./siteDepartments";
+import { notCollectedLabels } from "./syncStageStatus";
 import { providerInfo, type ProviderInfo } from "./providers";
 import { addDays, bankWorkbook, cardWorkbook, freshTransactions, israelDay, purchaseDay } from "./scrapeWorkbook";
 import { processAlive } from "./runProcesses";
 import type { ScraperFactory, ScraperRun } from "./scraperAdapter";
 import { createIsolatedScraper, redactLog, sweepStaleRuns } from "./scraperIsolation";
-import { BROWSER_CLOSED, BROWSER_LAUNCH, BROWSER_TAB_CLOSED } from "./scraperLaunch";
+import { BROWSER_CLOSED, BROWSER_LAUNCH, BROWSER_TAB_CLOSED, PROBE_DONE } from "./scraperLaunch";
 import { BLOCKING_ERRORS, retryBlock } from "./syncPolicy";
 
 const FIRST_SYNC_DAYS = 90;
@@ -43,6 +47,7 @@ function failureMessage(provider: ProviderInfo, errorType: string | undefined, m
   const signedIn = reached === "fetching" || reached === "building_import";
   if (errorType === BROWSER_LAUNCH) return `הדפדפן לא נפתח במחשב הזה, ולכן לא נוצר קשר עם ${provider.name}. זו תקלה אצלנו ולא בבנק — אפשר לנסות שוב מיד.`;
   if (errorType === "CANCELLED") return "הרענון בוטל. לא נוסף דבר.";
+  if (errorType === PROBE_DONE) return `הקלטת מבנה האתר של ${provider.name} הסתיימה. לא נקראו ולא נשמרו תנועות או נתונים מהחשבון.`;
   if (signedIn) {
     return errorType === "TIMEOUT"
       ? `הכניסה הצליחה, אבל ${site} לא הגיב בזמן בזמן קריאת התנועות. לא נוסף דבר. אפשר לנסות שוב.`
@@ -108,7 +113,7 @@ interface Target {
   answers: { kind: "bank"; accountId: number } | { kind: "credit"; cardId: number } | null;
 }
 
-export const SYNC_FILE_PREFIX = "סנכרון ";
+export { SYNC_FILE_PREFIX };
 const OVERLAP_DAYS = { bank: 3, card: 14 };
 
 const day = (date: Date | null | undefined) => date?.toISOString().slice(0, 10) ?? null;
@@ -179,15 +184,6 @@ async function carriedPending(connectionId: number): Promise<Map<string, Pending
   return new Map(items.map((item) => [item.key, Array.isArray(item.pending) ? item.pending : []]));
 }
 
-// A newer sync covers everything the older one offered; two open sessions with the same rows could both be approved.
-async function cancelUnapproved(userId: number, connectionId: number, key: string) {
-  const previous = await prisma.connectionSync.findMany({ where: { connectionId, status: "succeeded" }, select: { outcome: true } });
-  const ids = previous.flatMap((p) => (Array.isArray(p.outcome) ? (p.outcome as unknown as SyncOutcomeItem[]) : []))
-    .filter((item) => item.key === key && item.importSessionId).map((item) => item.importSessionId!);
-  // An approved session can no longer be cancelled — `cancel` refuses it, which is the point.
-  for (const id of ids) await importSessions.cancel(userId, id).catch(() => undefined);
-}
-
 async function importTarget(userId: number, connectionId: number, provider: ProviderInfo, target: Target, txns: ScrapedTransaction[], carried: PendingRef[], siteBalance: number | null = null): Promise<SyncOutcomeItem> {
   const fresh = freshTransactions(txns, isNewFor(target, carried));
   const workbook = target.answers?.kind === "credit" || !target.answers && provider.kind === "card" ? cardWorkbook(fresh) : bankWorkbook(fresh);
@@ -250,7 +246,10 @@ async function run(userId: number, connection: ConnectionRow, syncId: number, fa
       : await Promise.all(cards.map((c) => cardTarget(c.id, `כרטיס ${c.lastFour}`)));
     const carried = await carriedPending(connection.id);
     const defaultTimeout = method === "password" && provider.approvalHint ? APPROVAL_WAIT_MS : PAGE_WAIT_MS;
-    const scraper = await factory({ companyId: provider.id, startDate: scrapeFrom(known, carried), defaultTimeout, loginMethod: method, loginWaitMs: OFFICIAL_LOGIN_WAIT_MS });
+    const scraper = await factory({
+      companyId: provider.id, startDate: scrapeFrom(known, carried), defaultTimeout, loginMethod: method, loginWaitMs: OFFICIAL_LOGIN_WAIT_MS,
+      ...(provider.kind === "bank" ? { decideFollowUp: (checking: ScrapeResult) => decideLoanFollowUp(userId, checking) } : {}),
+    });
     control.scraper = scraper;
     if (control.cancelled) scraper.cancel();
     await setPhase(syncId, "launching");
@@ -283,9 +282,30 @@ async function run(userId: number, connection: ConnectionRow, syncId: number, fa
     await prisma.financialConnection.update({ where: { id: connection.id }, data: { verifiedAt: connection.verifiedAt ?? new Date() } });
     const accounts = validAccounts(result);
     const outcome: SyncOutcomeItem[] = [];
+    let notCollected: string[] = [];
     if (provider.kind === "bank") {
       const account = pickBankAccount(connection, accounts);
-      outcome.push(await importTarget(userId, connection.id, provider, known[0], account.txns, carried.get(known[0].key) ?? [], account.balance ?? null));
+      const checking = await importTarget(userId, connection.id, provider, known[0], account.txns, carried.get(known[0].key) ?? [], account.balance ?? null);
+      // A test factory can run the follow-up with the flag unset; its report is the proof it ran.
+      const followedUp = process.env.CONNECTION_LOANS_DEPARTMENT === "1" || !!result.extras?.followUp;
+      const loans = await importScrapedLoans(userId, connection.id, provider, result.extras)
+        .catch((): { items: SyncOutcomeItem[]; stage: SyncStage } => ({ items: [], stage: { stage: "loan_schedule_import", state: "failed", code: "IMPORT_FAILED" } }));
+      // Each is its own import she approves; one failing costs neither the checking rows nor the other.
+      const siteItem = (label: string, write: () => Promise<SyncOutcomeItem | null>) => write().catch((error: unknown) => {
+        console.error(`[סנכרון] שמירת ${label} מאתר הבנק נכשלה`, error instanceof Error ? error.name : "unknown");
+        return null;
+      });
+      const details = await siteItem("פרטי הלוואות", () => importLoanDetails(userId, connection.id, provider, connection.bankAccountId!, result.extras));
+      const orders = await siteItem("הוראות קבע", () => importStandingOrders(userId, connection.id, provider, connection.bankAccountId!, result.extras));
+      const readsStandingOrders = departmentReadList(process.env.CONNECTION_DEPARTMENT_READ).includes("standing_orders");
+      const detection = loanDetectionStage(account.txns);
+      const stages: SyncStage[] = [
+        { stage: "checking", state: "done", code: null, count: checking.rows },
+        detection, ...followUpStages(followedUp, method, result.extras, detection.code !== "NO_LOAN_LINES"), loans.stage,
+        ...await standingOrdersStages(userId, connection.bankAccountId!, account.txns, standingOrdersVerificationStage(readsStandingOrders, method, result.extras)),
+      ];
+      notCollected = notCollectedLabels(stages);
+      outcome.push({ ...checking, stages }, ...loans.items, ...[details, orders].filter((item): item is SyncOutcomeItem => item !== null));
     } else {
       for (const account of accounts) {
         const digits = lastDigits(account.accountNumber);
@@ -295,9 +315,15 @@ async function run(userId: number, connection: ConnectionRow, syncId: number, fa
       }
     }
     await prisma.financialConnection.update({ where: { id: connection.id }, data: { lastSyncAt: new Date() } });
-    const ready = outcome.filter((o) => o.importSessionId).length;
-    console.log(`[סנכרון] ${provider.name}: ${outcome.map((o) => `${o.target} — ${o.rows} שורות בחלון, ${o.skippedPending} בהמתנה, ${o.skippedForeign} במטבע זר, ${o.skippedZero} בסכום 0`).join(" · ") || "לא נמצאו חשבונות"}`);
-    await finish(syncId, "succeeded", ready === 1 ? "דוח אחד מחכה לאישור במסך הייבוא" : ready ? `${ready} דוחות מחכים לאישור במסך הייבוא` : "לא נמצאו תנועות חדשות לאישור", outcome);
+    // The checking message stays what it was whatever the follow-up did; loan schedules are counted in their stage.
+    const accountItems = outcome.filter((o) => (o.kind ?? "account") === "account");
+    const ready = accountItems.filter((o) => o.importSessionId).length;
+    console.log(`[סנכרון] ${provider.name}: ${accountItems.map((o) => `${o.target} — ${o.rows} שורות בחלון, ${o.skippedPending} בהמתנה, ${o.skippedForeign} במטבע זר, ${o.skippedZero} בסכום 0`).join(" · ") || "לא נמצאו חשבונות"}`);
+    // Counts and codes only: a loan's number, balance or rate never reaches the log (CLAUDE.md §7).
+    const stages = outcome.find((o) => o.stages)?.stages;
+    if (stages) console.log(`[סנכרון] ${provider.name}: שלבי הסנכרון — ${stages.map((s) => `${s.stage}=${s.state}${s.code ? `/${s.code}` : ""}${s.count !== undefined ? `(${s.count})` : ""}${s.rejected ? ` rejected=${s.rejected}` : ""}`).join(" ")}`);
+    const message = ready === 1 ? "דוח אחד מחכה לאישור במסך הייבוא" : ready ? `${ready} דוחות מחכים לאישור במסך הייבוא` : "לא נמצאו תנועות חדשות לאישור";
+    await finish(syncId, "succeeded", notCollected.length ? `${message} · לא נאספו: ${notCollected.join(", ")} — ראו פירוט` : message, outcome);
   } catch (error) {
     await progress;
     const message = error instanceof ApiError ? error.message : failureMessage(provider, undefined, method, reached);

@@ -6,10 +6,10 @@ const ago = (ms: number) => new Date(now.getTime() - ms);
 const password = { loginMethod: "password", blockedReason: null };
 
 describe("retryBlock", () => {
-  it("lets a first sync, a success, a cancel or a restart through at once", () => {
+  it("lets a first sync, a success, a cancel, a restart or a probe run through at once", () => {
     expect(retryBlock(password, null, now)).toBeNull();
     expect(retryBlock(password, { status: "succeeded", errorType: null, finishedAt: ago(1_000) }, now)).toBeNull();
-    for (const errorType of ["CANCELLED", "BROWSER_CLOSED", "INTERRUPTED", "APP"]) expect(retryBlock(password, { status: "failed", errorType, finishedAt: ago(1_000) }, now)).toBeNull();
+    for (const errorType of ["CANCELLED", "BROWSER_CLOSED", "INTERRUPTED", "APP", "PROBE_DONE"]) expect(retryBlock(password, { status: "failed", errorType, finishedAt: ago(1_000) }, now)).toBeNull();
   });
 
   it("holds a retry after a failed login for the cooldown, then lets it go", () => {

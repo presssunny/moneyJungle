@@ -1,4 +1,4 @@
-import type { ConnectionProvider, LoginMethod, ScrapeResult } from "../../types/connections.types";
+import type { ConnectionProvider, LoanFollowUpDecision, LoginMethod, ScrapeResult } from "../../types/connections.types";
 
 export interface ScraperOptions {
   companyId: ConnectionProvider;
@@ -8,6 +8,8 @@ export interface ScraperOptions {
   loginMethod: LoginMethod;
   /** official_window only: how long the bank's page may wait for her to sign in. */
   loginWaitMs: number;
+  /** Called at most once, after the checking fetch, while her session is still open. Must resolve fast. */
+  decideFollowUp?: (checking: ScrapeResult) => Promise<LoanFollowUpDecision>;
 }
 
 export interface ScraperRun {

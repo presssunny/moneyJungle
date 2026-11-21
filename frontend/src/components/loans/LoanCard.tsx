@@ -5,7 +5,7 @@ import { LoanProgressBar } from "./LoanProgressBar";
 import { LoanStatusBadge } from "./LoanStatusBadge";
 import { MissingValue } from "../common/MissingValue";
 import type { Loan } from "../../types/models";
-import { formatCurrency } from "../../utils/format";
+import { formatCurrency, formatDate } from "../../utils/format";
 import { loanTypeLabel } from "../../app/loanTypes";
 
 
@@ -135,6 +135,11 @@ export function LoanCard({ loan, actions }: { loan: Loan; actions: LoanActions }
               </span>
             )}
             {fromStatement && <span className="loan-card-source">🔎 זוהתה מדף החשבון</span>}
+            {loan.siteSnapshotAsOf && (
+              <span className="loan-card-source" title="חלק מהנתונים הושלמו מדף ההלוואות באתר הבנק, באישורך">
+                🏦 לפי אתר הבנק, נכון ל־{formatDate(loan.siteSnapshotAsOf)}
+              </span>
+            )}
           </p>
         </div>
         <ActionsMenu loan={loan} actions={actions} />

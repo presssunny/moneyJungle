@@ -1,8 +1,9 @@
 // Runs in its own process with a stripped env (see scraperIsolation.ts). It must not import
 // anything under src/config or the Prisma client: this process never holds the cipher key or DB access.
-import type { WorkerCommand, WorkerEvent } from "../../types/connections.types";
+import type { LoanFollowUpDecision, WorkerCommand, WorkerEvent } from "../../types/connections.types";
 import { killProcessesIn } from "./runProcesses";
-import { BROWSER_STARTED, libraryOptions } from "./scraperLaunch";
+import { BROWSER_STARTED, FOLLOW_UP_DECISION_MS, libraryOptions } from "./scraperLaunch";
+import { isReadableDepartment } from "./siteDepartments";
 
 interface LibraryScraper {
   scrape(credentials: Record<string, string>): Promise<unknown>;
@@ -31,8 +32,28 @@ async function fail(code: "MISSING_LIBRARY" | "UNSUPPORTED" | "CRASH", message: 
 }
 
 let scraper: LibraryScraper | null = null;
+type Decision = LoanFollowUpDecision & { timedOut?: boolean };
+let answer: ((decision: Decision) => void) | null = null;
+let asked = false;
+const NO_MOVE: LoanFollowUpDecision = { loans: false, standingOrders: false };
+
+/** The checking result goes to the parent at most once; no answer in time means no move. */
+function decideFollowUp(checking: unknown): Promise<Decision> {
+  if (asked) return Promise.resolve(NO_MOVE);
+  asked = true;
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => { answer = null; resolve({ ...NO_MOVE, timedOut: true }); }, FOLLOW_UP_DECISION_MS);
+    answer = (decision) => { clearTimeout(timer); answer = null; resolve(decision); };
+    void send({ type: "checking", result: checking });
+  });
+}
 
 async function handle(command: WorkerCommand): Promise<void> {
+  if (command.type === "followUp") {
+    // Untrusted shape: only a literal true moves the app.
+    answer?.({ loans: command.decision?.loans === true, standingOrders: command.decision?.standingOrders === true });
+    return;
+  }
   if (command.type === "start") {
     let lib: unknown;
     try {
@@ -43,7 +64,12 @@ async function handle(command: WorkerCommand): Promise<void> {
     const createScraper = isRecord(lib) ? lib.createScraper : undefined;
     if (typeof createScraper !== "function") return fail("UNSUPPORTED", "createScraper missing");
     const prepareBrowser = () => send({ type: "progress", progress: BROWSER_STARTED });
-    const created: unknown = createScraper({ ...libraryOptions(command.options), prepareBrowser });
+    const probe = command.options.urlProbe ? (line: string) => void send({ type: "probe", line }) : undefined;
+    const siteDiscovery = !!probe && command.options.siteDiscovery === true;
+    // Never in a probe run. Only the read list travels: a department outside it gets NOT_APPROVED, never a read (§7 A2).
+    const followUp = command.options.loansDepartment === true && !probe ? decideFollowUp : undefined;
+    const departmentRead = followUp && Array.isArray(command.options.departmentRead) ? command.options.departmentRead.filter(isReadableDepartment) : [];
+    const created: unknown = createScraper({ ...libraryOptions(command.options), prepareBrowser, probe, siteDiscovery, ...(followUp && { decideFollowUp: followUp, departmentRead }) });
     if (!isRecord(created) || typeof created.scrape !== "function" || typeof created.onProgress !== "function") {
       return fail("UNSUPPORTED", "scraper shape");
     }

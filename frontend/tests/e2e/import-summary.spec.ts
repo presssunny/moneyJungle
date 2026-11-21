@@ -6,7 +6,7 @@ function readySession(kind = 'bank'): ImportSession {
  return { id:'summary-test',fileName:'report.pdf',kind,status:'ready_for_review',version:4,answers:{kind,accountId:1},
   preview:{rows:[],count:117,total:0,questions:[],warnings:['היתרה בחשבון תחושב מהדף.'],validation:{balanceChecked:true,balanceMismatchCount:0,rejectedRowCount:0,reviewRowCount:0,balanceMode:'daily'}},result:null };
 }
-async function mockImport(page:Page, options:{initial?:ImportSession;pending?:number;failComplete?:boolean;editedCount?:number}={}) {
+async function mockImport(page:Page, options:{initial?:ImportSession;pending?:number;failComplete?:boolean;editedCount?:number;failUpload?:boolean}={}) {
  let session=options.initial??readySession();let pending=options.pending??0;let failComplete=options.failComplete??false;
  const requests:{action:string;payload:unknown}[]=[];const filters:(string|null)[]=[];
  await page.route('**/api/**',async route=>{
@@ -31,6 +31,10 @@ async function mockImport(page:Page, options:{initial?:ImportSession;pending?:nu
    requests.push({action:'complete',payload:request.postDataJSON()});
    if(failComplete)return route.fulfill({status:503,json:{error:{message:'אפשר לנסות שוב.'}}});
    session={...session,version:session.version+1,status:'completed'};body=session;
+  }else if(path==='/api/imports/sessions'&&request.method()==='POST'){
+   requests.push({action:'upload',payload:request.postDataBuffer()?.toString().includes('"kind":"loan_schedule"')});
+   if(options.failUpload)return route.fulfill({status:422,json:{error:{message:'הקובץ אינו לוח סילוקין.'}}});
+   session={id:'schedule-test',fileName:'loan.xlsx',kind:'loan_schedule',status:'ready_for_review',version:1,answers:{kind:'loan_schedule'},preview:{rows:[],count:60,total:0,questions:[],warnings:[]},result:null};body=session;
   }else if(path.includes('/imports/sessions/'))body=session;
   await route.fulfill({json:body});
  });
@@ -117,4 +121,36 @@ test('Detected fixed debits are offered unmarked, and only the marked one is sen
  await page.getByRole('button',{name:'הוספת התנועות',exact:true}).click();
  await expect(page.getByText('הייבוא הושלם.')).toBeVisible();
  expect(mocked.requests[0]).toEqual({action:'commit',payload:{version:4,acceptCommitments:['loan:108:16']}});
+});
+
+test('A detected loan asks for its schedule right after the statement is added, and the file opens its own approval',async({page})=>{
+ const initial=readySession();
+ initial.preview.commitments=[{key:'loan:108:16',kind:'loan',name:'הלוואה 108',amount:1226.29,dayOfMonth:16,months:2,lastDate:'2026-10-16',nextDate:'2026-11-16',loanNumber:'108'}];
+ const mocked=await mockImport(page,{initial});await page.goto('/imports?session=summary-test');
+ await expect(page.getByText(/מיד אחרי ההוספה אפשר להעלות אותו כאן/)).toBeVisible();
+ await expect(page.getByText(/הצעד הבא: לוח הסילוקין/)).toHaveCount(0);
+ await page.getByRole('button',{name:'הוספת התנועות',exact:true}).click();
+ await expect(page.getByText('הצעד הבא: לוח הסילוקין של הלוואה 108.')).toBeVisible();
+ await page.locator('.loan-schedule-next input[type=file]').setInputFiles({name:'loan.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.from('x')});
+ await expect(page).toHaveURL(/session=schedule-test/);
+ await expect(page.getByRole('button',{name:'הוספת התנועות',exact:true})).toBeVisible();
+ expect(mocked.requests.map(r=>r.action)).toEqual(['commit','complete','upload']);
+ expect(mocked.requests[2].payload).toBe(true);
+});
+
+test('A failed schedule upload explains itself next to the drop zone',async({page})=>{
+ const initial=readySession();
+ initial.preview.commitments=[{key:'loan:108:16',kind:'loan',name:'הלוואה 108',amount:1226.29,dayOfMonth:16,months:2,lastDate:'2026-10-16',nextDate:'2026-11-16',loanNumber:'108'}];
+ await mockImport(page,{initial,failUpload:true});await page.goto('/imports?session=summary-test');
+ await page.getByRole('button',{name:'הוספת התנועות',exact:true}).click();
+ await page.locator('.loan-schedule-next input[type=file]').setInputFiles({name:'x.xlsx',mimeType:'application/octet-stream',buffer:Buffer.from('x')});
+ await expect(page.locator('.loan-schedule-next [role=alert]')).toHaveText('הקובץ אינו לוח סילוקין.');
+ await expect(page).toHaveURL(/session=summary-test/);
+});
+
+test('A statement with no loan does not ask for a schedule',async({page})=>{
+ await mockImport(page);await page.goto('/imports?session=summary-test');
+ await page.getByRole('button',{name:'הוספת התנועות',exact:true}).click();
+ await expect(page.getByText('הייבוא הושלם.')).toBeVisible();
+ await expect(page.locator('.loan-schedule-next')).toHaveCount(0);
 });

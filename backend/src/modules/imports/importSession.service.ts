@@ -5,7 +5,7 @@ import { ApiError } from "../../utils/ApiError";
 import { documentStorage } from "../documents/documentStorage.service";
 import { documentsService } from "../documents/documents.service";
 import { bankService } from "../bank/bank.service";
-import { describeIngestionIssueCounts, describeIngestionIssues, describeIngestionReport, parseBankStatement, parseBankStatementPdf, readPdfText, type ParsedBankStatement } from "../bank/bankParser.service";
+import { describeIngestionIssueCounts, describeIngestionIssues, describeIngestionReport, isDirectDebitIssue, parseBankStatement, parseBankStatementPdf, readPdfText, type ParsedBankStatement } from "../bank/bankParser.service";
 import { creditService } from "../credit/credit.service";
 import { parseCreditFile } from "../credit/creditParser.service";
 import { loanScheduleService } from "../loans/loanSchedule.service";
@@ -17,9 +17,11 @@ import { importRows, type ImportOrigin, type PreviewRow, type SourceRef } from "
 import { json } from "../journey/journey.utils";
 import { statementCommitmentsService } from "../bank/statementCommitments.service";
 import type { DetectedCommitment } from "../../types/commitments.types";
+import type { SiteSnapshotPreview } from "../../types/siteSnapshot.types";
+import { commitSiteSnapshot, isSiteSnapshotKind, prepareSiteSnapshot, type SiteSnapshotSession } from "./siteSnapshotImport";
 
 export const answersSchema = z.object({
-  kind: z.enum(["bank", "credit", "loan_schedule", "expense_sheet"]).optional(),
+  kind: z.enum(["bank", "credit", "loan_schedule", "expense_sheet", "loan_details", "standing_orders"]).optional(),
   accountId: z.number().int().positive().optional(), cardId: z.number().int().positive().optional(),
   loanId: z.number().int().positive().optional(), month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional(),
 }).strict();
@@ -31,6 +33,8 @@ export interface ImportPreview {
   previousImportId?: number;
   /** Fixed debits the statement proves that nothing tracks yet — offered pre-checked. */
   commitments?: DetectedCommitment[];
+  /** loan_details | standing_orders: what the bank's pages showed, matched to what she already has. */
+  siteSnapshot?: SiteSnapshotPreview;
 }
 async function owned(userId: number, id: string) {
   const session = await prisma.importSession.findFirst({ where: { id, userId } });
@@ -42,7 +46,21 @@ async function bytes(storagePath: string) {
   if (!path) throw ApiError.badRequest("הקובץ אינו זמין — יש להעלות אותו מחדש");
   try { return await readFile(path); } catch { throw ApiError.badRequest("הקובץ אינו זמין — יש לבטל את הייבוא ולהעלות אותו מחדש"); }
 }
-async function prepare(userId: number, buffer: Buffer, fileName: string, answers: Answers) {
+/**
+ * importSchedule would carve the oldest statement placeholder, or attach to whichever loan came first:
+ * with several candidates for the same loan number that is a guess, so she picks (answers.loanId).
+ */
+async function ambiguousTrack(userId: number, loanNumber: string, trackNumber: string | null): Promise<boolean> {
+  if (await prisma.loan.findFirst({ where: { userId, loanNumber, trackNumber }, select: { id: true } })) return false;
+  const placeholders = await prisma.loan.count({ where: { userId, loanNumber, scheduleSource: "statement", status: { not: "finished" } } });
+  return placeholders > 1 || (trackNumber === null && await prisma.loan.count({ where: { userId, loanNumber } }) > 1);
+}
+async function prepare(userId: number, buffer: Buffer, fileName: string, answers: Answers, session: SiteSnapshotSession) {
+  if (isSiteSnapshotKind(answers.kind)) {
+    const { blockingIssues, warnings, siteSnapshot } = await prepareSiteSnapshot(userId, answers.kind, buffer, answers, session);
+    const preview: ImportPreview = { rows: [], total: 0, count: 0, warnings, questions: [], blockingIssues, ...(siteSnapshot ? { siteSnapshot } : {}) };
+    return { kind: answers.kind, preview };
+  }
   const detected = detectStatement(buffer, fileName);
   const isPdf = /\.pdf$/i.test(fileName) || buffer.subarray(0,5).toString() === "%PDF-";
   let kind: string = answers.kind ?? (isPdf ? "unknown" : detected.kind);
@@ -70,16 +88,18 @@ async function prepare(userId: number, buffer: Buffer, fileName: string, answers
     else preview.commitments = await statementCommitmentsService.detect(userId, answers.accountId, parsed.rows);
     const { rejected, balanceMismatches, review } = parsed.report;
     const readingIssues = review.filter(issue => issue.kind === "reading");
-    const classificationIssues = review.filter(issue => issue.kind === "classification");
+    const directDebitIssues = review.filter(isDirectDebitIssue);
+    const loanCreditIssues = review.filter(issue => issue.kind === "classification" && !isDirectDebitIssue(issue));
     if (rejected.length) preview.blockingIssues!.push(`לא הצלחנו לקרוא ${rejected.length} שורות בדוח. לא נוסף דבר. אפשר לנסות עיבוד מחדש או להעלות את הדוח בפורמט Excel.`);
     if (balanceMismatches.length) preview.blockingIssues!.push(`בדיקת היתרות מצאה ${balanceMismatches.length} אי־התאמות בדוח. לא נוסף דבר. אפשר לנסות עיבוד מחדש או להעלות את הדוח בפורמט Excel.`);
     if (readingIssues.length && !balanceMismatches.length) preview.blockingIssues!.push(`לא הצלחנו לאמת את הקריאה של ${readingIssues.length} שורות בדוח. לא נוסף דבר. אפשר להעלות את הדוח בפורמט Excel.`);
     // Each mismatch already names the row, so its paired reading issue would repeat it.
-    preview.details = describeIngestionIssues({ rejected, balanceMismatches, review: balanceMismatches.length ? [] : readingIssues });
+    preview.details = describeIngestionIssues({ rejected, balanceMismatches, review: balanceMismatches.length ? [] : [...readingIssues, ...directDebitIssues] });
     console.log(`[תצוגת ייבוא בנק] ${describeIngestionReport(parsed.report)}`);
     const issueCounts = describeIngestionIssueCounts(parsed.report);
     if (issueCounts) console.warn(`[תצוגת ייבוא בנק] ${issueCounts} — הפירוט במסך הייבוא`);
-    if (classificationIssues.length) preview.warnings.push(`נמצאו ${classificationIssues.length} זיכויים המתוארים כתשלומי קרן או הלוואה. הם לא ייספרו כהחזרי הלוואה.`);
+    if (loanCreditIssues.length) preview.warnings.push(`נמצאו ${loanCreditIssues.length} זיכויים המתוארים כתשלומי קרן או הלוואה. הם לא ייספרו כהחזרי הלוואה.`);
+    if (directDebitIssues.length) preview.warnings.push(`נמצאו ${directDebitIssues.length} הרשאות לחיוב שלא מציינות חברת כרטיס. הן ייספרו כהוצאה רגילה. אם אחת מהן היא חיוב של כרטיס אשראי, אפשר להחריג אותה במסך ההתאמה אחרי הייבוא.`);
     preview.validation = {
       balanceChecked: parsed.rows.length > 0 && !rejected.length && !readingIssues.length && parsed.rows.every(row => row.balanceCheck === "printed" || row.balanceCheck === "chain"),
       balanceMismatchCount: balanceMismatches.length, rejectedRowCount: rejected.length,
@@ -100,6 +120,7 @@ async function prepare(userId: number, buffer: Buffer, fileName: string, answers
     preview.rows = parsed.rows.map(r=>({date:r.paymentDate,name:`תשלום ${r.paymentNumber}`,amount:r.total}));
     if (answers.loanId && !await prisma.loan.findFirst({where:{id:answers.loanId,userId}})) preview.questions.push("ההלוואה שנבחרה אינה זמינה");
     if (!answers.loanId && !parsed.loanNumber) preview.questions.push("בלוח לא מופיע מספר הלוואה — יש לבחור לאיזו הלוואה הוא שייך");
+    if (!answers.loanId && parsed.loanNumber && await ambiguousTrack(userId, parsed.loanNumber, parsed.trackNumber)) preview.questions.push(`להלוואה ${parsed.loanNumber} יש כמה מסלולים במערכת — לאיזה מהם שייך הלוח?`);
     if (parsed.originalAmountSource === "reconstructed") preview.warnings.push("סכום ההלוואה המקורי חושב מהלוח ואינו לקוח מהחוזה");
     preview.warnings.push("הלוח ייצור את ההלוואה או יעדכן את לוח התשלומים שלה. הוא לא מוסיף תנועות לחשבון.");
   } else if (detected.kind === "credit") {
@@ -122,7 +143,7 @@ async function processSession(userId:number,id:string,answers:Answers) {
   const session=await owned(userId,id);
   await prisma.importSession.update({where:{id},data:{status:"processing",answers:json(answers),error:null}});
   try {
-    const prepared=await prepare(userId,await bytes(session.storagePath),session.fileName,answers);
+    const prepared=await prepare(userId,await bytes(session.storagePath),session.fileName,answers,session);
     const sourceVersion=await importRows.replace(userId,id,prepared.kind,answers,prepared.preview.rows,session.origin);
     return prisma.importSession.update({where:{id},data:{kind:prepared.kind,preview:json({...prepared.preview,sourceVersion,rows:prepared.preview.rows.slice(0,50)}),status:prepared.preview.blockingIssues?.length?"failed":prepared.preview.questions.length?"needs_input":"ready_for_review",version:{increment:1}}});
   } catch(error) {
@@ -166,9 +187,14 @@ export const importSessions = {
       if(session.version!==version || session.status!=="ready_for_review") throw ApiError.conflict("יש להשלים את הפרטים ולרענן לפני ההוספה");
       const buffer=await bytes(session.storagePath);
       const answers=answersSchema.parse(session.answers);
-      const check=await prepare(userId,buffer,session.fileName,answers);
+      const check=await prepare(userId,buffer,session.fileName,answers,session);
       const blockers=[...check.preview.questions,...(check.preview.blockingIssues??[])];
       if(blockers.length) throw ApiError.conflict(blockers.join(" · "));
+      if(isSiteSnapshotKind(session.kind)) {
+        // No rows and no document: it only fills in or labels what she already has, so its approval is the whole review.
+        const applied=await commitSiteSnapshot(userId,session.kind,buffer,answers,session,acceptCommitments);
+        return prisma.importSession.update({where:{id},data:{status:"review",preview:json({...check.preview,siteSnapshot:applied.preview}),result:json({commitVersion:version,details:applied.details}),version:{increment:1}}});
+      }
       if(!await prisma.importRow.count({where:{sessionId:id}})) {
         const sourceVersion=await importRows.replace(userId,id,session.kind,answers,check.preview.rows,session.origin);
         await prisma.importSession.update({where:{id},data:{preview:json({...check.preview,sourceVersion,rows:check.preview.rows.slice(0,50)})}});

@@ -9,6 +9,9 @@ export const BROWSER_TAB_CLOSED = "BROWSER_TAB_CLOSED";
 export const BROWSER_STARTED = "BROWSER_STARTED";
 /** The errorType when Chrome never started: nothing reached the bank. */
 export const BROWSER_LAUNCH = "BROWSER_LAUNCH";
+/** A probe run: she signed in (progress), and how it ends, with the library's fetch never run (errorType). */
+export const PROBE_SIGNED_IN = "PROBE_SIGNED_IN";
+export const PROBE_DONE = "PROBE_DONE";
 
 /**
  * Exactly what the worker hands createScraper. No `args` beyond the profile — never
@@ -22,9 +25,16 @@ export function libraryOptions(options: WorkerLaunchOptions) {
     defaultTimeout: options.defaultTimeout,
     showBrowser: options.showBrowser,
     loginWaitMs: options.loginWaitMs,
-    urlProbe: options.urlProbe ?? false,
     args: [`--user-data-dir=${options.profileDir}`],
     combineInstallments: false,
     verbose: false,
   };
 }
+
+/**
+ * The whole follow-up after the checking fetch, in the worker: the checking import waits at most this long for it.
+ * Two departments now (loans, standing orders): a slow menu and navigation each (~45s) plus their table reads.
+ */
+export const LOAN_FOLLOW_UP_MS = 120_000;
+/** How long the worker waits for the parent's follow-up decision before going on without the move. */
+export const FOLLOW_UP_DECISION_MS = 10_000;

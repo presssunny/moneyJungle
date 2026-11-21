@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { parseBankStatement, parseBankStatementPdf, type ParsedBankRow } from "./bankParser.service";
-import { detectStatementCommitments, normalizePayee, samePayee } from "./statementCommitments.detector";
+import { detectStatementCommitments, LOAN_PAYMENT_KINDS, loanDays, normalizePayee, samePayee } from "./statementCommitments.detector";
 import type { StatementDebit } from "../../types/commitments.types";
 import { fixturePath, hasFixture } from "../../testing/fixtures";
 
@@ -26,6 +26,13 @@ describe("detectStatementCommitments", () => {
   it("never offers a card settlement — the card statement itemizes it", () => {
     const rows = months.flatMap((m) => [debit(`${m}-15`, "כרטיסי אשראי לי - 2349", 3000), debit(`${m}-10`, 'עפ"י הרשאה כאל', 1654)]);
     expect(detectStatementCommitments(rows, END)).toEqual([]);
+  });
+
+  it("offers a direct debit that names no card company — it is spending, not a card settlement", () => {
+    const rows = months.map((m) => debit(`${m}-12`, "הרשאה לחיוב הראל ביטוח", 245));
+    const found = detectStatementCommitments(rows, END);
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatchObject({ kind: "recurring", amount: 245, months: 3 });
   });
 
   it("tracks a cheque by amount, ignoring the cheque number and a one-off cheque the same day", () => {
@@ -103,5 +110,22 @@ describe("samePayee", () => {
 
   it("leaves the key a statement line is remembered by unchanged", () => {
     expect(normalizePayee("NETFLIX.COM")).toBe("NETFLIXCOM");
+  });
+});
+
+// The grouping the bank sync's loan decision now shares with the detector (design 2026-11-13: one source).
+describe("loanDays", () => {
+  it("is one gross entry per loan payment day, numbered only when its principal lines name one loan, and skips payoff days", () => {
+    const days = loanDays([
+      debit("2026-06-15", "הלוואה - תשלום קרן 108", 900, "loan_principal", "108"),
+      debit("2026-06-15", "הלוואה - תשלום ריבית 01040", 300, "loan_interest", "01040"),
+      debit("2026-06-19", "הלוואה - תשלום קרן 108", 1700, "loan_principal", "108"),
+      debit("2026-06-19", "הלוואה - תשלום קרן 207", 500, "loan_principal", "207"),
+      debit("2026-06-28", "הלוואה - תשלום קרן 108", 26189.3, "loan_principal", "108"),
+      debit("2026-06-28", "ע. פרעון מוקדם", 60, "loan_fee"),
+      debit("2026-06-25", "ביטוח ישיר", 129),
+    ]);
+    expect(days.map((d) => [d.date.toISOString().slice(0, 10), d.total, d.loanNumber])).toEqual([["2026-06-15", 1200, "108"], ["2026-06-19", 2200, null]]);
+    expect([...LOAN_PAYMENT_KINDS].sort()).toEqual(["loan_interest", "loan_mixed", "loan_principal"]);
   });
 });

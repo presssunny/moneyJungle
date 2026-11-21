@@ -8,7 +8,9 @@ import { Input } from "../components/common/Input";
 import { Select } from "../components/common/Select";
 import { CARD_ISSUER_OPTIONS } from "../types/models";
 import { ImportRowsReview } from "../components/common/ImportRowsReview";
-import { AddedCommitments, DetectedCommitments } from "../components/common/DetectedCommitments";
+import { AddedCommitments, DetectedCommitments, LoanScheduleNext } from "../components/common/DetectedCommitments";
+import { SiteSnapshotReview } from "../components/common/SiteSnapshotReview";
+import type { SiteSnapshotPreview } from "../types/models";
 import { AsyncSection } from "../components/common/AsyncSection";
 import { Loading } from "../components/common/Loading";
 import { useAsync } from "../hooks/useAsync";
@@ -29,6 +31,11 @@ const KIND_OPTIONS = [
   { value: "expense_sheet", label: "רשימת הוצאות" },
 ];
 
+// Kinds the import screen completes right after the commit; a credit import waits for the card screen.
+const ROWS_COMPLETE = ["bank", "expense_sheet", "loan_schedule"];
+/** What the bank's pages showed after her sign-in (§7 A2): no rows, her approval is the whole review. */
+const SNAPSHOT_KINDS = ["loan_details", "standing_orders"];
+
 const STATUS_TEXT: Record<string, string> = {
   failed: "לא הצלחנו לקרוא את הקובץ. אפשר לתקן את הפרטים ולנסות שוב.",
   uploaded: "הקובץ התקבל.",
@@ -40,6 +47,18 @@ const STATUS_TEXT: Record<string, string> = {
   cancelled: "הייבוא בוטל. לא נוסף דבר.",
   rolled_back: "הייבוא בוטל, והתנועות שנוספו ממנו הוסרו.",
 };
+
+const siteSnapshotTitle = (snapshot: SiteSnapshotPreview) => snapshot.kind === "loan_details"
+  ? `נקראו ${snapshot.loans.length} מסלולי הלוואה מאתר הבנק`
+  : `נקראו ${snapshot.orders.length} הוראות קבע והרשאות מאתר הבנק`;
+
+// The server's own counts of what the approval wrote.
+function snapshotOutcome(session: ImportSession): string {
+  const d = session.result?.details;
+  if (session.kind === "loan_details") return d?.updated ? `עודכנו פרטים ב־${d.updated} הלוואות.` : "לא עודכנה אף הלוואה — הנתונים הוצגו להשוואה בלבד.";
+  const parts = [d?.labelled ? `${d.labelled} תשלומים קבועים סומנו 'אומת באתר הבנק'` : "", d?.added ? `נוספו ${d.added} תשלומים קבועים` : ""].filter(Boolean);
+  return parts.length ? `${parts.join(' · ')}.` : "לא סומן ולא נוסף תשלום קבוע.";
+}
 
 type Status = Awaited<ReturnType<typeof getFinancialStatus>>;
 
@@ -90,7 +109,7 @@ function ImportJourney(){
   await run(async()=>{
    const committed=await actOnSession(session,'commit',{acceptCommitments:[...acceptedCommitments]});
    setSession(committed);
-   if(['bank','expense_sheet','loan_schedule'].includes(committed.kind)&&committed.status==='review'){
+   if([...ROWS_COMPLETE,...SNAPSHOT_KINDS].includes(committed.kind)&&committed.status==='review'){
     try{return await actOnSession(committed,'complete');}
     catch(e){setError(`התנועות נוספו ונשמרו, אך הסיום לא הושלם. ${apiErrorMessage(e)}`);}
    }
@@ -105,7 +124,8 @@ function ImportJourney(){
  const kind=String(answers.kind??session?.kind??'');
  const editable=session&&['uploaded','processing','failed','needs_input','ready_for_review'].includes(session.status);
  const answersChanged=Boolean(session)&&JSON.stringify(cleanAnswers())!==JSON.stringify(session?.answers??{});
- const destination=session?.result?.creditImportId?`/accounts?tab=credit&importId=${session.result.creditImportId}`:session?.kind==='bank'?'/accounts?tab=reconcile':session?.kind==='loan_schedule'?'/accounts?tab=loans':'/transactions?tab=expenses';
+ const destination=session?.result?.creditImportId?`/accounts?tab=credit&importId=${session.result.creditImportId}`:session?.kind==='bank'?'/accounts?tab=reconcile':['loan_schedule','loan_details'].includes(session?.kind??'')?'/accounts?tab=loans':session?.kind==='standing_orders'?'/commitments?tab=recurring':'/transactions?tab=expenses';
+ const isSnapshot=SNAPSHOT_KINDS.includes(session?.kind??'');const snapshot=session?.preview?.siteSnapshot;
  const sourceName=kind==='bank'?sources.data?.balances.find(a=>a.id===Number(answers.accountId))?.name:kind==='credit'?sources.data?.cards.find(c=>c.id===Number(answers.cardId))?.name:undefined;
  const needsDetails=session&&(!session.preview||session.preview.questions.length>0||kind==='unknown');
  return <div className="journey-page import-journey-page">
@@ -122,9 +142,9 @@ function ImportJourney(){
    <Link to="/data">דוחות שהועלו בעבר</Link></Card>}
   {busy&&!session&&<Loading/>}
   {session&&<>
-   <Card title={session.fileName}><p role="status">{STATUS_TEXT[session.status]??session.status}</p>{sourceName&&<p>חשבון: <strong>{sourceName}</strong></p>}</Card>
+   <Card title={session.fileName}><p role="status">{isSnapshot&&session.status==='ready_for_review'?'הפרטים נקראו מאתר הבנק. שום דבר לא נשמר עד שתאשרי.':STATUS_TEXT[session.status]??session.status}</p>{sourceName&&<p>חשבון: <strong>{sourceName}</strong></p>}</Card>
    {session.error&&<p role="alert">{session.error}</p>}
-   {editable&&<Card><details open={Boolean(needsDetails)}><summary>פרטי הקובץ ושיוך החשבון</summary>
+   {editable&&!isSnapshot&&<Card><details open={Boolean(needsDetails)}><summary>פרטי הקובץ ושיוך החשבון</summary>
     <Select label="סוג הדוח" value={kind==='unknown'?'':kind} placeholder="בחירת סוג" options={KIND_OPTIONS} onChange={e=>setAnswers(old=>({...old,kind:e.target.value}))}/>
     <AsyncSection resource={sources} errorTitle="לא ניתן לטעון חשבונות וכרטיסים" skeleton={<Loading/>}>{data=><>
      {kind==='bank'&&<Select label="חשבון בנק" value={answers.accountId??''} placeholder="בחירת חשבון" options={data.balances.map(a=>({value:a.id,label:a.name}))} onChange={e=>inputNumber('accountId',e.target.value)}/>}
@@ -136,7 +156,12 @@ function ImportJourney(){
     {editedCount>0&&<p className="text-muted">שינוי הפרטים או בדיקה מחדש יבטלו את התיקונים והחלטות הכפילות ששמרת בדוח הזה.</p>}
     <Button disabled={busy||!kind||kind==='unknown'} onClick={()=>run(()=>answerSession(session,cleanAnswers()))}>המשך לבדיקת התנועות</Button>
    </details></Card>}
-   {session.preview&&<Card title={`נקראו ${session.preview.count} תנועות`}>
+   {session.preview&&isSnapshot&&<Card title={snapshot?siteSnapshotTitle(snapshot):'פרטים מאתר הבנק'}>
+    {(session.preview.blockingIssues??[]).map((issue,i)=><p key={i} role="alert">{issue}</p>)}
+    {session.preview.warnings.map((w,i)=><p key={i} className="text-muted">{w}</p>)}
+    {snapshot&&<SiteSnapshotReview snapshot={snapshot} accepted={acceptedCommitments} onToggle={toggleCommitment} disabled={busy||session.status!=='ready_for_review'} approved={['review','completed'].includes(session.status)}/>}
+   </Card>}
+   {session.preview&&!isSnapshot&&<Card title={`נקראו ${session.preview.count} תנועות`}>
     {session.preview.questions.map((q,i)=><p key={i} role="status">{q}</p>)}
     {(session.preview.blockingIssues??[]).map((issue,i)=><p key={i} role="alert">{issue}</p>)}
     {(session.preview.blockingIssues??[]).length>0&&(session.preview.details??[]).length>0&&<details><summary>פירוט השורות שלא אומתו ({session.preview.details!.length})</summary><ul>{session.preview.details!.map((d,i)=><li key={i}>{d}</li>)}</ul></details>}
@@ -144,22 +169,26 @@ function ImportJourney(){
     {session.preview.warnings.length>0&&<details><summary>מידע נוסף על קריאת הדוח ({session.preview.warnings.length})</summary><ul>{session.preview.warnings.map((w,i)=><li key={i}>{w}</li>)}</ul></details>}
     <ImportRowsReview session={session} onSummary={onRowsSummary} onSaved={next=>{setSession(next);setPendingCount(null);}}/>
    </Card>}
-   {editable&&['failed','processing','needs_input','ready_for_review'].includes(session.status)&&<div>
+   {editable&&!isSnapshot&&['failed','processing','needs_input','ready_for_review'].includes(session.status)&&<div>
     {editedCount>0&&!needsDetails&&<p className="text-muted">בדיקה מחדש תבטל תיקונים והחלטות כפילות ששמרת בדוח הזה.</p>}
     <Button variant="outline" disabled={busy} onClick={()=>run(()=>answerSession(session,cleanAnswers()))}>בדיקה מחדש של הקובץ</Button>
    </div>}
-   {session.status==='ready_for_review'&&<Card title="אישור והוספה"><p>אין צורך לעבור על כל שורה. אפשר לפתוח את הפירוט לפי הצורך.</p>
+   {session.status==='ready_for_review'&&isSnapshot&&<Card title="אישור"><p>{session.kind==='loan_details'?'באישור יישמרו רק השדות שמופיעים תחת "מה יישמר באישור". לא נוספות תנועות או הוצאות.':'באישור יסומנו התשלומים הקבועים שתואמים, ויתווספו רק אלה שסימנת. לא נוספות תנועות או הוצאות.'}</p>
+    <Button disabled={busy||!snapshot} onClick={commit}>{busy?'שומר…':'אישור ושמירה'}</Button>
+   </Card>}
+   {session.status==='ready_for_review'&&!isSnapshot&&<Card title="אישור והוספה"><p>אין צורך לעבור על כל שורה. אפשר לפתוח את הפירוט לפי הצורך.</p>
     {pendingCount!==null&&pendingCount>0&&<p role="status">נשאר להחליט על {pendingCount} תנועות שעשויות להיות כפולות.</p>}
     {answersChanged&&<p role="status">פרטי הקובץ השתנו. יש להפעיל בדיקה מחדש לפני ההוספה.</p>}
     <DetectedCommitments items={session.preview?.commitments??[]} accepted={acceptedCommitments} onToggle={toggleCommitment} disabled={busy}/>
     <Button disabled={busy||pendingCount!==0||answersChanged} onClick={commit}>{busy?'מוסיף…':'הוספת התנועות'}</Button>
    </Card>}
-   {session.status==='review'&&<Card title={session.kind==='credit'?'אישור עסקאות האשראי':'התנועות נוספו'}><p>{session.kind==='credit'?'נשאר לאשר את עסקאות האשראי במסך הכרטיס, ואז לסיים כאן.':'התנועות נשמרו. אפשר להשלים את הסיום בלי להוסיף אותן שוב.'}</p><div className="row-actions">
+   {session.status==='review'&&<Card title={session.kind==='credit'?'אישור עסקאות האשראי':isSnapshot?'הפרטים נשמרו':'התנועות נוספו'}><p>{session.kind==='credit'?'נשאר לאשר את עסקאות האשראי במסך הכרטיס, ואז לסיים כאן.':isSnapshot?'האישור נשמר. נשאר רק להשלים את הסיום.':'התנועות נשמרו. אפשר להשלים את הסיום בלי להוסיף אותן שוב.'}</p><div className="row-actions">
     <Link to={destination+`&returnTo=${encodeURIComponent('/imports?session='+session.id)}`}>פתיחת התנועות שנוספו</Link>
     <Button disabled={busy} onClick={()=>run(()=>actOnSession(session,'complete'))}>{session.kind==='credit'?'בדקתי — סיום':'השלמת הייבוא'}</Button>
    </div></Card>}
    {editable&&<Button variant="ghost" disabled={busy} onClick={()=>run(()=>actOnSession(session,'cancel'))}>ביטול הייבוא — שום דבר לא יתווסף</Button>}
-   {session.status==='completed'&&<Card title="הדוח נוסף לתמונה"><AddedCommitments items={session.result?.details?.commitments??[]}/><div className="row-actions"><Link to={destination}>צפייה בתנועות שנוספו</Link><Link to="/data">דוחות ואפשרות ביטול הייבוא</Link><Link to="/">לדף הבית</Link><Link to="/check-in">לבדיקה השבועית</Link><Link to="/onboarding">להמשך ההיכרות</Link><Button variant="outline" onClick={()=>setParams({})}>העלאת דוח נוסף</Button></div></Card>}
+   {session.status==='completed'&&isSnapshot&&<Card title="הפרטים מאתר הבנק נשמרו"><p role="status">{snapshotOutcome(session)}</p><div className="row-actions"><Link to={destination}>{session.kind==='loan_details'?'למסך ההלוואות':'לתשלומים הקבועים'}</Link><Link to="/accounts?tab=connections">לחיבורים לבנק</Link><Link to="/">לדף הבית</Link></div></Card>}
+   {session.status==='completed'&&!isSnapshot&&<Card title="הדוח נוסף לתמונה"><AddedCommitments items={session.result?.details?.commitments??[]}/>{session.kind==='bank'&&<LoanScheduleNext items={session.preview?.commitments??[]} busy={busy} error={error} onFile={file=>run(()=>uploadSession(file,{kind:'loan_schedule'}))}/>}<div className="row-actions"><Link to={destination}>צפייה בתנועות שנוספו</Link><Link to="/data">דוחות ואפשרות ביטול הייבוא</Link><Link to="/">לדף הבית</Link><Link to="/check-in">לבדיקה השבועית</Link><Link to="/onboarding">להמשך ההיכרות</Link><Button variant="outline" onClick={()=>setParams({})}>העלאת דוח נוסף</Button></div></Card>}
    {['cancelled','rolled_back'].includes(session.status)&&<Button onClick={()=>setParams({})}>העלאת דוח אחר</Button>}
   </>}
  </div>;

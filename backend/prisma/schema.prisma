@@ -498,10 +498,17 @@ model RecurringPayment {
   frequency       String   @default("monthly") @db.VarChar(20) // monthly | weekly | yearly
   nextPaymentDate DateTime @map("next_payment_date") @db.Date
   // Set when the payment was found in a bank statement. Its real expense arrives
-  // with every statement, so `generate` must never materialize it again.
+  // with every statement, so nothing may ever materialize it as an expense.
   detectedKey     String?  @map("detected_key") @db.VarChar(160)
   // Last statement debit it was read from — only a later one may update it.
   detectedThrough DateTime? @map("detected_through") @db.Date
+  // Seen on the bank's standing-orders page (CLAUDE.md §7 A2): a label only — amount and dates
+  // stay the checking debit's, and a debit later than verifiedAt outranks bankStatus.
+  verifiedAt      DateTime? @map("verified_at") @db.Date
+  verifiedSource  String?   @map("verified_source") @db.VarChar(20) // bank_site
+  debitKind       String?   @map("debit_kind") @db.VarChar(20) // standing_order | direct_debit
+  bankStatus      String?   @map("bank_status") @db.VarChar(10) // active | inactive
+  bankReference   String?   @map("bank_reference") @db.VarChar(4)
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
@@ -583,6 +590,8 @@ model Loan {
   detectedThrough      DateTime? @map("detected_through") @db.Date
   originalAmountSource String    @default("manual") @map("original_amount_source") @db.VarChar(20) // contract | reconstructed | manual | unknown
   scheduleImportedAt   DateTime? @map("schedule_imported_at")
+  // The bank-site day of the figures a snapshot filled in (CLAUDE.md §7 A2); her own edit clears it.
+  siteSnapshotAsOf     DateTime? @map("site_snapshot_as_of") @db.Date
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

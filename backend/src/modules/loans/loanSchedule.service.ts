@@ -37,7 +37,7 @@ export interface ScheduleImportResult {
   assistant: AssistantStep;
 }
 
-function loanLabel(parsed: ParsedSchedule): string {
+export function loanLabel(parsed: Pick<ParsedSchedule, "loanNumber" | "trackNumber" | "trackName">): string {
   if (parsed.loanNumber && parsed.trackNumber) {
     return `הלוואה ${parsed.loanNumber} · מסלול ${parsed.trackNumber}`;
   }

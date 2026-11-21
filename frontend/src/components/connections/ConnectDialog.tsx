@@ -13,7 +13,7 @@ import { createBankAccount, listBankAccounts } from "../../services/planning.ser
 import type { BankAccount, ConnectionProviderInfo, FinancialConnection } from "../../types/models";
 import { SyncJourney } from "./SyncJourney";
 import { SyncSummary } from "./SyncSummary";
-import { awaitsReview, milestones, phaseLabel, REVIEWABLE, siteDomain } from "./syncPhases";
+import { awaitsReview, isAccountItem, milestones, phaseLabel, REVIEWABLE, siteDomain, syncedLabel } from "./syncPhases";
 
 
 function ProviderTiles({ providers, chosen, onChoose }: { providers: ConnectionProviderInfo[]; chosen: string; onChoose: (id: string) => void }) {
@@ -169,7 +169,7 @@ function Track({ connection, provider, initialError, onChanged, onClose, onSwitc
   const headingRef = useRef<HTMLHeadingElement>(null);
   // One live region that only changes its text: a region inserted already filled is often not read.
   const announcement = !sync ? "" : sync.status === "running" ? phaseLabel(sync.phase)
-    : sync.status === "succeeded" ? (awaitsReview(sync) ? "הסנכרון הושלם. התנועות מחכות לאישור שלך." : m?.approved ? "הייבוא אושר." : "הסנכרון הושלם. אין תנועות חדשות לבדיקה.")
+    : sync.status === "succeeded" ? (awaitsReview(sync) ? `${syncedLabel(sync)}. התנועות מחכות לאישור שלך.` : m?.approved ? "הייבוא אושר." : `${syncedLabel(sync)}. אין תנועות חדשות לבדיקה.`)
     : sync.status === "cancelled" ? "הרענון בוטל. לא נוסף דבר." : "";
   // The buttons that had focus vanish when the state changes; focus moves to the new state, not to <body>.
   useEffect(() => { headingRef.current?.focus(); }, [sync?.status]);
@@ -183,9 +183,10 @@ function Track({ connection, provider, initialError, onChanged, onClose, onSwitc
   }
 
   const title = !sync ? "עוד לא בוצע רענון" : sync.status === "running" ? (m?.signedIn ? "התחברת — קוראים את הנתונים" : "מתחברים לבנק")
-    : sync.status === "succeeded" ? (m?.approved ? "הכול נקלט" : awaitsReview(sync) ? "הנתונים מוכנים לבדיקה" : "הרענון הסתיים") : sync.status === "cancelled" ? "הרענון בוטל" : "הרענון נעצר";
+    : sync.status === "succeeded" ? (m?.approved ? (sync.incomplete ? "התנועות נקלטו — חלק מהנתונים לא נאספו" : "הכול נקלט") : awaitsReview(sync) ? "הנתונים מוכנים לבדיקה" : "הרענון הסתיים") : sync.status === "cancelled" ? "הרענון בוטל" : "הרענון נעצר";
   const reviewLink = sync?.outcome?.find((item) => item.importSessionId && REVIEWABLE.includes(item.review?.status ?? ""))?.importSessionId;
-  const added = (sync?.outcome ?? []).reduce((sum, item) => sum + (item.review?.counts.included ?? 0), 0);
+  // A schedule's payments and a site snapshot's figures are not account transactions.
+  const added = (sync?.outcome ?? []).filter(isAccountItem).reduce((sum, item) => sum + (item.review?.counts.included ?? 0), 0);
   const canSwitch = connection.loginMethod === "password" && !!provider?.loginMethods.some((x) => x.id === "official_window");
 
   return (
@@ -196,14 +197,15 @@ function Track({ connection, provider, initialError, onChanged, onClose, onSwitc
       {sync?.status === "succeeded" && m?.approved && (
         <div className="sync-journey-success sync-journey-success-final">
           <span className="sync-journey-success-mark" aria-hidden="true">✓</span>
-          <div><strong>הייבוא אושר — התנועות נוספו</strong><p>{added === 1 ? "נוספה תנועה אחת." : `נוספו ${added} תנועות.`}</p></div>
+          <div><strong>הייבוא אושר — התנועות נוספו</strong><p>{added === 1 ? "נוספה תנועה אחת." : `נוספו ${added} תנועות.`}</p>
+            {sync.incomplete && <p className="connection-state connection-state-waiting">חלק מהנתונים לא נאספו — הפירוט בסיכום הרענון.</p>}</div>
         </div>
       )}
       {sync?.status === "succeeded" && !m?.approved && awaitsReview(sync) && (
         <div className="sync-journey-turn">
           <span className="sync-journey-turn-mark" aria-hidden="true">✓</span>
           <div>
-            <strong>הסנכרון הושלם. עכשיו תורך: לבדוק ולאשר</strong>
+            <strong>{syncedLabel(sync)}. עכשיו תורך: לבדוק ולאשר</strong>
             <p>שום דבר לא נוסף עדיין. התנועות מחכות לאישור שלך במסך הייבוא.</p>
             {reviewLink && <Link className="btn btn-primary btn-md" to={`/imports?session=${reviewLink}`}>לבדיקה ואישור</Link>}
           </div>

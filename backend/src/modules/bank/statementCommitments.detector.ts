@@ -4,13 +4,13 @@ import type { DetectedCommitment, StatementDebit } from "../../types/commitments
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DAY_OF_MONTH_TOLERANCE = 4;
-const LOAN_PAYMENT_KINDS = new Set(["loan_principal", "loan_interest", "loan_mixed"]);
+export const LOAN_PAYMENT_KINDS = new Set(["loan_principal", "loan_interest", "loan_mixed"]);
 // Interest lines print the rate (01040 = 10.40%), not the loan — only these name it.
 const LOAN_NUMBER_KINDS = new Set(["loan_principal", "loan_mixed"]);
 const PAYOFF_FEE_WINDOW_DAYS = 3;
 // Two tracks of one loan can fall four days apart (15th / 19th) — tighter than a payee's drift.
 const LOAN_DAY_TOLERANCE = 2;
-const AMOUNT_TOLERANCE = 1.15;
+export const AMOUNT_TOLERANCE = 1.15;
 
 // Variable cash withdrawals repeat often but are not obligations.
 const NOT_A_COMMITMENT = /כספומט|כספונט|סניפומט|בנקט|משיכת\s*מזומן/;
@@ -51,7 +51,7 @@ const PAYEE_ALIASES: Array<[string, RegExp]> = [
   ["bezeq", /בזק/g],
 ];
 
-function canonicalPayee(description: string): string {
+export function canonicalPayee(description: string): string {
   return PAYEE_ALIASES.reduce((name, [canonical, alias]) => name.replace(alias, canonical), normalizePayee(description).toLowerCase());
 }
 
@@ -175,19 +175,14 @@ function detectRecurring(debits: StatementDebit[], statementEnd: Date, forecastF
   return found;
 }
 
-interface LoanDay {
+export interface LoanDay {
   date: Date;
   total: number;
   loanNumber: string | null;
 }
 
-/**
- * One loan per bank loan number and payment day, priced at the latest month's
- * full debit (principal + interest, gross). Tracks paid on the same day can't
- * be told apart from the statement, so they stay one entry until a schedule
- * file replaces it. Payoff days are not instalments.
- */
-function detectLoans(debits: StatementDebit[], statementEnd: Date, forecastFrom: Date): DetectedCommitment[] {
+/** One entry per loan payment day, with its gross total and the loan number its lines name. Payoff days are not instalments. */
+export function loanDays(debits: StatementDebit[]): LoanDay[] {
   const feeTimes = debits.filter((d) => d.lineKind === "loan_fee").map((d) => d.date.getTime());
   const byDate = new Map<string, StatementDebit[]>();
   for (const d of debits) {
@@ -196,13 +191,27 @@ function detectLoans(debits: StatementDebit[], statementEnd: Date, forecastFrom:
     byDate.set(key, [...(byDate.get(key) ?? []), d]);
   }
 
-  const series = new Map<string, LoanDay[]>();
+  const days: LoanDay[] = [];
   for (const rows of byDate.values()) {
     const date = rows[0].date;
     if (feeTimes.some((t) => Math.abs(t - date.getTime()) <= PAYOFF_FEE_WINDOW_DAYS * DAY_MS)) continue;
     const numbers = new Set(rows.filter((r) => LOAN_NUMBER_KINDS.has(r.lineKind) && r.loanRef).map((r) => r.loanRef!));
     const loanNumber = numbers.size === 1 ? [...numbers][0] : null;
-    const day: LoanDay = { date, total: round2(rows.reduce((s, r) => s + r.amount, 0)), loanNumber };
+    days.push({ date, total: round2(rows.reduce((s, r) => s + r.amount, 0)), loanNumber });
+  }
+  return days;
+}
+
+/**
+ * One loan per bank loan number and payment day, priced at the latest month's
+ * full debit (principal + interest, gross). Tracks paid on the same day can't
+ * be told apart from the statement, so they stay one entry until a schedule
+ * file replaces it.
+ */
+function detectLoans(debits: StatementDebit[], statementEnd: Date, forecastFrom: Date): DetectedCommitment[] {
+  const series = new Map<string, LoanDay[]>();
+  for (const day of loanDays(debits)) {
+    const { date, loanNumber } = day;
     const existing = [...series.entries()].find(
       ([, days]) => days[0].loanNumber === loanNumber && dayDistance(days[0].date.getUTCDate(), date.getUTCDate()) <= LOAN_DAY_TOLERANCE
     );

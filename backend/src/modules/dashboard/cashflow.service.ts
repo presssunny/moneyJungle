@@ -148,7 +148,10 @@ export async function buildUpcoming(userId: number, windowDays: number, anchor =
         : r.frequency === "yearly"
           ? yearlyOccurrences(anchor, occurrenceFrom, to)
           : monthlyOccurrences(anchor, occurrenceFrom, to);
+    // The bank's own page listed it as inactive; only a checking debit after that day says it still runs.
+    const stoppedAt = r.bankStatus === "inactive" && r.verifiedAt && !(r.detectedThrough && r.detectedThrough > r.verifiedAt) ? r.verifiedAt : null;
     for (const d of dates) {
+      if (stoppedAt && d > stoppedAt) continue;
       events.push({ key: `recurring:${r.id}:${d.toISOString().slice(0, 10)}`, date: d.toISOString(), kind: "recurring", name: r.name, amount,
         basis: r.detectedKey ? "last_debit" : "stated", icon: KIND_ICON.recurring });
     }

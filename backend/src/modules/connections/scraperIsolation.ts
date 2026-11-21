@@ -4,10 +4,13 @@ import os from "node:os";
 import path from "node:path";
 import { z } from "zod";
 import { ApiError } from "../../utils/ApiError";
-import type { ScrapeResult, WorkerCommand, WorkerEvent } from "../../types/connections.types";
-import type { ScraperFactory, ScraperRun } from "./scraperAdapter";
+import type { DepartmentFollowUp, LoanFollowUpDecision, LoanFollowUpReport, ScrapeExtras, ScrapeResult, WorkerCommand, WorkerEvent } from "../../types/connections.types";
+import type { ScraperFactory, ScraperOptions, ScraperRun } from "./scraperAdapter";
+import { openProbeLog, PROBE_ROOT } from "./probeLog";
 import { killProcessesIn, processAlive } from "./runProcesses";
-import { BROWSER_CLOSED, BROWSER_LAUNCH, BROWSER_STARTED, BROWSER_TAB_CLOSED } from "./scraperLaunch";
+import { BROWSER_CLOSED, BROWSER_LAUNCH, BROWSER_STARTED, BROWSER_TAB_CLOSED, FOLLOW_UP_DECISION_MS, PROBE_DONE, PROBE_SIGNED_IN } from "./scraperLaunch";
+import { hasLongNumber } from "./departmentTables.parser";
+import { DEPARTMENT_STOPS, departmentReadList } from "./siteDepartments";
 
 const LIBRARY = "israeli-bank-scrapers";
 const HARD_LIMIT_MS = 15 * 60_000;
@@ -118,13 +121,64 @@ const resultSchema = z.object({
   errorMessage: z.string().nullish().transform((v) => v?.slice(0, 500)),
 });
 
+const amount = z.number().finite().nullable();
+const day = z.string().max(40);
+// §7 A2: a number read from a bank page arrives as its last 4 digits; a longer one, even split by separators, is a leak.
+const lastDigits = z.string().regex(/^\d{1,4}$/);
+const shortNumbersOnly = (max: number) => z.string().max(max).refine((text) => !hasLongNumber(text), "more than 4 digits");
+const loanPaymentSchema = z.strictObject({
+  paymentNumber: z.number().int().positive(), date: day, principal: amount, interest: amount, linkage: amount, total: amount, balanceAfter: amount,
+});
+const loanSchema = z.strictObject({
+  loanNumber: lastDigits, trackNumber: lastDigits.nullable(), name: shortNumbersOnly(200).nullable(), asOf: day.nullable(),
+  originalAmount: amount, principalBalance: amount, indexedBalance: amount, interestType: z.enum(["fixed", "prime", "variable"]).nullable(),
+  annualInterestRate: amount, primeMargin: amount, indexLinked: z.boolean().nullable(), baseIndex: amount, baseIndexMonth: z.string().max(7).nullable(),
+  paymentsMade: z.number().int().nonnegative().nullable(), paymentsTotal: z.number().int().positive().nullable(), startDate: day.nullable(), endDate: day.nullable(),
+  nextPaymentAmount: amount, nextPaymentDate: day.nullable(), schedule: z.array(loanPaymentSchema).max(1_000),
+});
+const standingOrderSchema = z.strictObject({
+  payee: shortNumbersOnly(60).pipe(z.string().min(1)), amount, dayOfMonth: z.number().int().min(1).max(31).nullable(),
+  kind: z.enum(["standing_order", "direct_debit"]).nullable(), status: z.enum(["active", "inactive"]).nullable(),
+  reference: lastDigits.nullable(), lastChargeDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
+});
+const departmentReportSchema = z.strictObject({
+  department: z.enum([...DEPARTMENT_STOPS, "landed", "NO_DECISION", "NOT_NEEDED"]),
+  details: z.enum(["NOT_APPROVED", "READ", "UNAVAILABLE", "FAILED", "NOT_RUN"]),
+  rejected: z.number().int().min(0).max(500).optional(),
+});
+const followUpSchema = departmentReportSchema.extend({ standingOrders: departmentReportSchema.optional() });
+// Strict, so a field the bank renamed fails loudly instead of vanishing like an unknown key in resultSchema.
+const extrasSchema = z.strictObject({
+  loans: z.array(loanSchema).max(50).optional(),
+  standingOrders: z.array(standingOrderSchema).max(100).optional(),
+  followUp: followUpSchema.optional(),
+  errors: z.array(z.enum(["EXTRAS_INVALID"])).max(10).default([]),
+});
+
+/** Parsed on its own: a malformed extra is reported as such and never fails the checking account's result. */
+export function parseExtras(raw: unknown): ScrapeExtras | undefined {
+  if (raw === undefined) return undefined;
+  const parsed = extrasSchema.safeParse(raw);
+  if (parsed.success) return parsed.data;
+  // Malformed loans must not also hide how far the follow-up got: its codes are checked on their own.
+  const followUp = typeof raw === "object" && raw !== null && "followUp" in raw ? followUpSchema.safeParse(raw.followUp) : null;
+  return followUp?.success ? { followUp: followUp.data, errors: ["EXTRAS_INVALID"] } : { errors: ["EXTRAS_INVALID"] };
+}
+
 /** Which fields came back filled, as counts — never a value, amount or account number. */
 export function resultShape(result: ScrapeResult): string {
   if (!result.success) return `failed ${result.errorType ?? "?"}`;
-  return `accounts=${result.accounts?.length ?? 0} ` + (result.accounts ?? []).map((account) => {
+  const accounts = [`accounts=${result.accounts?.length ?? 0}`, ...(result.accounts ?? []).map((account) => {
     const count = (has: (txn: (typeof account.txns)[number]) => boolean) => account.txns.filter(has).length;
     return `[txns=${account.txns.length} balance=${account.balance == null ? "no" : "yes"} pending=${count((t) => t.status === "pending")} installments=${count((t) => !!t.installments)} memo=${count((t) => !!t.memo)} processedDiffers=${count((t) => t.processedDate !== t.date)} foreign=${count((t) => t.originalCurrency !== "ILS")}]`;
-  }).join(" ");
+  })].join(" ");
+  if (!result.extras) return accounts;
+  const loans = result.extras.loans ?? [];
+  const { followUp: report, standingOrders } = result.extras;
+  const codes = (r: DepartmentFollowUp) => `${r.department}/${r.details}${r.rejected ? ` rejected=${r.rejected}` : ""}`;
+  const orders = report?.standingOrders ? ` standingOrders=${codes(report.standingOrders)}` : "";
+  const followUp = report ? ` followUp=${codes(report)}${orders}` : "";
+  return `${accounts} extras=[loans=${loans.length}${standingOrders ? ` orders=${standingOrders.length}` : ""} schedules=${loans.filter((l) => l.schedule.length).length} payments=${loans.reduce((n, l) => n + l.schedule.length, 0)} errors=${result.extras.errors.join(",") || "none"}${followUp}]`;
 }
 
 function workerEvent(message: unknown): WorkerEvent | null {
@@ -142,9 +196,38 @@ function startupError(event: Extract<WorkerEvent, { type: "error" }>): Error {
 const GENERIC_ERRORS = ["GENERIC", "GENERAL_ERROR"];
 const failed = (errorType: string, errorMessage: string): ScrapeResult => ({ success: false, errorType, errorMessage });
 
+/** The parent's answer, inside the worker's own wait so it never times out first; anything else means no follow-up. */
+const NO_MOVE: LoanFollowUpDecision = { loans: false, standingOrders: false };
+async function followUpDecision(decide: ScraperOptions["decideFollowUp"], checking: ScrapeResult): Promise<LoanFollowUpDecision> {
+  if (!decide) return NO_MOVE;
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    const decision = await Promise.race([
+      decide(checking),
+      new Promise<LoanFollowUpDecision>((resolve) => { timer = setTimeout(() => resolve(NO_MOVE), FOLLOW_UP_DECISION_MS - 1_000); }),
+    ]);
+    return { loans: decision.loans === true, standingOrders: decision.standingOrders === true };
+  } catch {
+    console.warn("[סנכרון] ההחלטה על מעבר לדפי המחלקות נכשלה — ממשיכים בלי מעבר");
+    return NO_MOVE;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Each sync gets a fresh worker process; the parent alone decrypts credentials and touches the DB. */
-export function isolatedScraperFactory({ library = LIBRARY, officialLibrary = OFFICIAL_LOGIN, hardLimitMs = HARD_LIMIT_MS, runRoot = RUN_ROOT, tmpRoot = os.tmpdir(), urlProbe = process.env.CONNECTION_URL_PROBE === "1" } = {}): ScraperFactory {
+export function isolatedScraperFactory({ library = LIBRARY, officialLibrary = OFFICIAL_LOGIN, hardLimitMs = HARD_LIMIT_MS, runRoot = RUN_ROOT, tmpRoot = os.tmpdir(), urlProbe = process.env.CONNECTION_URL_PROBE === "1", siteDiscovery = process.env.CONNECTION_SITE_DISCOVERY === "1", loansDepartment = process.env.CONNECTION_LOANS_DEPARTMENT === "1", departmentRead = departmentReadList(process.env.CONNECTION_DEPARTMENT_READ), probeRoot = PROBE_ROOT } = {}): ScraperFactory {
   return (options) => new Promise<ScraperRun>((resolveRun, rejectRun) => {
+    // Only officialLogin stops after her sign-in; the library's password login would read her account.
+    // Discovery moves the bank's app, so it never runs as a normal sync that would also import.
+    if (siteDiscovery && !urlProbe) {
+      rejectRun(ApiError.badRequest("מעבר בין דפי המחלקות פועל רק בהקלטת מבנה האתר. הדפדפן לא נפתח ולא נוצר קשר עם הבנק."));
+      return;
+    }
+    if (urlProbe && options.loginMethod !== "official_window") {
+      rejectRun(ApiError.badRequest("הקלטת מבנה האתר פועלת רק בכניסה בחלון הרשמי של הבנק. הדפדפן לא נפתח ולא נוצר קשר עם הבנק."));
+      return;
+    }
     mkdirSync(runRoot, { recursive: true, mode: 0o700 });
     const runDir = mkdtempSync(path.join(runRoot, `run-${process.pid}-`));
     // mkdtemp makes it 0700 under a fresh random name, so a shared /tmp is safe.
@@ -190,6 +273,12 @@ export function isolatedScraperFactory({ library = LIBRARY, officialLibrary = OF
     let settled = false;
     let windowClosed = false;
     let browserStarted = false;
+    let probeSignedIn = false;
+    // The follow-up exception to "discovery never runs in an importing sync": default off, official window only (§7 clause A, A2).
+    const followUpAsked = (loansDepartment || departmentRead.length > 0) && !urlProbe && headed;
+    let checkingSeen = false;
+    let early: ScrapeResult | null = null;
+    const probeLog = urlProbe ? openProbeLog(probeRoot) : null;
     let progressListener: (type: string) => void = () => {};
     let resolveScrape: (result: ScrapeResult) => void = () => {};
     const scrapeResult = new Promise<ScrapeResult>((resolve) => { resolveScrape = resolve; });
@@ -206,8 +295,16 @@ export function isolatedScraperFactory({ library = LIBRARY, officialLibrary = OF
       settled = true;
       clearTimeout(timer);
       stop();
+      const probed = probeLog?.close();
+      if (probed) console.warn(`[סנכרון] probe: ${probed.written} שורות נכתבו ל־${probed.file ?? "(אין קובץ)"}, ${probed.dropped} נשמטו מעבר לתקרה, ${probed.rejected} נדחו`);
       if (!ready) { rejectRun(outcome instanceof Error ? outcome : new Error(outcome.errorMessage ?? "sync worker stopped")); return; }
-      const result = outcome instanceof Error ? failed("GENERAL_ERROR", outcome.message) : outcome;
+      const ended = outcome instanceof Error ? failed("GENERAL_ERROR", outcome.message) : outcome;
+      // The follow-up never costs the checking rows already read; only her own cancel discards them.
+      const department = windowClosed || [BROWSER_CLOSED, BROWSER_TAB_CLOSED].includes(ended.errorType ?? "") ? "CLOSED" : "ERROR";
+      const result = !ended.success && ended.errorType !== "CANCELLED" && early
+        ? { ...early, extras: { errors: [], followUp: { department, details: "NOT_RUN" } satisfies LoanFollowUpReport } }
+        : ended;
+      if (result !== ended) console.warn(`[סנכרון] הסנכרון נקטע אחרי קריאת העו״ש (${department}) — נקלטות התנועות שכבר נקראו`);
       // A generic failure before Chrome came up is a launch failure here, never the bank's answer.
       resolveScrape(!result.success && GENERIC_ERRORS.includes(result.errorType ?? "") && !browserStarted ? failed(BROWSER_LAUNCH, result.errorMessage ?? "") : result);
     };
@@ -219,17 +316,36 @@ export function isolatedScraperFactory({ library = LIBRARY, officialLibrary = OF
       if (event.type === "progress" && typeof event.progress === "string") {
         if (event.progress === BROWSER_CLOSED) windowClosed = true;
         if (event.progress === BROWSER_STARTED) { browserStarted = true; return; }
+        if (event.progress === PROBE_SIGNED_IN) { probeSignedIn = true; return; }
         progressListener(event.progress.slice(0, 64));
+      }
+      else if (event.type === "probe") probeLog?.write(event.line);
+      else if (event.type === "checking") {
+        if (!followUpAsked || checkingSeen) return;
+        checkingSeen = true;
+        const checking = resultSchema.safeParse(event.result);
+        if (checking.success && checking.data.success) early = checking.data;
+        const decided = early ? followUpDecision(options.decideFollowUp, early) : Promise.resolve(NO_MOVE);
+        void decided.then((decision) => {
+          const command: WorkerCommand = { type: "followUp", decision };
+          try { if (!settled) child.send(command); } catch { /* the worker is gone; its exit settles the run */ }
+        });
       }
       else if (event.type === "error") settle(ready ? failed("GENERAL_ERROR", String(event.message).slice(0, 500)) : startupError(event));
       else if (event.type === "result") {
-        const parsed = resultSchema.safeParse(event.result);
+        const checking = resultSchema.safeParse(event.result);
+        const extras = checking.success && checking.data.success && typeof event.result === "object" && event.result !== null && "extras" in event.result
+          ? parseExtras(event.result.extras) : undefined;
+        const parsed = checking.success && extras ? { ...checking, data: { ...checking.data, extras } } : checking;
         // officialLogin throws BROWSER_CLOSED when she closes the bank's window; the library reports it as generic.
         // A close during the fetch surfaces as "Target closed"; the progress event says whose doing it was.
         const closed = parsed.success && !parsed.data.success && (windowClosed || parsed.data.errorMessage === BROWSER_CLOSED);
         const tabClosed = parsed.success && !closed && parsed.data.errorMessage === BROWSER_TAB_CLOSED;
         if (urlProbe && parsed.success) console.warn(`[סנכרון] probe: ${resultShape(parsed.data)}`);
+        // A probe run imports nothing, whatever came back: after her sign-in it ends here, even as a "success".
+        const probeDone = urlProbe && parsed.success && (parsed.data.success || probeSignedIn || parsed.data.errorMessage === PROBE_DONE);
         settle(!parsed.success ? failed("GENERAL_ERROR", "unexpected scraper result")
+          : probeDone ? failed(PROBE_DONE, "probe run: nothing read or imported")
           : closed ? failed(BROWSER_CLOSED, "browser window closed")
           : tabClosed ? failed(BROWSER_TAB_CLOSED, "bank tab closed") : parsed.data);
       } else if (event.type === "ready" && !ready) {
@@ -260,7 +376,8 @@ export function isolatedScraperFactory({ library = LIBRARY, officialLibrary = OF
       library: headed ? officialLibrary : library,
       options: {
         companyId: options.companyId, startDate: options.startDate.toISOString(), defaultTimeout: options.defaultTimeout,
-        showBrowser: headed, loginWaitMs: options.loginWaitMs, profileDir: path.join(runDir, "profile"), urlProbe: headed && urlProbe,
+        showBrowser: headed, loginWaitMs: options.loginWaitMs, profileDir: path.join(runDir, "profile"), urlProbe, siteDiscovery,
+        ...(followUpAsked ? { loansDepartment: true, departmentRead } : {}),
       },
     };
     child.send(start);

@@ -194,3 +194,215 @@ test('A connection saved with credentials before the change can move to the bank
  await expect(page.getByRole('button',{name:/רענון נתונים: הבנק הבינלאומי/})).toHaveText('פתיחת חלון הבנק');
  expect(requests.find(r=>r.method==='PATCH')?.body).toEqual({loginMethod:'official_window'});
 });
+
+// Bank sync → loans (design 2026-11-13, scenario 12): the stage list is the server's; only "done" may look like success.
+// `status` and `incomplete` are the server's (syncStageStatus.ts); the page only shows them, so the mock states them.
+const stage=(stage:string,state:string,status:string,code:string|null=null,count?:number)=>({stage,state,status,code,...(count===undefined?{}:{count})});
+const BLOCKED='פרטי ההלוואות לא נקראו מהאתר — קריאת הדף כבויה בהגדרות. אפשר להעלות לוח סילוקין כקובץ במסך ההלוואות';
+const loanStages=(details:Row,imported:Row,department:Row=stage('loans_department','skipped','unavailable','DISABLED'))=>[stage('checking','done','done',null,9),stage('loan_detection','done','done',null,1),department,details,imported];
+const VISITED=stage('loans_department','done','done');
+const loanItem=(status:string,included:number)=>({kind:'loan_schedule',key:'loan:90001:301',importSessionId:'s-2',target:'הלוואה 90001 · מסלול 301',rows:3,skippedPending:0,skippedForeign:0,skippedZero:0,storedThrough:null,pending:[],foreign:[],
+ review:{status,counts:{included,duplicate:0,pending:0}}});
+const finishedSync=(outcome:Row[],message:string,incomplete?:boolean)=>({id:1,provider:'beinleumi',kind:'bank',label:'הבנק הבינלאומי',bankAccountId:1,accountHint:null,loginMethod:'official_window',blockedReason:null,verifiedAt:'2026-10-20T10:02:00Z',lastSyncAt:'2026-10-20T10:02:00Z',createdAt:'2026-10-20T10:00:00Z',retryBlockedReason:null,retryMessage:null,retryAvailableAt:null,
+ syncs:[{id:1,status:'succeeded',phase:'building_import',method:'official_window',errorType:null,message,outcome,deadlineAt:null,startedAt:'2026-10-20T10:00:00Z',finishedAt:'2026-10-20T10:02:00Z',...(incomplete===undefined?{}:{incomplete})}]});
+async function openSummary(page:Page,connection:Row){
+ await mockConnections(page,[],{initial:[connection]});
+ await page.goto('/accounts?tab=connections');
+ await page.getByRole('button',{name:/פרטי הרענון/}).click();
+ return page.getByRole('dialog');
+}
+
+test('A loan details step the bank sync may not run yet is shown as blocked, in its own words, never as success',async({page},info)=>{
+ const [account]=outcome('ready_for_review');
+ const dialog=await openSummary(page,finishedSync([{...account,stages:loanStages(stage('loan_details','blocked','blocked','NOT_APPROVED'),stage('loan_schedule_import','skipped','not_needed',null,0))}],'דוח אחד מחכה לאישור במסך הייבוא · פרטי ההלוואות לא הושלמו — ראו פירוט',true));
+ const stages=dialog.getByRole('region',{name:'שלבי הסנכרון'});
+ // A flag that is off is not "not needed": a loan line was found and the step was wanted.
+ await expect(stages.getByRole('listitem')).toHaveText(['✓התנועות בעו״ש נקראומצב: הושלם','✓זוהו 1 חיובי הלוואהמצב: הושלם','–המעבר לדף ההלוואות כבוי בהגדרות, לכן לא בוצעמצב: לא זמין',`⊘${BLOCKED}מצב: חסום במדיניות`,'–אין לוח סילוקין לשמורמצב: לא נדרש']);
+ await expect(stages.getByText('לא נדרש מעבר לדף ההלוואות')).toHaveCount(0);
+ const blocked=stages.getByRole('listitem').filter({hasText:BLOCKED});
+ await expect(blocked).toHaveClass(/connection-state-waiting/);
+ await expect(blocked).not.toHaveClass(/sync-stage-done/);
+ await expect(stages.getByRole('listitem').filter({hasText:'התנועות בעו״ש נקראו'})).toHaveClass(/sync-stage-done/);
+ await expect(dialog.locator('.sync-journey-success, .sync-journey-success-final').getByText(BLOCKED)).toHaveCount(0);
+ await expect(dialog.locator('.sync-journey-steps').getByText('העו״ש סונכרן — חלק מהנתונים לא נאספו')).toBeVisible();
+ await expect(dialog.getByText('הסנכרון הושלם',{exact:false})).toHaveCount(0);
+ await page.screenshot({path:info.outputPath('loans-blocked.png')});
+ expect(await axeSerious(page)).toEqual([]);
+});
+
+// The stages of the real sync that showed the bug (2026-11-14): only the checking part completed.
+const STANDING_BLOCKED='הוראות הקבע וההרשאות לחיוב לא נקראו מאתר הבנק — קריאת הדף כבויה בהגדרות';
+const DOCUMENTS_BLOCKED='מסמכים ודוחות לא הורדו מאתר הבנק — הורדה כזו עדיין לא אושרה. אפשר להעלות קובץ במסך הייבוא';
+const fullStages=(detection:Row,department:Row=stage('loans_department','skipped','unavailable','DISABLED'))=>[stage('checking','done','done',null,79),stage('loan_detection','partial','awaiting_approval','AMBIGUOUS',1),department,stage('loan_details','blocked','blocked','NOT_APPROVED'),stage('loan_schedule_import','skipped','not_needed',null,0),
+ detection,stage('standing_orders_verification','blocked','blocked','NOT_APPROVED'),stage('bank_documents','blocked','blocked','NOT_APPROVED')];
+test('Every stage of a partial bank sync is grouped, says what was not collected, and carries its own status — never "sync complete"',async({page},info)=>{
+ const [account]=outcome('ready_for_review');
+ const dialog=await openSummary(page,finishedSync([{...account,stages:fullStages(stage('standing_orders_detection','done','done','INFERRED',4))}],'דוח אחד מחכה לאישור במסך הייבוא · לא נאספו: פרטי הלוואות, אימות הוראות קבע, מסמכי בנק — ראו פירוט',true));
+ const stages=dialog.getByRole('region',{name:'שלבי הסנכרון'});
+ await expect(stages.getByRole('heading')).toHaveText(['עו״ש','הלוואות','הוראות קבע','מסמכים']);
+ const group=(name:string)=>stages.getByRole('list',{name}).locator('.sync-stage-status');
+ await expect(group('עו״ש')).toHaveText(['מצב: הושלם']);
+ await expect(group('הלוואות')).toHaveText(['מצב: ממתין לאישור','מצב: לא זמין','מצב: חסום במדיניות','מצב: לא נדרש']);
+ await expect(group('הוראות קבע')).toHaveText(['מצב: הושלם','מצב: חסום במדיניות']);
+ await expect(group('מסמכים')).toHaveText(['מצב: חסום במדיניות']);
+ await expect(stages.getByText('1 חיובי הלוואה לא שויכו להלוואה אחת — תתבקשי לבחור במסך הייבוא')).toBeVisible();
+ await expect(stages.getByText('זוהו 4 חיובים חוזרים מתוך העו״ש (הסקה מהתנועות — לא אומת מול הוראות הקבע בבנק)')).toBeVisible();
+ await expect(stages.getByText(STANDING_BLOCKED)).toBeVisible();
+ await expect(stages.getByText(DOCUMENTS_BLOCKED)).toBeVisible();
+ await expect(dialog.locator('.sync-journey-steps').getByText('העו״ש סונכרן — חלק מהנתונים לא נאספו')).toBeVisible();
+ await expect(dialog.locator('.sync-journey-turn').getByText('העו״ש סונכרן — חלק מהנתונים לא נאספו. עכשיו תורך: לבדוק ולאשר')).toBeVisible();
+ await expect(dialog.getByText('הסנכרון הושלם',{exact:false})).toHaveCount(0);
+ await page.screenshot({path:info.outputPath('sync-partial.png')});
+ expect(await axeSerious(page)).toEqual([]);
+ await page.unrouteAll({behavior:'ignoreErrors'});
+ const short=await openSummary(page,finishedSync([{...account,stages:fullStages(stage('standing_orders_detection','skipped','unavailable','WINDOW_TOO_SHORT'),stage('loans_department','skipped','unavailable','NOT_OFFICIAL_WINDOW'))}],'דוח אחד מחכה לאישור במסך הייבוא',true));
+ const shortStages=short.getByRole('region',{name:'שלבי הסנכרון'});
+ await expect(shortStages.getByRole('listitem').filter({hasText:'אין מספיק חודשים בעו״ש כדי לזהות חיובים חוזרים'}).locator('.sync-stage-status')).toHaveText('מצב: לא זמין');
+ await expect(shortStages.getByRole('listitem').filter({hasText:'המעבר לדף ההלוואות אפשרי רק בכניסה בחלון של הבנק'}).locator('.sync-stage-status')).toHaveText('מצב: לא זמין');
+ await page.unrouteAll({behavior:'ignoreErrors'});
+ const none=await openSummary(page,finishedSync([{...account,stages:fullStages(stage('standing_orders_detection','skipped','not_needed','NO_RECURRING'))}],'דוח אחד מחכה לאישור במסך הייבוא',true));
+ await expect(none.getByRole('region',{name:'שלבי הסנכרון'}).getByRole('listitem').filter({hasText:'לא זוהו חיובים חוזרים'}).locator('.sync-stage-status')).toHaveText('מצב: לא נדרש');
+});
+
+test('A loan schedule waits for its own approval and is not counted as account transactions',async({page})=>{
+ const [account]=outcome('ready_for_review');
+ const dialog=await openSummary(page,finishedSync([{...account,stages:loanStages(stage('loan_details','done','done',null,1),stage('loan_schedule_import','done','awaiting_approval',null,1),VISITED)},loanItem('ready_for_review',3)],'דוח אחד מחכה לאישור במסך הייבוא',false));
+ const schedules=dialog.getByRole('region',{name:'לוחות סילוקין לאישור'});
+ await expect(schedules.getByText('הלוואה 90001 · מסלול 301')).toBeVisible();
+ await expect(schedules.getByRole('link',{name:'לבדיקה ואישור: הלוואה 90001 · מסלול 301'})).toHaveAttribute('href','/imports?session=s-2');
+ await expect(dialog.getByRole('region',{name:'שלבי הסנכרון'}).getByText('1 לוחות סילוקין מחכים לאישור')).toBeVisible();
+ // The account's own counts only: the schedule's three payments are not "to be added" transactions.
+ await expect(dialog.getByText('ייכנסו באישור: 5',{exact:true})).toBeVisible();
+ await expect(dialog.getByText(/ייכנסו באישור: 8/)).toHaveCount(0);
+});
+
+test('Once both are approved, "added" counts the account\'s transactions only, and an incomplete loan stage keeps it from "all done"',async({page})=>{
+ const [account]=outcome('completed');
+ const done=await openSummary(page,finishedSync([{...account,stages:loanStages(stage('loan_details','done','done',null,1),stage('loan_schedule_import','done','awaiting_approval',null,1),VISITED)},loanItem('completed',3)],'דוח אחד מחכה לאישור במסך הייבוא',false));
+ await expect(done.getByText('נוספו 5 תנועות.')).toBeVisible();
+ await expect(done.getByText('נוספו 8 תנועות.')).toHaveCount(0);
+ await expect(done.getByText('הכול נקלט')).toBeVisible();
+ await page.unrouteAll({behavior:'ignoreErrors'});
+ const blocked=await openSummary(page,finishedSync([{...account,stages:loanStages(stage('loan_details','blocked','blocked','NOT_APPROVED'),stage('loan_schedule_import','skipped','not_needed',null,0))}],'דוח אחד מחכה לאישור במסך הייבוא · פרטי ההלוואות לא הושלמו — ראו פירוט',true));
+ await expect(blocked.getByText('התנועות נקלטו — חלק מהנתונים לא נאספו')).toBeVisible();
+ await expect(blocked.getByText('הכול נקלט')).toHaveCount(0);
+ await expect(blocked.getByText('חלק מהנתונים לא נאספו — הפירוט בסיכום הרענון.')).toHaveClass(/connection-state-waiting/);
+});
+
+// Each stop speaks for itself: our own fault is never told as the bank's.
+test('Each loans-page stop, a rejected schedule and a failed standing-orders check say what happened, with the server\'s status',async({page})=>{
+ const [account]=outcome('ready_for_review');
+ const cases:Array<[Row,string,string]>=[
+  [stage('loans_department','failed','failed','SESSION_LOST'),'לא הגענו לדף ההלוואות: הבנק ניתק את הכניסה — לא ניסינו שוב','מצב: נכשל'],
+  [stage('loans_department','failed','unavailable','NOT_IN_MENU'),'לא הגענו לדף ההלוואות: הדף לא מופיע בתפריט — לא ניסינו שוב','מצב: לא זמין'],
+  [stage('loans_department','failed','failed','ERROR'),'המעבר לדף ההלוואות לא הושלם בגלל תקלה אצלנו — לא ניסינו שוב','מצב: נכשל'],
+  [stage('loans_department','failed','failed','REDIRECT'),'לא הגענו לדף ההלוואות: הבנק הפנה לדף אחר — לא ניסינו שוב','מצב: נכשל'],
+  [stage('loans_department','failed','failed','HTTP_STATUS'),'לא הגענו לדף ההלוואות: הבנק החזיר שגיאה — לא ניסינו שוב','מצב: נכשל'],
+  [stage('loans_department','failed','failed','NEW_TAB'),'לא הגענו לדף ההלוואות: נפתחה לשונית חדשה — עצרנו — לא ניסינו שוב','מצב: נכשל'],
+ ];
+ for(const [department,text,status] of cases){
+  const dialog=await openSummary(page,finishedSync([{...account,stages:loanStages(stage('loan_details','skipped','unavailable','NOT_RUN'),stage('loan_schedule_import','skipped','not_needed',null,0),department)}],'דוח אחד מחכה לאישור במסך הייבוא',true));
+  const line=dialog.getByRole('region',{name:'שלבי הסנכרון'}).getByRole('listitem').filter({hasText:text});
+  await expect(line).toHaveCount(1);
+  await expect(line.locator('.sync-stage-status')).toHaveText(status);
+  await expect(dialog.getByText('הבנק לא הציג את הדף',{exact:false})).toHaveCount(0);
+  await page.unrouteAll({behavior:'ignoreErrors'});
+ }
+ const rejected=await openSummary(page,finishedSync([{...account,stages:loanStages(stage('loan_details','done','done',null,1),stage('loan_schedule_import','failed','failed','SCHEDULE_REJECTED'),VISITED)}],'דוח אחד מחכה לאישור במסך הייבוא',true));
+ await expect(rejected.getByRole('listitem').filter({hasText:'לוחות הסילוקין לא נשמרו: הלוח לא עבר את בדיקת התקינות'}).locator('.sync-stage-status')).toHaveText('מצב: נכשל');
+ await page.unrouteAll({behavior:'ignoreErrors'});
+ const standing=await openSummary(page,finishedSync([{...account,stages:fullStages(stage('standing_orders_detection','failed','failed','ERROR',0))}],'דוח אחד מחכה לאישור במסך הייבוא · לא נאספו: פרטי הלוואות, זיהוי הוראות קבע, אימות הוראות קבע, מסמכי בנק — ראו פירוט',true));
+ await expect(standing.getByRole('listitem').filter({hasText:'זיהוי החיובים החוזרים נכשל — התנועות עצמן נקלטו כרגיל'}).locator('.sync-stage-status')).toHaveText('מצב: נכשל');
+ await expect(standing.locator('.sync-journey-steps').getByText('העו״ש סונכרן — חלק מהנתונים לא נאספו')).toBeVisible();
+});
+
+// Banker: a table read with rows we could not place may hide a loan, so it never reads as plain success.
+test('A bank page read with unrecognised rows says how many, waits for approval, and leaves the sync incomplete',async({page})=>{
+ const [account]=outcome('ready_for_review');
+ const unrecognized=(name:string,count:number,rejected:number)=>({...stage(name,'partial','awaiting_approval','ROWS_UNRECOGNIZED',count),rejected});
+ const cases:Array<[number,number,string,string]>=[
+  [1,2,'נקראו 2 מסלולי הלוואה מאתר הבנק, ושורה אחת בטבלה לא זוהתה — ייתכן שחסרה הלוואה. כדאי להשוות לדף הבנק','נקראו 3 הוראות קבע מאתר הבנק, ו־2 שורות לא זוהו — ייתכן שחסרה הוראה'],
+  [3,1,'נקראו 2 מסלולי הלוואה מאתר הבנק, ו־3 שורות בטבלה לא זוהו — ייתכן שחסרה הלוואה. כדאי להשוות לדף הבנק','נקראו 3 הוראות קבע מאתר הבנק, ושורה אחת לא זוהתה — ייתכן שחסרה הוראה'],
+ ];
+ for(const [loansRejected,ordersRejected,loansText,ordersText] of cases){
+  const stages=[stage('checking','done','done',null,9),stage('loan_detection','done','done',null,1),VISITED,unrecognized('loan_details',2,loansRejected),stage('loan_schedule_import','skipped','not_needed',null,0),
+   stage('standing_orders_detection','done','done','INFERRED',3),unrecognized('standing_orders_verification',3,ordersRejected),stage('bank_documents','blocked','blocked','NOT_APPROVED')];
+  const dialog=await openSummary(page,finishedSync([{...account,stages}],'דוח אחד מחכה לאישור במסך הייבוא · לא נאספו: פרטי הלוואות, אימות הוראות קבע, מסמכי בנק — ראו פירוט',true));
+  const list=dialog.getByRole('region',{name:'שלבי הסנכרון'});
+  for(const text of [loansText,ordersText]){
+   const line=list.getByRole('listitem').filter({hasText:text});
+   await expect(line).toHaveCount(1);
+   await expect(line).toHaveText(`◐${text}מצב: ממתין לאישור`);
+   await expect(line).not.toHaveClass(/sync-stage-done/);
+  }
+  await expect(list).not.toContainText(/מחכ(ים|ות) לאישורך/);
+  await expect(dialog.locator('.sync-journey-steps').getByText('העו״ש סונכרן — חלק מהנתונים לא נאספו')).toBeVisible();
+  await expect(dialog.getByText('הסנכרון הושלם',{exact:false})).toHaveCount(0);
+  await page.unrouteAll({behavior:'ignoreErrors'});
+ }
+});
+
+// The status and the "incomplete" verdict are the server's: the page shows them and never derives its own.
+test('The page follows the server\'s incomplete flag, and a stage without a status still shows its text',async({page})=>{
+ const [account]=outcome('ready_for_review');
+ const old=await openSummary(page,finishedSync([{...account,stages:[{stage:'checking',state:'done',code:null,count:9},{stage:'loan_details',state:'blocked',code:'NOT_APPROVED'}]}],'דוח אחד מחכה לאישור במסך הייבוא'));
+ const stages=old.getByRole('region',{name:'שלבי הסנכרון'});
+ await expect(stages.getByText('התנועות בעו״ש נקראו')).toBeVisible();
+ await expect(stages.getByText(BLOCKED)).toBeVisible();
+ await expect(stages.locator('.sync-stage-status')).toHaveCount(0);
+ await expect(stages).not.toContainText('undefined');
+ await page.unrouteAll({behavior:'ignoreErrors'});
+ // Statuses that look complete, but the server says a gap remains: its word stands.
+ const flagged=await openSummary(page,finishedSync([{...account,stages:[stage('checking','done','done',null,9)]}],'דוח אחד מחכה לאישור במסך הייבוא',true));
+ await expect(flagged.locator('.sync-journey-steps').getByText('העו״ש סונכרן — חלק מהנתונים לא נאספו')).toBeVisible();
+ await page.unrouteAll({behavior:'ignoreErrors'});
+ const complete=await openSummary(page,finishedSync([{...account,stages:[stage('checking','done','done',null,9),stage('loan_detection','partial','awaiting_approval','AMBIGUOUS',1)]}],'דוח אחד מחכה לאישור במסך הייבוא',false));
+ await expect(complete.locator('.sync-journey-steps').getByText('הסנכרון הושלם')).toBeVisible();
+ await expect(complete.getByRole('listitem').filter({hasText:'1 חיובי הלוואה לא שויכו להלוואה אחת'}).locator('.sync-stage-status')).toHaveText('מצב: ממתין לאישור');
+});
+
+// §7 A2: what the bank's own loans and standing-orders pages showed waits for her approval, like a schedule.
+const siteItem=(kind:string,key:string,target:string,session:string,status='ready_for_review')=>({kind,key,importSessionId:session,target,rows:2,skippedPending:0,skippedForeign:0,skippedZero:0,storedThrough:null,pending:[],foreign:[],
+ review:{status,counts:{included:0,duplicate:0,pending:0}}});
+const SITE_STAGES=[stage('checking','done','done',null,9),stage('loan_detection','done','done',null,1),VISITED,stage('loan_details','done','done',null,2),stage('loan_schedule_import','skipped','not_needed',null,0),
+ stage('standing_orders_detection','done','done','INFERRED',3),stage('standing_orders_verification','done','done',null,4),stage('bank_documents','blocked','blocked','NOT_APPROVED')];
+test('Loan details and standing orders read from the bank site link to their own review, apart from the account\'s transactions',async({page},info)=>{
+ const [account]=outcome('ready_for_review');
+ const dialog=await openSummary(page,finishedSync([{...account,stages:SITE_STAGES},siteItem('loan_details','loan_details','פרטי הלוואות מאתר הבנק','s-3'),siteItem('standing_orders','standing_orders','הוראות קבע מאתר הבנק','s-4')],'דוח אחד מחכה לאישור במסך הייבוא',true));
+ const site=dialog.getByRole('region',{name:'פרטים מאתר הבנק לאישור'});
+ await expect(site.getByRole('link',{name:'לבדיקה ואישור: פרטי הלוואות מאתר הבנק'})).toHaveAttribute('href','/imports?session=s-3');
+ await expect(site.getByRole('link',{name:'לבדיקה ואישור: הוראות קבע מאתר הבנק'})).toHaveAttribute('href','/imports?session=s-4');
+ const stages=dialog.getByRole('region',{name:'שלבי הסנכרון'});
+ await expect(stages.getByText('נקראו פרטים של 2 מסלולי הלוואה מאתר הבנק — מחכים לאישורך')).toBeVisible();
+ await expect(stages.getByText('נקראו 4 הוראות קבע והרשאות מאתר הבנק — מחכות לאישורך')).toBeVisible();
+ // The site items carry no rows: only the account's own list shows counts.
+ await expect(site.getByText(/ייכנסו באישור/)).toHaveCount(0);
+ await expect(dialog.getByText('ייכנסו באישור: 5',{exact:true})).toBeVisible();
+ await page.screenshot({path:info.outputPath('sync-site-snapshot.png')});
+ expect(await axeSerious(page)).toEqual([]);
+ await page.unrouteAll({behavior:'ignoreErrors'});
+ const [approved]=outcome('completed');
+ const done=await openSummary(page,finishedSync([{...approved,stages:SITE_STAGES},siteItem('loan_details','loan_details','פרטי הלוואות מאתר הבנק','s-3','completed')],'',false));
+ await expect(done.getByText('נוספו 5 תנועות.')).toBeVisible();
+});
+
+test('A bank-site page with no known table, a failed read and a skipped one each say so, with the server\'s status',async({page})=>{
+ const [account]=outcome('ready_for_review');
+ const cases:Array<[Row,string,string]>=[
+  [stage('loan_details','failed','unavailable','UNAVAILABLE'),'הדף נפתח, אבל לא זיהינו בו טבלה מוכרת — לא נקרא דבר','מצב: לא זמין'],
+  [stage('loan_details','failed','failed','FAILED'),'קריאת הדף נכשלה — לא ניסינו שוב','מצב: נכשל'],
+  [stage('standing_orders_verification','failed','unavailable','UNAVAILABLE'),'הדף נפתח, אבל לא זיהינו בו טבלה מוכרת — לא נקרא דבר','מצב: לא זמין'],
+  [stage('standing_orders_verification','failed','failed','FAILED'),'קריאת הדף נכשלה — לא ניסינו שוב','מצב: נכשל'],
+  [stage('standing_orders_verification','failed','failed','SESSION_LOST'),'לא הגענו לדף: הבנק ניתק את הכניסה — לא ניסינו שוב','מצב: נכשל'],
+  [stage('standing_orders_verification','skipped','not_needed','NOT_NEEDED'),'לא נדרשה קריאה של הוראות הקבע מאתר הבנק','מצב: לא נדרש'],
+  [stage('standing_orders_verification','blocked','blocked','NOT_APPROVED'),STANDING_BLOCKED,'מצב: חסום במדיניות'],
+ ];
+ for(const [row,text,status] of cases){
+  const dialog=await openSummary(page,finishedSync([{...account,stages:[stage('checking','done','done',null,9),row]}],'דוח אחד מחכה לאישור במסך הייבוא',true));
+  const line=dialog.getByRole('region',{name:'שלבי הסנכרון'}).getByRole('listitem').filter({hasText:text});
+  await expect(line).toHaveCount(1);
+  await expect(line.locator('.sync-stage-status')).toHaveText(status);
+  await expect(dialog.getByText('עדיין לא אושר',{exact:false})).toHaveCount(0);
+  await page.unrouteAll({behavior:'ignoreErrors'});
+ }
+});

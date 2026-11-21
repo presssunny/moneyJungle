@@ -6,6 +6,13 @@ export interface StatementDebit {
   loanRef: string | null;
 }
 
+/** An account's debits as the detector reads them, and the first and last day of all its rows. */
+export interface DebitEvidence {
+  debits: StatementDebit[];
+  first: Date;
+  last: Date;
+}
+
 export interface DetectedCommitment {
   /** Stable across overlapping statements, so a re-upload never adds a twin. */
   key: string;

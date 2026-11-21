@@ -334,6 +334,20 @@ input[type=checkbox], input[type=radio] { accent-color: var(--primary); width: 1
 .detected-commitments { border: 0; padding: 0; margin-block: var(--space-4); }
 .detected-commitments legend { font-weight: 600; padding: 0; }
 .detected-commitments .household-consent { padding-block: var(--space-2); }
+.loan-schedule-next { margin-block: var(--space-4); padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-surface); }
+.site-snapshot-list { list-style: none; margin: var(--space-3) 0 0; padding: 0; display: grid; gap: var(--space-4); }
+.site-snapshot-item { padding-block-end: var(--space-4); border-block-end: 1px solid var(--border); }
+.site-snapshot-item:last-child { border-block-end: 0; }
+.site-snapshot-title { margin: 0; font-size: 1rem; }
+.site-snapshot-source { margin: var(--space-1) 0; font-size: 0.85rem; color: var(--text-muted); }
+.site-snapshot-facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--space-2); margin: var(--space-2) 0; }
+.site-snapshot-facts dt { font-size: 0.8rem; color: var(--text-muted); }
+.site-snapshot-facts dd { margin: 0; }
+.site-snapshot-fills ul, .site-snapshot-notes ul { margin: var(--space-1) 0 0; }
+.site-snapshot-notes { margin-block-start: var(--space-2); color: var(--text-muted); }
+/* Small source label beside a figure; text carries the meaning, colour only tints the ground. */
+.source-tag { display: inline-block; margin-inline-start: var(--space-1); padding: 0 6px; border-radius: 99px; font-size: 12px; color: var(--text); border: 1px solid var(--border); background: color-mix(in srgb, var(--text-muted) 10%, transparent); white-space: nowrap; }
+.source-tag-warn { border-color: var(--warning); background: color-mix(in srgb, var(--warning) 14%, transparent); }
 .connections-page { display: flex; flex-direction: column; gap: var(--space-4); }
 .connection-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-4); }
 .connection-item { border-block-end: 1px solid var(--border); padding-block-end: var(--space-4); }
@@ -420,6 +434,21 @@ input[type=checkbox], input[type=radio] { accent-color: var(--primary); width: 1
 .sync-state-title:focus { outline: none; }
 .sync-state-title:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .sync-counts { list-style: none; margin: var(--space-1) 0; padding: 0; }
+.sync-stages { margin: var(--space-2) 0; display: grid; gap: var(--space-2); }
+.sync-stage-group-title { margin: 0 0 var(--space-1); font-size: 0.85rem; font-weight: 650; color: var(--text-muted); }
+.sync-stage-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-1); }
+.sync-stage-text { flex: 1; }
+/* The label carries the status; color only tints the ground, so the text keeps full contrast. */
+.sync-stage-status { flex: none; padding: 1px 8px; border-radius: 99px; font-size: 12px; color: var(--text); border: 1px solid var(--border); background: color-mix(in srgb, var(--text-muted) 12%, transparent); white-space: nowrap; }
+.sync-stage-status-done { border-color: var(--success); background: color-mix(in srgb, var(--success) 14%, transparent); }
+.sync-stage-status-awaiting_approval, .sync-stage-status-blocked { border-color: var(--warning); background: color-mix(in srgb, var(--warning) 14%, transparent); }
+.sync-stage-status-failed { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 14%, transparent); }
+.sync-stage { display: flex; gap: var(--space-2); align-items: baseline; color: var(--text-muted); }
+.sync-stage-mark { flex: none; inline-size: 1.25em; text-align: center; }
+.sync-stage-done { color: var(--text); }
+.sync-stage-done .sync-stage-mark { color: var(--success); }
+.sync-stage.connection-state-waiting { color: var(--text); }
+.sync-schedules h4 { margin: var(--space-3) 0 0; font-size: 0.95rem; }
 .sync-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); margin-block-start: var(--space-4); }
 @media (max-width: 480px) { .sync-actions { flex-direction: column-reverse; } .sync-actions .btn { inline-size: 100%; min-height: 44px; } }
 .palette { display: flex; flex-direction: column; gap: var(--space-3); }

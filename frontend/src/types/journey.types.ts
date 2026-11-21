@@ -1,4 +1,4 @@
-import type { AmountBasis, KnownSum } from "./models";
+import type { AmountBasis, KnownSum, SiteSnapshotPreview } from "./models";
 import type { FinancialPicture, Situation } from "./picture.types";
 export interface ReviewItem {key:string;title:string;to:string;blocking:boolean;fingerprint:string}
 export interface Commitment {key:string;date:string;name:string;amount:number|null;kind:string;fingerprint:string;decision:string|null;note:string|null;to:string;basis?:AmountBasis}
@@ -21,8 +21,10 @@ export interface DetectedCommitment {key:string;kind:"loan"|"recurring";name:str
 export interface ImportSession {
  error?:string|null;
  id:string;fileName:string;kind:string;status:string;version:number;answers:Record<string,string|number>;
- preview:{rows:Array<{date:string|null;name:string;amount:number}>;count:number;total:number;warnings:string[];questions:string[];previousImportId?:number;blockingIssues?:string[];details?:string[];validation?:{balanceChecked:boolean;balanceMismatchCount:number;rejectedRowCount:number;reviewRowCount:number;balanceMode?:"per_transaction"|"daily"};commitments?:DetectedCommitment[]};
- result:{creditImportId?:number;accountId?:number;statementImportId?:number;details?:{loanId?:number;expenseIds?:number[];commitments?:DetectedCommitment[]}}|null;
+ preview:{rows:Array<{date:string|null;name:string;amount:number}>;count:number;total:number;warnings:string[];questions:string[];previousImportId?:number;blockingIssues?:string[];details?:string[];validation?:{balanceChecked:boolean;balanceMismatchCount:number;rejectedRowCount:number;reviewRowCount:number;balanceMode?:"per_transaction"|"daily"};commitments?:DetectedCommitment[];
+  /** loan_details | standing_orders sessions only; after approval, the server re-matched view. */
+  siteSnapshot?:SiteSnapshotPreview};
+ result:{creditImportId?:number;accountId?:number;statementImportId?:number;details?:{loanId?:number;expenseIds?:number[];commitments?:DetectedCommitment[];kind?:string;updated?:number;labelled?:number;added?:number}}|null;
 }
 export interface CheckInView {draft:{id:string;step:number}|null;previousCompletedAt:string|null;due:boolean;token:string;action:{title:string;to:string;reason?:string};status:FinancialStatus & {upcoming:Commitment[]};comparison:{baseline:boolean;added:number|null;late:number|null;changed:number|null;removed:number|null;cashChange:number|null;limited:boolean;historyChanged:boolean|null}}
 export interface JourneyAction {id:string;topic:string;title:string;reason:string;to:string;priority:number}

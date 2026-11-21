@@ -1,5 +1,5 @@
 import * as XLSX from "xlsx";
-import type { ForeignRef, PendingRef, ScrapedTransaction } from "../../types/connections.types";
+import type { ForeignRef, PendingRef, ScrapedLoan, ScrapedTransaction } from "../../types/connections.types";
 
 /**
  * A sync becomes an ordinary statement file, read by the same parsers as an
@@ -57,9 +57,9 @@ export function freshTransactions(txns: ScrapedTransaction[], isNew: (txn: Scrap
   return txns.filter((t) => t.status === "pending" || isNew(t));
 }
 
-function toBuffer(header: string[], rows: Array<Array<string | number>>): Buffer {
+function toBuffer(header: string[], rows: Array<Array<string | number>>, sheet = "תנועות"): Buffer {
   const book = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([header, ...rows]), "תנועות");
+  XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([header, ...rows]), sheet);
   return XLSX.write(book, { type: "buffer", bookType: "xlsx" }) as Buffer;
 }
 
@@ -127,5 +127,49 @@ export function cardWorkbook(txns: ScrapedTransaction[]): ScrapeWorkbook {
   return {
     buffer: toBuffer(["תאריך עסקה", "מועד חיוב", "שם בית עסק", "סכום חיוב", "מספר תשלום", "סוג עסקה"], rows),
     rows: rows.length, ...counts,
+  };
+}
+
+export type LoanScheduleSkip = "SCHEDULE_INCOMPLETE" | "INDEX_LINKED" | "IDENTIFIER_UNREADABLE" | "NO_SCHEDULE";
+
+const DIGITS = /^\d+$/;
+
+/** A bank day as YYYY-MM-DD: an ISO day or timestamp (Israeli midnight), or the bank's DD.MM.YYYY / DD/MM/YYYY. */
+export function bankDay(value: string | null): string | null {
+  if (!value) return null;
+  const text = value.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  const printed = /^(\d{1,2})[./](\d{1,2})[./](\d{4})$/.exec(text);
+  if (printed) return `${printed[3]}-${printed[2].padStart(2, "0")}-${printed[1].padStart(2, "0")}`;
+  return /^\d{4}-\d{2}-\d{2}T/.test(text) && !Number.isNaN(Date.parse(text)) ? israelDay(text) : null;
+}
+
+const printedDay = (day: string, separator: string) => day.split("-").reverse().join(separator);
+
+/**
+ * A loan track read from the site becomes the same schedule file she would download, so it goes
+ * through parseLoanSchedule, the import's approval and its loan matching (CLAUDE.md §7). The date
+ * line is the bank's `asOf`, never today: identical figures must give identical bytes (fileHash dedup).
+ */
+export function loanScheduleWorkbook(loan: ScrapedLoan): ScrapeWorkbook | { skip: LoanScheduleSkip } {
+  // The parser reads both identifiers with \d+; anything else would match the wrong loan or none.
+  if (!DIGITS.test(loan.loanNumber) || loan.trackNumber === null || !DIGITS.test(loan.trackNumber)) return { skip: "IDENTIFIER_UNREADABLE" };
+  if (!loan.schedule.length) return { skip: "NO_SCHEDULE" };
+  const days = loan.schedule.map((payment) => bankDay(payment.date));
+  if (loan.schedule.some((p, i) => p.principal === null || p.interest === null || p.balanceAfter === null || days[i] === null)) return { skip: "SCHEDULE_INCOMPLETE" };
+  // The schedule format has no linkage column, and CPI linkage needs a banker's rule first (§5).
+  if (loan.indexLinked === true || loan.schedule.some((p) => p.linkage !== null && p.linkage !== 0)) return { skip: "INDEX_LINKED" };
+  const asOf = bankDay(loan.asOf);
+  // The parser takes the first colon-less line under the track code as its name.
+  const name = loan.name?.replace(/:/g, " ").replace(/\s+/g, " ").trim();
+  const header = [`סוג הלוואה: ${loan.trackNumber}`, ...(name ? [name] : []), ...(asOf ? [`תאריך: ${printedDay(asOf, "/")}`] : [])];
+  const rows = loan.schedule.map((p, i) => [p.paymentNumber, printedDay(days[i]!, "."), p.principal!, p.interest!, p.total ?? "", p.balanceAfter!]);
+  return {
+    buffer: toBuffer([`מספר הלוואה: ${loan.loanNumber}`], [
+      ...header.map((line) => [line]),
+      ["מספר תשלום", "תאריך תשלום", "סכום תשלום קרן", "סכום תשלום ריבית", 'סה"כ לתשלום', "יתרה לאחר תשלום"],
+      ...rows,
+    ], "לוח סילוקין"),
+    rows: rows.length, skippedPending: 0, skippedForeign: 0, skippedZero: 0, pending: [], foreign: [],
   };
 }

@@ -2,9 +2,9 @@ import type { LoginMethod } from "../../types/connections.types";
 
 /** A login the bank refused outright: retrying with the same details only moves the account toward a lock. */
 export const BLOCKING_ERRORS = ["INVALID_PASSWORD", "CHANGE_PASSWORD", "ACCOUNT_BLOCKED"] as const;
-// Not the bank's answer — a restart, her own cancel or closed window, our app, or a browser that never
-// started (nothing reached the bank) — so no reason to make her wait.
-const NO_COOLDOWN_ERRORS = ["INTERRUPTED", "CANCELLED", "BROWSER_CLOSED", "BROWSER_LAUNCH", "APP"];
+// Not the bank's answer — a restart, her own cancel or closed window, our app, a browser that never
+// started (nothing reached the bank), or a probe run's planned end — so no reason to make her wait.
+const NO_COOLDOWN_ERRORS = ["INTERRUPTED", "CANCELLED", "BROWSER_CLOSED", "BROWSER_LAUNCH", "APP", "PROBE_DONE"];
 export const RETRY_COOLDOWN_MS = 2 * 60_000;
 
 export interface LastSync {

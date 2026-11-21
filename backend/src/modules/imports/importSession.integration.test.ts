@@ -257,3 +257,44 @@ describe('a card statement sent as an expense sheet',()=>{
   expect(await prisma.expense.count({where:{userId}})).toBe(0);
  });
 });
+
+// Scenario 13 (design 2026-11-13): a schedule that could belong to more than one stored loan is never attached by guess.
+describe('a loan schedule whose loan is ambiguous',()=>{
+ const COLUMNS=['מספר תשלום','תאריך תשלום','סכום תשלום קרן','סכום תשלום ריבית','סה"כ לתשלום','יתרה לאחר תשלום'];
+ const ROWS=[[4,'01.11.2026',1000,15,1015,2000],[5,'01.12.2026',1000,10,1010,1000],[6,'01.01.2027',1000,5,1005,0]];
+ const QUESTION='להלוואה 90001 יש כמה מסלולים במערכת — לאיזה מהם שייך הלוח?';
+ const schedule=(track:string|null)=>sheet([['מספר הלוואה: 90001'],...(track?[[`סוג הלוואה: ${track}`],['מסלול לדוגמה']]:[]),['תאריך: 31/10/2026'],COLUMNS,...ROWS]);
+ const loan=(data:{trackNumber?:string|null;scheduleSource:string;status?:'active'|'finished'})=>prisma.loan.create({data:{userId,loanName:'הלוואה',loanType:'bank',monthlyPayment:2015,startDate:new Date('2026-08-10'),loanNumber:'90001',...data}});
+ const questions=(session:{preview:unknown})=>(session.preview as {questions:string[]}).questions;
+
+ it('asks which track when two statement loans share its loan number, and attaches only to her answer',async()=>{
+  const [first,second]=[await loan({scheduleSource:'statement'}),await loan({scheduleSource:'statement'})];
+  const session=await importSessions.create(userId,'schedule.xlsx',schedule('301'),{kind:'loan_schedule'},'sync');
+  expect(session.status).toBe('needs_input');expect(questions(session)).toEqual([QUESTION]);
+  await expect(importSessions.commit(userId,session.id,session.version)).rejects.toThrow();
+  expect(await prisma.loan.count({where:{userId,scheduleSource:'bank_file'}})).toBe(0);
+  const answered=await importSessions.answer(userId,session.id,session.version,{loanId:second.id});
+  expect(answered.status).toBe('ready_for_review');
+  await importSessions.commit(userId,session.id,answered.version);
+  expect(await prisma.loan.count({where:{userId,scheduleSource:'bank_file',loanNumber:'90001',trackNumber:'301'}})).toBe(1);
+  // Her pick is the one carved; the other statement loan is left as it was.
+  expect(Number((await prisma.loan.findUniqueOrThrow({where:{id:second.id}})).monthlyPayment)).toBe(1000);
+  expect(Number((await prisma.loan.findUniqueOrThrow({where:{id:first.id}})).monthlyPayment)).toBe(2015);
+ });
+
+ it('asks when the schedule names no track and two tracks share its loan number',async()=>{
+  await loan({trackNumber:'301',scheduleSource:'bank_file'});await loan({trackNumber:'302',scheduleSource:'bank_file'});
+  const session=await importSessions.create(userId,'no-track.xlsx',schedule(null),{kind:'loan_schedule'});
+  expect(session.status).toBe('needs_input');expect(questions(session)).toEqual([QUESTION]);
+ });
+
+ it('does not ask when one stored loan matches exactly, one statement loan waits, or the other one is finished',async()=>{
+  await loan({scheduleSource:'statement'});await loan({scheduleSource:'statement',status:'finished'});
+  const one=await importSessions.create(userId,'one.xlsx',schedule('301'),{kind:'loan_schedule'});
+  expect(one.status).toBe('ready_for_review');expect(questions(one)).toEqual([]);
+  await importSessions.cancel(userId,one.id);
+  await loan({scheduleSource:'statement'});await loan({trackNumber:'301',scheduleSource:'bank_file'});
+  const exact=await importSessions.create(userId,'exact.xlsx',schedule('301'),{kind:'loan_schedule'});
+  expect(exact.status).toBe('ready_for_review');
+ });
+});

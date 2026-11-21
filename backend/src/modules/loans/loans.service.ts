@@ -16,6 +16,17 @@ import { CreateLoanBody, UpdateLoanBody } from "./loans.validation";
 
 type LoanRecord = NonNullable<Awaited<ReturnType<typeof loansRepository.findById>>>;
 
+/** Her own figure replacing one a bank-site snapshot may have filled: from now on it is hers, and no snapshot overwrites it. */
+function editsSnapshotFigure(existing: LoanRecord, body: UpdateLoanBody): boolean {
+  if (!existing.siteSnapshotAsOf) return false;
+  const day = (d: Date | null | undefined) => d?.toISOString().slice(0, 10) ?? null;
+  return (body.currentBalance !== undefined && body.currentBalance !== decimalOrNull(existing.currentBalance))
+    || (body.annualInterestRate !== undefined && body.annualInterestRate !== decimalOrNull(existing.annualInterestRate))
+    || (body.endDate !== undefined && day(body.endDate) !== day(existing.endDate))
+    || (body.trackNumber !== undefined && (body.trackNumber ?? null) !== existing.trackNumber)
+    || (body.isIndexLinked !== undefined && body.isIndexLinked !== existing.isIndexLinked);
+}
+
 export { loanTotals };
 
 /** Flatten decimals to numbers and attach derived Spitzer + lifecycle values. */
@@ -184,6 +195,7 @@ export const loansService = {
       existing.status === "finished" && body.status !== undefined && body.status !== "finished";
     const data: Prisma.LoanUncheckedUpdateInput = {
       ...body,
+      ...(editsSnapshotFigure(existing, body) ? { siteSnapshotAsOf: null } : {}),
       // Stating the contract amount upgrades the progress figures from a
       // reconstructed scenario to a measured one.
       ...(body.originalAmount !== undefined ? { originalAmountSource: "contract" } : {}),
