@@ -472,26 +472,42 @@ describe("bank and card connections", () => {
     expect(rows.map((r) => r.resolution)).toEqual(["include"]);
   });
 
-  it("after approval, puts our balance next to the bank site's balance from the sync", async () => {
-    await prisma.bankAccount.update({ where: { id: accountId }, data: { initialBalance: 1000 } });
-    const connection = await bankConnection();
-    const scrape = fakeFactory({ success: true, accounts: [{ accountNumber: "1", balance: 970, txns: [txn("חדש", -30)] }] });
-    await (await connectionSync.start(userId, connection.id, scrape.factory)).done;
-    const before = (await connectionsService.get(userId, connection.id)).syncs[0].outcome as unknown as Array<{ ourBalance: number | null }>;
-    expect(before[0].ourBalance).toBeNull();
-    await prisma.importSession.update({ where: { id: (await sessionOf(connection.id)).importSessionId! }, data: { status: "completed" } });
-    const after = (await connectionsService.get(userId, connection.id)).syncs[0].outcome as unknown as Array<{ siteBalance: number; ourBalance: number | null; balanceUnknown: boolean }>;
-    expect(after[0].siteBalance).toBe(970);
-    expect(typeof after[0].ourBalance).toBe("number");
-    expect(after[0].balanceUnknown).toBe(false);
-  });
+  describe("the balance check against the bank site, after approval", () => {
+    type Check = { status: string; ourBalance: number | null; gap: number | null; asOf: string | null } | null;
+    async function approvedSync(siteBalance: number) {
+      const connection = await bankConnection();
+      await (await connectionSync.start(userId, connection.id, fakeFactory({ success: true, accounts: [{ accountNumber: "1", balance: siteBalance, txns: [txn("חדש", -30)] }] }).factory)).done;
+      const before = (await connectionsService.get(userId, connection.id)).syncs[0].outcome as unknown as Array<{ balanceCheck: Check }>;
+      expect(before[0].balanceCheck).toBeNull();
+      const session = await importSessions.get(userId, (await sessionOf(connection.id)).importSessionId!);
+      const committed = await importSessions.commit(userId, session.id, session.version, []);
+      expect(committed.status).not.toBe("failed");
+      await importSessions.finish(userId, session.id);
+      return async () => ((await connectionsService.get(userId, connection.id)).syncs[0].outcome as unknown as Array<{ balanceCheck: Check }>)[0].balanceCheck;
+    }
 
-  it("does not compare with the site when our opening balance is unknown — that would show the whole balance as a gap", async () => {
-    const connection = await bankConnection();
-    await (await connectionSync.start(userId, connection.id, fakeFactory({ success: true, accounts: [{ accountNumber: "1", balance: 970, txns: [txn("חדש", -30)] }] }).factory)).done;
-    await prisma.importSession.update({ where: { id: (await sessionOf(connection.id)).importSessionId! }, data: { status: "completed" } });
-    const after = (await connectionsService.get(userId, connection.id)).syncs[0].outcome as unknown as Array<{ ourBalance: number | null; balanceUnknown: boolean }>;
-    expect(after[0]).toMatchObject({ ourBalance: null, balanceUnknown: true });
+    it("compares as of the last synced row and says they match", async () => {
+      await prisma.bankAccount.update({ where: { id: accountId }, data: { initialBalance: 1000 } });
+      const check = await approvedSync(970);
+      expect(await check()).toEqual({ status: "match", ourBalance: 970, gap: 0, asOf: "2026-09-10" });
+      // A row dated after the sync is not part of what the site's balance covered.
+      await prisma.bankTransaction.create({ data: { userId, bankAccountId: accountId, transactionDate: new Date(Date.now() - 86400_000), description: "אחרי הרענון", amount: 50, type: "withdrawal" } });
+      expect(await check()).toMatchObject({ status: "match", gap: 0 });
+    });
+
+    it("names a gap computed on the server", async () => {
+      await prisma.bankAccount.update({ where: { id: accountId }, data: { initialBalance: 1000 } });
+      expect(await (await approvedSync(950))()).toEqual({ status: "gap", ourBalance: 970, gap: 20, asOf: "2026-09-10" });
+    });
+
+    it("does not compare when our opening balance is unknown — that would show the whole balance as a gap", async () => {
+      expect(await (await approvedSync(970))()).toMatchObject({ status: "unknown", ourBalance: null, gap: null });
+    });
+
+    it("a balance she copied from the same sync is not a check of it", async () => {
+      await prisma.bankAccount.update({ where: { id: accountId }, data: { anchorBalance: 970, anchorDate: new Date("2026-09-10") } });
+      expect(await (await approvedSync(970))()).toMatchObject({ status: "circular", gap: null });
+    });
   });
 
   it("offers the official window for Beinleumi only", async () => {

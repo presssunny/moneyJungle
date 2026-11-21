@@ -4,7 +4,8 @@ import { PROVIDERS, providerInfo, type ProviderInfo } from "./providers";
 import { retryBlock } from "./syncPolicy";
 import { importRows } from "../imports/importRows.service";
 import { accountBalanceService } from "../bank/accountBalance.service";
-import type { SyncOutcomeItem } from "../../types/connections.types";
+import type { BalanceCheck, SyncOutcomeItem } from "../../types/connections.types";
+import { round2 } from "../../utils/money.utils";
 import type { LoginMethod } from "../../types/connections.types";
 import type { CreateConnectionBody, UpdateConnectionBody } from "./connections.validation";
 
@@ -34,13 +35,23 @@ const outcomeOf = (connection: PublicConnection) => (Array.isArray(connection.sy
 
 /**
  * Synced bank rows carry no running balance, so completeness is checked against the site's own
- * balance once the import is approved (banker 2026-10-17). Ours comes from the one balance service.
- * An unknown balance of ours is not compared — it would show the whole site balance as a gap.
+ * balance once the import is approved (banker 2026-10-17), as of the last day the sync covered.
+ * Unknown is not compared (the whole balance would read as a gap), and a balance she copied from
+ * this same sync proves nothing about it (banker 2026-10-27).
  */
-async function balanceCheck(userId: number, connection: PublicConnection, item: SyncOutcomeItem, status: string | undefined) {
-  if (connection.kind !== "bank" || !connection.bankAccountId || item.siteBalance == null || status !== "completed") return { ourBalance: null, balanceUnknown: false };
-  const { balance } = await accountBalanceService.derive(userId, connection.bankAccountId);
-  return { ourBalance: balance, balanceUnknown: balance === null };
+async function balanceCheck(userId: number, connection: PublicConnection, item: SyncOutcomeItem, status: string | undefined, statementImportId: number | null): Promise<BalanceCheck | null> {
+  if (connection.kind !== "bank" || !connection.bankAccountId || item.siteBalance == null || status !== "completed" || statementImportId === null) return null;
+  const covered = await prisma.bankStatementImport.findFirst({ where: { id: statementImportId, userId }, select: { coverageFrom: true, coverageTo: true } });
+  if (!covered) return null;
+  const derived = await accountBalanceService.derive(userId, connection.bankAccountId, covered.coverageTo);
+  const asOf = covered.coverageTo.toISOString().slice(0, 10);
+  if (derived.balance === null) return { status: "unknown", ourBalance: null, gap: null, asOf };
+  const anchor = derived.anchor;
+  if (anchor && anchor.statementId === null && round2(anchor.closingBalance) === round2(item.siteBalance) && anchor.coverageTo >= covered.coverageFrom.toISOString().slice(0, 10)) {
+    return { status: "circular", ourBalance: derived.balance, gap: null, asOf };
+  }
+  const gap = round2(derived.balance - item.siteBalance);
+  return { status: gap === 0 ? "match" : "gap", ourBalance: derived.balance, gap, asOf };
 }
 
 /**
@@ -50,11 +61,14 @@ async function balanceCheck(userId: number, connection: PublicConnection, item: 
 async function present(userId: number, connections: PublicConnection[]) {
   const ids = connections.flatMap((c) => outcomeOf(c).map((item) => item.importSessionId).filter((id): id is string => !!id));
   const review = await importRows.summaries(userId, ids);
+  const sessions = await prisma.importSession.findMany({ where: { userId, id: { in: ids } }, select: { id: true, result: true } });
+  const statementOf = new Map(sessions.map((s) => [s.id, (s.result as { statementImportId?: number } | null)?.statementImportId ?? null]));
   return Promise.all(connections.map(async (connection) => {
     const block = retryBlock(connection, connection.syncs[0]);
     const outcome = await Promise.all(outcomeOf(connection).map(async (item) => {
       const itemReview = item.importSessionId ? review.get(item.importSessionId) ?? null : null;
-      return { ...item, review: itemReview, ...(await balanceCheck(userId, connection, item, itemReview?.status)) };
+      const statementImportId = item.importSessionId ? statementOf.get(item.importSessionId) ?? null : null;
+      return { ...item, review: itemReview, balanceCheck: await balanceCheck(userId, connection, item, itemReview?.status, statementImportId) };
     }));
     const syncs = connection.syncs.map((sync, index) => (index > 0 ? sync : { ...sync, outcome }));
     return { ...connection, syncs, retryBlockedReason: block?.reason ?? null, retryMessage: block?.message ?? null, retryAvailableAt: block?.until ?? null };

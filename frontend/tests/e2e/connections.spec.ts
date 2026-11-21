@@ -45,7 +45,7 @@ async function mockConnections(page:Page, script:Script, options:{after?:Row;ini
 }
 
 const soon=()=>new Date(Date.now()+5*60_000).toISOString();
-const outcome=(reviewStatus:string)=>[{key:'bank:1',importSessionId:'s-1',target:'חשבון הבנק',rows:9,skippedPending:2,skippedForeign:1,skippedZero:0,storedThrough:null,pending:[],siteBalance:1234.5,ourBalance:reviewStatus==='completed'?1234.5:null,
+const outcome=(reviewStatus:string)=>[{key:'bank:1',importSessionId:'s-1',target:'חשבון הבנק',rows:9,skippedPending:2,skippedForeign:1,skippedZero:0,storedThrough:null,pending:[],siteBalance:1234.5,balanceCheck:reviewStatus==='completed'?{status:'match',ourBalance:1234.5,gap:0,asOf:'2026-10-01'}:null,
  foreign:[{date:'2026-10-10',description:'AMAZON',originalAmount:-20,originalCurrency:'USD',chargedAmount:-20,chargedCurrency:'USD'}],review:{status:reviewStatus,counts:{included:5,duplicate:3,pending:reviewStatus==='completed'?0:1}}}];
 const succeeded={status:'succeeded',phase:'building_import',message:'דוח אחד מחכה לאישור במסך הייבוא',finishedAt:'2026-10-20T10:02:00Z',outcome:outcome('ready_for_review')};
 const repeat=(n:number,row:Row)=>Array.from({length:n},()=>row);
@@ -132,7 +132,7 @@ test('Only after she approves the import does the third success, "import approve
  await expect(dialog.getByText('נוספו 5 תנועות.')).toBeVisible();
  await expect(dialog.getByText(/מחכה לאישור/)).toHaveCount(0);
  await expect(dialog.getByText('נוספו: 5',{exact:true})).toBeVisible();
- await expect(dialog.getByText(/היתרה אצלנו תואמת את אתר הבנק/)).toBeVisible();
+ await expect(dialog.getByText(/היתרה אצלנו נכון ל־.* תואמת את אתר הבנק/)).toBeVisible();
  await page.screenshot({path:info.outputPath('4-approved.png')});
 });
 

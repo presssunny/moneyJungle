@@ -50,10 +50,11 @@ interface Anchor {
 async function findAnchor(
   userId: number,
   accountId: number,
-  account: { anchorBalance: unknown; anchorDate: Date | null }
+  account: { anchorBalance: unknown; anchorDate: Date | null },
+  asOf: Date
 ): Promise<Anchor | null> {
   const statement = await prisma.bankStatementImport.findFirst({
-    where: { userId, bankAccountId: accountId, closingBalance: { not: null }, coverageTo: { lte: new Date(businessDate()) } },
+    where: { userId, bankAccountId: accountId, closingBalance: { not: null }, coverageTo: { lte: asOf } },
     orderBy: [{ coverageTo: "desc" }, { createdAt: "desc" }],
   });
   const fromStatement: Anchor | null =
@@ -67,7 +68,7 @@ async function findAnchor(
       : null;
 
   const fromUser: Anchor | null =
-    account.anchorDate !== null && account.anchorBalance !== null && account.anchorDate <= new Date(businessDate())
+    account.anchorDate !== null && account.anchorBalance !== null && account.anchorDate <= asOf
       ? {
           statementId: null,
           fileName: "יתרה שהוזנה ידנית",
@@ -91,15 +92,18 @@ export function bankTotals(balances: Array<number | null>): { totalBalance: numb
 }
 
 export const accountBalanceService = {
-  /** Compute the balance from scratch. Pure read — nothing is written here. */
-  async derive(userId: number, accountId: number): Promise<DerivedBalance> {
+  /**
+   * Compute the balance from scratch, as of today or of an earlier day (end of that
+   * day) — e.g. the last row a sync pulled. Pure read — nothing is written here.
+   */
+  async derive(userId: number, accountId: number, asOf: Date = new Date(businessDate())): Promise<DerivedBalance> {
     const account = await prisma.bankAccount.findFirst({
       where: { id: accountId, userId },
       select: { initialBalance: true, anchorBalance: true, anchorDate: true },
     });
     if (!account) throw new Error(`bank account ${accountId} not found for user ${userId}`);
 
-    const anchor = await findAnchor(userId, accountId, account);
+    const anchor = await findAnchor(userId, accountId, account, asOf);
 
     const opening = decimalOrNull(account.initialBalance);
     if (!anchor && opening === null) {
@@ -117,7 +121,7 @@ export const accountBalanceService = {
       // No statement ever reported a balance — the best we can do is the old
       // sum. Reported as "accumulated" so the UI never presents it as verified.
       const all = await prisma.bankTransaction.findMany({
-        where: { userId, bankAccountId: accountId, transactionDate: { lte: new Date(businessDate()) } },
+        where: { userId, bankAccountId: accountId, transactionDate: { lte: asOf } },
         select: { amount: true, type: true },
       });
       const net = all.reduce((sum, t) => sum + signed(t.type, decimalToNumber(t.amount)), 0);
@@ -138,12 +142,12 @@ export const accountBalanceService = {
       where: {
         userId,
         bankAccountId: accountId,
-        transactionDate: { gt: anchor.asOf, lte: new Date(businessDate()) },
+        transactionDate: { gt: anchor.asOf, lte: asOf },
       },
       select: { amount: true, type: true },
     });
     const afterNet = after.reduce((sum, t) => sum + signed(t.type, decimalToNumber(t.amount)), 0);
-    const asOf = anchor.asOf.toISOString().slice(0, 10);
+    const anchorDay = anchor.asOf.toISOString().slice(0, 10);
     const source = anchor.statementId === null ? "יתרה שהזנת" : "יתרה מודפסת בדוח";
 
     return {
@@ -152,15 +156,15 @@ export const accountBalanceService = {
       anchor: {
         statementId: anchor.statementId,
         fileName: anchor.fileName,
-        coverageTo: asOf,
+        coverageTo: anchorDay,
         closingBalance: round2(anchor.balance),
       },
       afterAnchorNet: round2(afterNet),
       afterAnchorCount: after.length,
       explanation:
         after.length === 0
-          ? `${source} נכון ל-${asOf}`
-          : `${source} נכון ל-${asOf}, בתוספת ${after.length} תנועות מאוחרות יותר`,
+          ? `${source} נכון ל-${anchorDay}`
+          : `${source} נכון ל-${anchorDay}, בתוספת ${after.length} תנועות מאוחרות יותר`,
     };
   },
 

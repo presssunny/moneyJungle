@@ -25,14 +25,17 @@ function counts(item: SyncOutcomeItem): string[] {
 function BalanceCheck({ item }: { item: SyncOutcomeItem }) {
   if (item.siteBalance == null) return null;
   const exact = (amount: number) => <span dir="ltr">{formatCurrency(amount, { exact: true })}</span>;
-  if (item.balanceUnknown) return <p className="text-muted">יתרה לפי אתר הבנק בזמן הרענון: {exact(item.siteBalance)}. לא ניתן להשוות — יתרת הפתיחה אצלנו לא ידועה. אפשר להזין את היתרה מהבנק במסך החשבון.</p>;
-  if (item.ourBalance == null) return <p className="text-muted">יתרה לפי אתר הבנק בזמן הרענון: {exact(item.siteBalance)}</p>;
-  const gap = Math.round((item.ourBalance - item.siteBalance) * 100) / 100;
-  if (gap === 0) return <p className="text-muted">היתרה אצלנו תואמת את אתר הבנק: {exact(item.siteBalance)}</p>;
+  const check = item.balanceCheck;
+  const site = <>יתרה לפי אתר הבנק בזמן הרענון: {exact(item.siteBalance)}</>;
+  if (!check) return <p className="text-muted">{site}</p>;
+  const asOf = formatDate(check.asOf);
+  if (check.status === "unknown") return <p className="text-muted">{site}. לא ניתן להשוות — יתרת הפתיחה אצלנו לא ידועה. אפשר להזין את היתרה מהבנק במסך החשבון.</p>;
+  if (check.status === "circular") return <p className="text-muted">{site}. היתרה אצלנו נקבעה לפי אותה יתרה מהאתר, ולכן זו לא בדיקה שהתנועות שלמות.</p>;
+  if (check.status === "match") return <p className="text-muted">היתרה אצלנו נכון ל־{asOf} תואמת את אתר הבנק: {exact(item.siteBalance)}</p>;
   return (
     <p className="connection-state connection-state-waiting">
-      לפי אתר הבנק {exact(item.siteBalance)}, אצלנו {exact(item.ourBalance)}.
-      {" "}ייתכן שחסרות תנועות, שיש תנועות שעדיין בתהליך אצל הבנק, או שנוספו תנועות אחרי הרענון.
+      לפי אתר הבנק {exact(item.siteBalance)}, אצלנו נכון ל־{asOf} {exact(check.ourBalance!)} (פער {exact(check.gap!)}).
+      {" "}ייתכן שחסרות תנועות או שיש תנועות שעדיין בתהליך אצל הבנק.
     </p>
   );
 }

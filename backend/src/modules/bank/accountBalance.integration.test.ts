@@ -71,6 +71,16 @@ describe("a bank balance nobody stated", () => {
   });
 });
 
+describe("cash for planning with several accounts", () => {
+  it("is unknown — not 0 — until she picks the account the spending comes from", async () => {
+    await prisma.bankAccount.create({ data: { userId, bankName: "א", accountName: "עו״ש", initialBalance: 1000 } });
+    await prisma.bankAccount.create({ data: { userId, bankName: "ב", accountName: "משני", initialBalance: 500 } });
+    const status = await financialStatus(userId);
+    expect(status.allowance.cashInPlan).toBeNull();
+    expect(status.blockers.join(" ")).toMatch(/יש לבחור את החשבון שממנו יוצאות ההוצאות השוטפות/);
+  });
+});
+
 describe("the balance she types when opening an account, and the accounts' total", () => {
   it("a typed current balance is that day's stated balance, not an opening balance", async () => {
     const created = await bankService.createAccount(userId, createBankAccountSchema.parse({ bankName: "הבינלאומי", accountName: "עו״ש", currentBalance: 2500 }));

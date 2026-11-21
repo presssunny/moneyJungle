@@ -53,6 +53,15 @@ export interface ForeignRef {
   chargedCurrency: string | null;
 }
 
+/** The site's balance at sync time against ours as of the last day the sync covered. */
+export interface BalanceCheck {
+  status: "match" | "gap" | "unknown" | "circular";
+  ourBalance: number | null;
+  /** ours − site; null unless compared. */
+  gap: number | null;
+  asOf: string;
+}
+
 /** One import session a sync produced — approved on the regular import screen. */
 export interface SyncOutcomeItem {
   /** bank:<accountId> | card:<cardId> | card-digits:<last four> — matches carried pending rows to their target. */
