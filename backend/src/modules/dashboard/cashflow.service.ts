@@ -1,5 +1,6 @@
 import { prisma } from "../../config/database";
 import { decimalOrNull, decimalToNumber, sumKnown, type KnownSum } from "../../utils/money.utils";
+import type { AmountBasis } from "../../types/money.types";
 import { businessDate } from "../journey/journey.utils";
 import { firstPaymentDate } from "../loans/loanDates";
 
@@ -19,6 +20,7 @@ export interface UpcomingEvent {
   name: string;
   /** null = unknown, never 0. */
   amount: number | null;
+  basis: AmountBasis;
   icon: string;
 }
 
@@ -102,6 +104,21 @@ function weeklyOccurrences(anchor: Date, from: Date, to: Date): Date[] {
   return res;
 }
 
+/** The single day most charges land on — the "pressure" moment worth warning about. */
+export function heaviestDayOf(events: Array<{ date: string; amount: number | null }>): UpcomingResponse["heaviestDay"] {
+  const byDay = new Map<string, Array<number | null>>();
+  for (const e of events) {
+    const key = e.date.slice(0, 10);
+    byDay.set(key, [...(byDay.get(key) ?? []), e.amount]);
+  }
+  let heaviest: UpcomingResponse["heaviestDay"] = null;
+  for (const [date, amounts] of byDay) {
+    const total = sumKnown(amounts);
+    if (!heaviest || total.knownTotal > heaviest.total.knownTotal) heaviest = { date: `${date}T00:00:00.000Z`, count: amounts.length, total };
+  }
+  return heaviest;
+}
+
 // Journey review includes historical occurrences because a past date alone is
 // not payment evidence. Dashboard callers keep the forward-only default.
 export async function buildUpcoming(userId: number, windowDays: number, anchor = businessDayStart(), includeOverdue = false): Promise<UpcomingResponse> {
@@ -132,7 +149,8 @@ export async function buildUpcoming(userId: number, windowDays: number, anchor =
           ? yearlyOccurrences(anchor, occurrenceFrom, to)
           : monthlyOccurrences(anchor, occurrenceFrom, to);
     for (const d of dates) {
-      events.push({ key: `recurring:${r.id}:${d.toISOString().slice(0, 10)}`, date: d.toISOString(), kind: "recurring", name: r.name, amount, icon: KIND_ICON.recurring });
+      events.push({ key: `recurring:${r.id}:${d.toISOString().slice(0, 10)}`, date: d.toISOString(), kind: "recurring", name: r.name, amount,
+        basis: r.detectedKey ? "last_debit" : "stated", icon: KIND_ICON.recurring });
     }
   }
 
@@ -142,7 +160,7 @@ export async function buildUpcoming(userId: number, windowDays: number, anchor =
     const occurrenceFrom = includeOverdue ? laterOf(anchor, historicalFloor(from)) : from;
     const dates = s.frequency === "yearly" ? yearlyOccurrences(anchor, occurrenceFrom, to) : monthlyOccurrences(anchor, occurrenceFrom, to);
     for (const d of dates) {
-      events.push({ key: `subscription:${s.id}:${d.toISOString().slice(0, 10)}`, date: d.toISOString(), kind: "subscription", name: s.name, amount, icon: KIND_ICON.subscription });
+      events.push({ key: `subscription:${s.id}:${d.toISOString().slice(0, 10)}`, date: d.toISOString(), kind: "subscription", name: s.name, amount, basis: "stated", icon: KIND_ICON.subscription });
     }
   }
 
@@ -151,7 +169,7 @@ export async function buildUpcoming(userId: number, windowDays: number, anchor =
     if (loan.scheduleSource === "bank_file") {
       for (const entry of loan.schedule) {
         events.push({ key: `loan:${loan.id}:${entry.paymentDate.toISOString().slice(0, 10)}`, date: entry.paymentDate.toISOString(), kind: "loan", name: loan.loanName,
-          amount: decimalToNumber(entry.total), icon: KIND_ICON.loan });
+          amount: decimalToNumber(entry.total), basis: "schedule", icon: KIND_ICON.loan });
       }
       continue;
     }
@@ -172,6 +190,7 @@ export async function buildUpcoming(userId: number, windowDays: number, anchor =
         kind: "loan",
         name: loan.loanName,
         amount,
+        basis: loan.scheduleSource === "statement" ? "last_debit" : "stated",
         icon: KIND_ICON.loan,
       });
     }
@@ -185,25 +204,14 @@ export async function buildUpcoming(userId: number, windowDays: number, anchor =
       kind: "reminder",
       name: rem.title,
       amount: decimalOrNull(rem.estimatedAmount),
+      basis: "estimate",
       icon: rem.icon || KIND_ICON.reminder,
     });
   }
 
   events.sort((a, b) => a.date.localeCompare(b.date));
 
-  // Heaviest single day — the "pressure" moment worth warning about.
-  const byDay = new Map<string, Array<number | null>>();
-  for (const e of events) {
-    const key = e.date.slice(0, 10);
-    byDay.set(key, [...(byDay.get(key) ?? []), e.amount]);
-  }
-  let heaviestDay: UpcomingResponse["heaviestDay"] = null;
-  for (const [date, amounts] of byDay) {
-    const total = sumKnown(amounts);
-    if (!heaviestDay || total.knownTotal > heaviestDay.total.knownTotal) {
-      heaviestDay = { date: `${date}T00:00:00.000Z`, count: amounts.length, total };
-    }
-  }
+  const heaviestDay = heaviestDayOf(events);
 
   const byMonth = new Map<string, Array<number | null>>();
   for (const e of events) {

@@ -367,12 +367,6 @@ export async function deleteRecurring(id: number): Promise<void> {
   await api.delete(`/recurring/${id}`);
 }
 
-export async function generateRecurring(monthKey: string): Promise<{ created: number; skipped: number }> {
-  const [year, month] = monthKey.split("-").map(Number);
-  const { data } = await api.post("/recurring/generate", { year, month });
-  return data;
-}
-
 // ---------- Subscriptions ----------
 
 export interface SubscriptionInput {

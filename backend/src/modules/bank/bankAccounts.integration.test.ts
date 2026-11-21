@@ -29,3 +29,12 @@ describe("editing a bank account", () => {
     expect(Number(after.initialBalance)).toBe(5000);
   });
 });
+
+describe("a fixed payment is a forecast, never an expense", () => {
+  it("there is no way to write this month's fixed payments as expenses", async () => {
+    await prisma.recurringPayment.create({ data: { userId, name: "שכר דירה", amount: 4500, frequency: "monthly", nextPaymentDate: new Date("2026-10-10") } });
+    const res = await request(app).post("/api/recurring/generate").set(headers()).send({ year: 2026, month: 10 });
+    expect(res.status).toBe(404);
+    expect(await prisma.expense.count({ where: { userId } })).toBe(0);
+  });
+});

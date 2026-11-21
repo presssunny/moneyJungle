@@ -1,3 +1,5 @@
+import type { AmountBasis } from "./money.types";
+
 export interface Commitment {
   key: string;
   date: string;
@@ -8,6 +10,8 @@ export interface Commitment {
   decision: string | null;
   note: string | null;
   to: string;
+  /** Where a projected amount comes from; absent on card bills (summed from the card file). */
+  basis?: AmountBasis;
 }
 
 export interface ReviewItem {

@@ -9,9 +9,8 @@ import { SummaryCard } from "../components/dashboard/SummaryCard";
 import { ReminderForm } from "../components/reminders/ReminderForm";
 import { useMonth } from "../context/MonthContext";
 import { useAsync } from "../hooks/useAsync";
-import { listReminders } from "../services/reminders.service";
-import { listRecurring, listSubscriptions } from "../services/planning.service";
-import { formatCurrency, formatKnownSum, sumKnown } from "../utils/format";
+import { getCommitmentsMonth } from "../services/journey.service";
+import { amountBasisNote, formatCurrency, formatKnownSum } from "../utils/format";
 
 interface CalendarEvent {
   key: string;
@@ -19,110 +18,44 @@ interface CalendarEvent {
   icon: string;
   title: string;
   amount: number | null;
-  kind: "reminder" | "recurring" | "subscription";
+  kind: string;
+  basisNote: string | null;
 }
 
 const WEEKDAYS = ["א", "ב", "ג", "ד", "ה", "ו", "ש"];
+const KIND_ICON: Record<string, string> = { recurring: "🔁", subscription: "📺", loan: "📉", reminder: "🔔", credit: "💳" };
 
 export default function CalendarPage() {
-  const { year, month } = useMonth();
+  const { year, month, monthKey } = useMonth();
   const [reminderOpen, setReminderOpen] = useState(false);
 
-  // One resource for the whole calendar: a month drawn from two of the three
-  // sources would be silently wrong ("nothing scheduled" when in fact a request
-  // failed), so the grid is shown only when all three arrived.
-  const schedule = useAsync(
-    async () => {
-      const [reminders, recurring, subscriptions] = await Promise.all([
-        listReminders(),
-        listRecurring(),
-        listSubscriptions(),
-      ]);
-      return { reminders, recurring: recurring.items, subscriptions: subscriptions.items };
-    },
-    [],
-    "לא הצלחנו לטעון את אירועי החודש"
-  );
-  const reminders = schedule.data?.reminders;
-  const recurring = schedule.data?.recurring;
-  const subscriptions = schedule.data?.subscriptions;
+  // The month comes from the same list as the agenda (server): totals and the busiest day are not added up here.
+  const schedule = useAsync(() => getCommitmentsMonth(monthKey), [monthKey], "לא הצלחנו לטעון את אירועי החודש");
 
   const daysInMonth = new Date(year, month, 0).getDate();
   const firstWeekday = new Date(year, month - 1, 1).getDay(); // 0 = Sunday
 
   const eventsByDay = useMemo(() => {
     const map = new Map<number, CalendarEvent[]>();
-    const push = (event: CalendarEvent) => {
-      if (event.day < 1 || event.day > daysInMonth) return;
-      const list = map.get(event.day) ?? [];
-      list.push(event);
-      map.set(event.day, list);
-    };
-
-    for (const reminder of reminders ?? []) {
-      if (!reminder.isActive) continue;
-      const date = new Date(reminder.eventDate);
-      if (date.getFullYear() === year && date.getMonth() + 1 === month) {
-        push({
-          key: `reminder-${reminder.id}`,
-          day: date.getDate(),
-          icon: reminder.icon ?? "🔔",
-          title: reminder.title,
-          amount: reminder.estimatedAmount !== null ? Number(reminder.estimatedAmount) : null,
-          kind: "reminder",
-        });
-      }
+    for (const event of schedule.data?.events ?? []) {
+      const day = Number(event.date.slice(8, 10));
+      map.set(day, [...(map.get(day) ?? []), { key: event.key, day, icon: KIND_ICON[event.kind] ?? "📌", title: event.name, amount: event.amount, kind: event.kind,
+        basisNote: event.basis ? amountBasisNote(event.basis) : null }]);
     }
-
-    for (const payment of recurring ?? []) {
-      // Monthly payments recur on the same day every month; other frequencies only on their date
-      const date = new Date(payment.nextPaymentDate);
-      const inMonth = date.getFullYear() === year && date.getMonth() + 1 === month;
-      if (payment.frequency === "monthly" || inMonth) {
-        push({
-          key: `recurring-${payment.id}`,
-          day: Math.min(date.getDate(), daysInMonth),
-          icon: payment.category?.icon ?? "🔁",
-          title: payment.name,
-          amount: Number(payment.amount),
-          kind: "recurring",
-        });
-      }
-    }
-
-    for (const subscription of subscriptions ?? []) {
-      if (subscription.status !== "active") continue;
-      const date = new Date(subscription.billingDate);
-      const inMonth = date.getFullYear() === year && date.getMonth() + 1 === month;
-      if (subscription.frequency === "monthly" || inMonth) {
-        push({
-          key: `subscription-${subscription.id}`,
-          day: Math.min(date.getDate(), daysInMonth),
-          icon: "📺",
-          title: subscription.name,
-          amount: Number(subscription.amount),
-          kind: "subscription",
-        });
-      }
-    }
-
     return map;
-  }, [reminders, recurring, subscriptions, year, month, daysInMonth]);
+  }, [schedule.data]);
 
   const today = new Date();
   const isCurrentMonth = today.getFullYear() === year && today.getMonth() + 1 === month;
-  const monthTotal = sumKnown([...eventsByDay.values()].flat().map((e) => e.amount));
+  const monthTotal = schedule.data?.total ?? { knownTotal: 0, unknownCount: 0 };
+  const heaviest = schedule.data?.heaviestDay ? { day: Number(schedule.data.heaviestDay.date.slice(8, 10)), total: schedule.data.heaviestDay.total } : null;
+  const eventCount = schedule.data?.events.length ?? 0;
 
   const cells: Array<{ day: number | null }> = [
     ...Array.from({ length: firstWeekday }, () => ({ day: null })),
     ...Array.from({ length: daysInMonth }, (_, i) => ({ day: i + 1 })),
   ];
 
-  // The heaviest day of the month — the one worth planning around.
-  const heaviest = [...eventsByDay.entries()]
-    .map(([day, events]) => ({ day, total: sumKnown(events.map((e) => e.amount)) }))
-    .sort((a, b) => b.total.knownTotal - a.total.knownTotal || b.total.unknownCount - a.total.unknownCount)[0];
-  const eventCount = [...eventsByDay.values()].flat().length;
 
   return (
     <PageShell
@@ -141,6 +74,7 @@ export default function CalendarPage() {
                 icon="📅"
                 tone="danger"
                 sub={`${eventCount} אירועים`}
+                footnote={schedule.data?.possibleCardOverlap ? "ייתכן שתשלום קבוע בכרטיס כלול גם בחיוב הכרטיס" : undefined}
               />
               <SummaryCard
                 label="היום העמוס"
@@ -170,7 +104,7 @@ export default function CalendarPage() {
             <EmptyState
               icon="📅"
               title="אין אירועים בחודש הזה"
-              hint="תשלומים קבועים, מנויים ותזכורות שתגדירי יופיעו כאן לפי התאריך שלהם"
+              hint="תשלומים קבועים, מנויים, הלוואות, חיובי כרטיס ותזכורות יופיעו כאן לפי התאריך שלהם"
             />
           }
         >
@@ -193,7 +127,7 @@ export default function CalendarPage() {
                         <div key={event.key} className={`calendar-event calendar-event-${event.kind}`} title={event.title}>
                           <span>{event.icon}</span>
                           <span className="calendar-event-title">{event.title}</span>
-                          {event.amount !== null && <span className="mono calendar-event-amount">{formatCurrency(event.amount)}</span>}
+                          <span className="mono calendar-event-amount">{event.amount === null ? "סכום לא ידוע" : formatCurrency(event.amount)}{event.basisNote && ` · ${event.basisNote}`}</span>
                         </div>
                       ))}
                     </div>
@@ -209,6 +143,8 @@ export default function CalendarPage() {
         <span><span className="calendar-dot calendar-event-reminder" /> תזכורות</span>
         <span><span className="calendar-dot calendar-event-recurring" /> תשלומים קבועים</span>
         <span><span className="calendar-dot calendar-event-subscription" /> מנויים</span>
+        <span><span className="calendar-dot calendar-event-loan" /> הלוואות</span>
+        <span><span className="calendar-dot calendar-event-credit" /> חיובי כרטיס</span>
       </div>
 
       <ReminderForm open={reminderOpen} onClose={() => setReminderOpen(false)} onSaved={() => void schedule.reload()} />

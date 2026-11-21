@@ -1,5 +1,5 @@
 /** Formatting helpers — all display formatting lives here. */
-import type { KnownSum } from "../types/models";
+import type { AmountBasis, KnownSum } from "../types/models";
 
 /** `exact` keeps the agorot (₪1,234.50) — for a figure compared against a bank's own. */
 export function formatCurrency(amount: number | null | undefined, options?: { sign?: boolean; exact?: boolean }): string {
@@ -48,10 +48,9 @@ export function shiftMonthKey(monthKey: string, delta: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-/** Same rule as the server's sumKnown: an unknown amount is counted, never added as 0. */
-export function sumKnown(values: Array<number | null>): KnownSum {
-  const known = values.filter((v): v is number => v !== null);
-  return { knownTotal: Math.round(known.reduce((sum, v) => sum + v, 0) * 100) / 100, unknownCount: values.length - known.length };
+/** The words that say an amount is not a stated figure — shown next to it. */
+export function amountBasisNote(basis: AmountBasis): string | null {
+  return basis === "last_debit" ? "לפי החיוב האחרון" : basis === "estimate" ? "אומדן" : null;
 }
 
 export function formatKnownSum({ knownTotal, unknownCount }: KnownSum): string {

@@ -81,6 +81,21 @@ describe("forward obligations", () => {
     expect(dates("month-end")(result)).toEqual(["2026-01-31", "2026-02-28", "2026-03-31"]);
     expect(dates("detected")(result)).toEqual(["2026-01-10", "2026-02-10", "2026-03-10"]);
   });
+  it("says where each amount comes from, so an estimate never reads as a fact", async () => {
+    setup();
+    db.recurringPayment.findMany.mockResolvedValue([
+      { id: 1, name: "typed", amount: 100, frequency: "monthly", nextPaymentDate: new Date("2026-01-10"), detectedKey: null },
+      { id: 2, name: "seen", amount: 49.9, frequency: "monthly", nextPaymentDate: new Date("2026-01-12"), detectedKey: "recurring:SEEN" },
+    ]);
+    db.loan.findMany.mockResolvedValue([
+      { id: 3, loanName: "file", scheduleSource: "bank_file", monthlyPayment: 900, schedule: [{ paymentDate: new Date("2026-01-15"), total: 900 }] },
+      { id: 4, loanName: "statement", scheduleSource: "statement", monthlyPayment: 500, currentBalance: null, startDate: new Date("2026-01-16"), endDate: null },
+    ]);
+    db.reminder.findMany.mockResolvedValue([{ id: 5, title: "renewal", eventDate: new Date("2026-01-20"), estimatedAmount: 300, type: "expected_expense", icon: null }]);
+    const basis = Object.fromEntries((await buildUpcoming(1, 25)).events.map((e) => [e.name, e.basis]));
+    expect(basis).toEqual({ typed: "stated", seen: "last_debit", file: "schedule", statement: "last_debit", renewal: "estimate" });
+  });
+
   it("ends computed loan obligations at the end date", async () => {
     setup(); db.loan.findMany.mockResolvedValue([{ loanName: "loan", scheduleSource: "computed", monthlyPayment: 100, currentBalance: 200, startDate: new Date("2025-12-10"), endDate: new Date("2026-02-10") }]);
     const result = await buildUpcoming(1, 365);

@@ -6,6 +6,8 @@ import { gateAuth } from "../../middlewares/gateAuth.middleware";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { ApiError } from "../../utils/ApiError";
 import { commitments } from "./commitments.service";
+import { heaviestDayOf } from "../dashboard/cashflow.service";
+import { sumKnown } from "../../utils/money.utils";
 import { financialStatus, getProfile } from "./coverage.service";
 import { review } from "./review.service";
 import { businessDate, json } from "./journey.utils";
@@ -74,6 +76,16 @@ journeyRoutes.put("/funding",asyncHandler(async(req,res)=>{
 }));
 journeyRoutes.get("/review",asyncHandler(async(req,res)=>{res.json(await review(req.userId!));}));
 journeyRoutes.get("/commitments",asyncHandler(async(req,res)=>{res.json(await commitments(req.userId!));}));
+// One calendar month of the same list. A duplicate is the other event's money, so it is not counted twice.
+journeyRoutes.get("/commitments/month",asyncHandler(async(req,res)=>{
+  const month=z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).parse(req.query.month);
+  const events=await commitments(req.userId!,month);
+  const counted=events.filter(e=>e.decision!=="duplicate");
+  // A fixed payment charged to a card may also be inside the card bill; nothing links the two yet (banker A3).
+  const recurringIds=events.filter(e=>e.kind==="recurring").map(e=>Number(e.key.split(":")[1]));
+  const onCard=recurringIds.length&&events.some(e=>e.kind==="credit")?await prisma.recurringPayment.count({where:{userId:req.userId!,id:{in:recurringIds},paymentMethod:{type:{in:["credit_card","credit_installments"]}}}}):0;
+  res.json({month,events,total:sumKnown(counted.map(e=>e.amount)),heaviestDay:heaviestDayOf(counted),possibleCardOverlap:onCard>0});
+}));
 journeyRoutes.post("/commitments/decision",asyncHandler(async(req,res)=>{
   const body=z.object({key:z.string().max(160),fingerprint:z.string().length(64),decision:z.enum(["unpaid","paid","duplicate"]),note:z.string().trim().min(3).max(255),bankTransactionId:z.number().int().positive().optional(),relatedEventKey:z.string().max(160).optional()}).parse(req.body);
   res.json(await withFinancialTransaction(req.userId!,async()=>{

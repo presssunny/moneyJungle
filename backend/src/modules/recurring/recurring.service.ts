@@ -1,6 +1,5 @@
 import { prisma } from "../../config/database";
 import { ApiError } from "../../utils/ApiError";
-import { monthRange } from "../../utils/date.utils";
 import { statementCommitmentsService } from "../bank/statementCommitments.service";
 import { CreateRecurringBody, UpdateRecurringBody } from "./recurring.validation";
 
@@ -10,13 +9,7 @@ async function requireRecurring(userId: number, id: number) {
   return recurring;
 }
 
-/** Same day-of-month as the recurring's anchor date, clamped to the target month's length. */
-function paymentDateInMonth(anchor: Date, year: number, month: number): Date {
-  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
-  const day = Math.min(anchor.getUTCDate(), daysInMonth);
-  return new Date(Date.UTC(year, month - 1, day));
-}
-
+// A fixed payment is a forecast (buildUpcoming); the expense comes only from the bank or card row.
 export const recurringService = {
   async list(userId: number) {
     const items = await prisma.recurringPayment.findMany({
@@ -63,46 +56,5 @@ export const recurringService = {
     const recurring = await requireRecurring(userId, id);
     await prisma.recurringPayment.delete({ where: { id } });
     await statementCommitmentsService.dismiss(userId, recurring.detectedKey);
-  },
-
-  /**
-   * Materialize recurring payments into expenses for the given month:
-   * monthly payments every month, yearly payments only in their anchor month.
-   * A recurring payment is skipped when a recurring expense with the same name and
-   * amount already exists in that month, so re-running is safe.
-   */
-  async generate(userId: number, year: number, month: number) {
-    const all = await prisma.recurringPayment.findMany({ where: { userId } });
-    // Yearly payments materialize only in the month they're anchored to.
-    // A payment found on a statement gets its real expense from every statement;
-    // materializing it too would count it twice (CLAUDE.md §4).
-    const recurrings = all.filter(
-      (r) => r.detectedKey === null && (r.frequency === "monthly" || r.nextPaymentDate.getUTCMonth() + 1 === month)
-    );
-    const { start, end } = monthRange(year, month);
-    const existing = await prisma.expense.findMany({
-      where: { userId, isRecurring: true, expenseDate: { gte: start, lt: end } },
-      select: { businessName: true, amount: true },
-    });
-    const existingKeys = new Set(existing.map((e) => `${e.businessName}|${Number(e.amount)}`));
-
-    let created = 0;
-    for (const recurring of recurrings) {
-      if (existingKeys.has(`${recurring.name}|${Number(recurring.amount)}`)) continue;
-      await prisma.expense.create({
-        data: {
-          userId,
-          amount: recurring.amount,
-          categoryId: recurring.categoryId,
-          paymentMethodId: recurring.paymentMethodId,
-          businessName: recurring.name,
-          description: "תשלום קבוע",
-          expenseDate: paymentDateInMonth(recurring.nextPaymentDate, year, month),
-          isRecurring: true,
-        },
-      });
-      created += 1;
-    }
-    return { created, skipped: recurrings.length - created };
   },
 };

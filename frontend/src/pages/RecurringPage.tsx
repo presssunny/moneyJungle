@@ -19,7 +19,6 @@ import { apiErrorMessage } from "../services/api";
 import {
   createRecurring,
   deleteRecurring,
-  generateRecurring,
   listRecurring,
   updateRecurring,
   type RecurringInput,
@@ -50,7 +49,6 @@ export default function RecurringPage() {
   const [editing, setEditing] = useState<RecurringPayment | null>(null);
   const [form, setForm] = useState<RecurringInput>(emptyForm);
   const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
 
   const load = recurring.reload;
 
@@ -110,19 +108,6 @@ export default function RecurringPage() {
     );
   }
 
-  async function generate() {
-    setMessage("");
-    try {
-      const result = await generateRecurring(monthKey);
-      setMessage(
-        result.created > 0
-          ? `נוצרו ${result.created} הוצאות לחודש ${formatMonthKey(monthKey)} (${result.skipped} כבר קיימות)`
-          : `כל התשלומים הקבועים כבר קיימים כהוצאות ב${formatMonthKey(monthKey)}`
-      );
-    } catch (err) {
-      setMessage(apiErrorMessage(err));
-    }
-  }
 
   const columns: Column<RecurringPayment>[] = [
     { key: "name", header: "שם", render: (row) => <strong>{row.name}</strong> },
@@ -166,9 +151,6 @@ export default function RecurringPage() {
       toolbar={
         <>
           <Button onClick={openCreate}>+ תשלום קבוע</Button>
-          <Button variant="outline" onClick={generate}>
-            יצירת הוצאות החודש ⚡
-          </Button>
         </>
       }
       summary={
@@ -197,7 +179,6 @@ export default function RecurringPage() {
         </AsyncSection>
       }
     >
-      {message && <div className="info-banner">{message}</div>}
 
       <Card>
         <AsyncSection

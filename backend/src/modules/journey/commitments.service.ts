@@ -50,15 +50,21 @@ async function autoVerifyCardBills(userId: number, today: string, bills: Map<str
   return created;
 }
 
-export async function commitments(userId: number): Promise<Commitment[]> {
+/**
+ * The agenda: overdue and the next 62 days. With `month` (YYYY-MM), the same list for that
+ * calendar month instead — what the calendar shows, from the same projection and decisions.
+ */
+export async function commitments(userId: number, month?: string): Promise<Commitment[]> {
   const today = businessDate();
+  const monthStart = month ? new Date(`${month}-01T00:00:00.000Z`) : null;
+  const monthDays = monthStart ? new Date(Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth() + 1, 0)).getUTCDate() - 1 : 0;
   const [upcoming, cards, decisions] = await Promise.all([
-    buildUpcoming(userId, 62, new Date(today), true),
+    monthStart ? buildUpcoming(userId, monthDays, monthStart) : buildUpcoming(userId, 62, new Date(today), true),
     prisma.creditTransaction.findMany({ where: { userId, ...spendingCredit, chargeDate: { not: null } }, include: { card: true }, orderBy: { id: "asc" } }),
     prisma.commitmentDecision.findMany({ where: { userId } }),
   ]);
-  const rows: Array<Pick<Commitment, "key" | "date" | "name" | "amount" | "kind" | "to">> = upcoming.events.map(e => ({ key: e.key!, date: e.date.slice(0, 10), name: e.name,
-    amount: e.amount, kind: e.kind,
+  const rows: Array<Pick<Commitment, "key" | "date" | "name" | "amount" | "kind" | "to" | "basis">> = upcoming.events.map(e => ({ key: e.key!, date: e.date.slice(0, 10), name: e.name,
+    amount: e.amount, kind: e.kind, basis: e.basis,
     to: e.kind === "loan" ? "/accounts?tab=loans" : `/commitments?tab=${e.kind === "subscription" ? "subscriptions" : e.kind === "recurring" ? "recurring" : "calendar"}` }));
   const bills = new Map<string, { key: string; date: string; name: string; amount: number; kind: string; to: string; cardId: number | null; cardLastFour: string | null }>();
   for (const tx of cards) {
@@ -117,5 +123,5 @@ export async function commitments(userId: number): Promise<Commitment[]> {
       for (const row of rows) row.decision = null;
     }
   }
-  return result;
+  return month ? result.filter((row) => row.date.startsWith(month)) : result;
 }

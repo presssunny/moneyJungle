@@ -6,10 +6,8 @@ import { IdParam, idParamSchema, validatedBody, validatedParams } from "../../ut
 import { recurringService } from "./recurring.service";
 import {
   CreateRecurringBody,
-  GenerateBody,
   UpdateRecurringBody,
   createRecurringSchema,
-  generateSchema,
   updateRecurringSchema,
 } from "./recurring.validation";
 
@@ -30,15 +28,6 @@ recurringRoutes.post(
   asyncHandler(async (req: Request, res: Response) => {
     const body = validatedBody<CreateRecurringBody>(req);
     res.status(201).json(await recurringService.create(req.userId!, body));
-  })
-);
-
-recurringRoutes.post(
-  "/generate",
-  validate({ body: generateSchema }),
-  asyncHandler(async (req: Request, res: Response) => {
-    const { year, month } = validatedBody<GenerateBody>(req);
-    res.json(await recurringService.generate(req.userId!, year, month));
   })
 );
 

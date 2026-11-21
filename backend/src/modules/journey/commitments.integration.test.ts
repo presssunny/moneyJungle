@@ -186,3 +186,36 @@ describe("commitment evidence and coverage", () => {
     for (let i = 1; i < versions.length; i++) expect(versions[i]).not.toBe(versions[i - 1]);
   });
 });
+
+describe("one month of future charges, for the calendar", () => {
+  /** A month far enough ahead that the 62-day agenda window does not reach it. */
+  const ahead = () => { const d = new Date(`${businessDate().slice(0, 7)}-15T00:00:00.000Z`); return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 4, 1)).toISOString().slice(0, 7); };
+
+  it("is the same list as the agenda, with its total and busiest day worked out on the server", async () => {
+    const month = ahead();
+    await prisma.recurringPayment.create({ data: { userId, name: "שכר דירה", amount: 4500, frequency: "monthly", nextPaymentDate: new Date(`${businessDate()}T00:00:00.000Z`) } });
+    await prisma.reminder.create({ data: { userId, title: "חידוש רישיון", eventDate: new Date(`${month}-${String(Math.min(new Date(`${businessDate()}T00:00:00Z`).getUTCDate(), 28)).padStart(2, "0")}T00:00:00.000Z`), estimatedAmount: null, type: "expected_expense" } });
+    const res = await request(app).get(`/api/journey/commitments/month?month=${month}`).set(headers());
+    expect(res.status).toBe(200);
+    expect(res.body.events.every((e: Commitment) => e.date.startsWith(month))).toBe(true);
+    expect(res.body.events.map((e: Commitment) => e.kind).sort()).toEqual(["recurring", "reminder"]);
+    expect(res.body.total).toEqual({ knownTotal: 4500, unknownCount: 1 });
+    expect(res.body.heaviestDay).toMatchObject({ count: 2, total: { knownTotal: 4500, unknownCount: 1 } });
+  });
+
+  it("warns when a fixed payment charged to a card may also sit inside that month's card bill", async () => {
+    const month = ahead();
+    const card = await prisma.paymentMethod.create({ data: { userId, name: "ויזה", type: "credit_card" } });
+    await prisma.recurringPayment.create({ data: { userId, name: "חוג", amount: 300, frequency: "monthly", nextPaymentDate: new Date(`${month}-05T00:00:00.000Z`), paymentMethodId: card.id } });
+    const cardFile = await prisma.creditImport.create({ data: { userId, fileName: "c.xlsx", importMonth: 1, importYear: 2027, status: "confirmed" } });
+    await prisma.creditTransaction.create({ data: { userId, creditImportId: cardFile.id, transactionDate: new Date(`${month}-01T00:00:00.000Z`), billingDate: new Date(`${month}-01T00:00:00.000Z`), chargeDate: new Date(`${month}-10T00:00:00.000Z`), businessName: "קנייה", amount: 500 } });
+    const res = await request(app).get(`/api/journey/commitments/month?month=${month}`).set(headers());
+    expect(res.body.possibleCardOverlap).toBe(true);
+    await prisma.recurringPayment.updateMany({ where: { userId }, data: { paymentMethodId: null } });
+    expect((await request(app).get(`/api/journey/commitments/month?month=${month}`).set(headers())).body.possibleCardOverlap).toBe(false);
+  });
+
+  it("refuses a malformed month", async () => {
+    expect((await request(app).get("/api/journey/commitments/month?month=2026-13").set(headers())).status).toBe(400);
+  });
+});
