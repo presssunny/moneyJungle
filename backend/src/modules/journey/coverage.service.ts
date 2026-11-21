@@ -43,7 +43,7 @@ function planAcrossAccounts(input: {
   const { profile, balances, unpaid, today, end, dates, blockers } = input;
   const payer = new Map(input.fundingRows.map(r => [r.sourceKey, r.bankAccountId]));
   const spending = balances.find(b => b.id === profile.spendingAccountId);
-  const empty = { cashInPlan: 0 as number | null, savedReserveCounted: 0, obligations: [] as PlannedObligation[], transfers: [] as PlannedTransfer[] };
+  const empty = { cashInPlan: null as number | null, savedReserveCounted: 0, obligations: [] as PlannedObligation[], transfers: [] as PlannedTransfer[] };
   if (!spending) { blockers.push("יש לבחור את החשבון שממנו יוצאות ההוצאות השוטפות, כדי לתכנן כשיש כמה חשבונות"); return empty; }
   const savedReserve = Number(profile.savedReserve);
   if (savedReserve > 0 && !profile.savedReserveLocation) blockers.push("יש לציין באיזה חשבון מוחזק החיסכון ששוריין");

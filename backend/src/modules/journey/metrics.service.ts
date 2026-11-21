@@ -7,6 +7,7 @@ import { monthTotals } from "../dashboard/dashboard.service";
 import { spendingCredit, spendingCreditInMonth } from "../dashboard/dashboard.repository";
 import { loansService } from "../loans/loans.service";
 import { financialStatus } from "./coverage.service";
+import { statementCoverage } from "../bank/statementCoverage.service";
 
 const pageSize = 50;
 /** A page and its header are read under the same per-user transaction as Home.
@@ -42,9 +43,10 @@ export async function financialMetric(userId: number, name: MetricName, month: s
     return metric;
   }
   if (monthly) {
-    const totals = await monthTotals(userId,year,monthNumber);
+    const [totals, coverage] = await Promise.all([monthTotals(userId,year,monthNumber), statementCoverage(userId,[month]).then(c=>c.get(month)!)]);
     metric.value = name === "income" ? totals.incomeTotal : name === "expense" ? totals.expenseTotal : totals.balance;
     metric.state = "recorded";
+    if (coverage.state === "partial") metric.missingData = [...metric.missingData, `החודש מכוסה חלקית בדוחות הבנק: ${coverage.from ?? "?"}–${coverage.to ?? "?"}`];
     metric.formula = name === "surplus" ? "הכנסות רשומות פחות הוצאות רשומות" : name === "expense" ? "הוצאות שנרשמו ועסקאות בכרטיסי אשראי מפירוטים שאושרו, בלי אשראי מתגלגל; זיכויים מקטינים את הסכום" : "סכום ההכנסות לפי תאריך ההכנסה";
     metric.assumptions = ["אשראי משויך לפי חודש העסקה בדוח, לא לפי מועד הירידה בבנק", "העברות, קרן הלוואה וחיובי כרטיס שכבר פורטו אינם הוצאה נוספת", "עודף חודשי אינו יתרת בנק ואינו כסף פנוי"];
     // Concatenate source streams in stable source/id order. Only the requested

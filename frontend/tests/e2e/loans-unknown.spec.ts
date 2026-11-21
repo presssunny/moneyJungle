@@ -66,6 +66,7 @@ test('A loan with unknown values shows "חסר" — never 0 — and the totals s
  await expect(balanceCard).toContainText('עוד הלוואה אחת ללא יתרה ידועה');
  await expect(balanceCard.locator('.tone-success')).toHaveCount(0);
  await expect(page.locator('.summary-card').filter({hasText:'ריבית חודשית'})).toContainText('חלקי — לא כולל 2 הלוואות ללא ריבית ידועה');
+ await expect(page.locator('.summary-card').filter({hasText:'ריבית חודשית'})).toContainText('משוער לפי הריבית השנתית');
 
  const debtsChip=page.locator('.overview-chip').filter({hasText:'חובות'});
  await expect(debtsChip).toContainText('לפחות');

@@ -3,6 +3,7 @@ import { monthRange, toMonthKey } from "../../utils/date.utils";
 import { loanFigures, loanTotals } from "../loans/loanCalculator.service";
 import { loansRepository } from "../loans/loans.repository";
 import { dashboardRepository } from "./dashboard.repository";
+import { statementCoverage } from "../bank/statementCoverage.service";
 
 const SAVINGS_CATEGORY = "חיסכון";
 
@@ -133,6 +134,8 @@ export const dashboardService = {
     // of already-itemized card settlements leave the account and appear in no
     // expense figure — correctly, but only if the dashboard names them.
     const bankMonth = await bankResolutionTotals(userId, year, month);
+    const monthKey = `${year}-${String(month).padStart(2, "0")}`;
+    const coverage = (await statementCoverage(userId, [monthKey])).get(monthKey)!;
 
     return {
       incomeTotal: totals.incomeTotal,
@@ -147,6 +150,8 @@ export const dashboardService = {
       },
       /** Bank rows of this month by meaning — the audit trail for every figure above. */
       bankMonth,
+      /** How much of the month the bank statements cover: a partial month is not a full one. */
+      coverage,
       savingsMonthly: round2(savingsMonthly),
       budget: {
         total: round2(budgetTotal),

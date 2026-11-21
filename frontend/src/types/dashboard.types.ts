@@ -1,3 +1,8 @@
+export type MonthCoverage =
+  | { state: "unknown" }
+  | { state: "complete" | "to_date"; from: string; to: string }
+  | { state: "partial"; from: string | null; to: string | null };
+
 export interface DashboardSummary {
   dataVersion: string;
   incomeTotal: number;
@@ -20,6 +25,8 @@ export interface DashboardSummary {
    * card bill already itemized in the credit tab) is named here rather than
    * leaving the month looking short.
    */
+  /** How much of the month the bank statements cover (server). "partial" is not a full month. */
+  coverage: MonthCoverage;
   bankMonth: {
     income: number;
     spend: number;

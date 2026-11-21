@@ -12,7 +12,7 @@ import { chartChrome, tooltipStyle } from "../components/dashboard/chartTheme";
 import { useAsync } from "../hooks/useAsync";
 import { getForecast } from "../services/future.service";
 import { emptyForecastScenario as initial, readForecastPreferences, saveForecastPreferences } from "../services/forecastPreferences";
-import { formatCurrency, formatDate, formatKnownSum, formatMonthKey } from "../utils/format";
+import { amountBasisNote, formatCurrency, formatDate, formatKnownSum, formatMonthKey } from "../utils/format";
 import "../styles/future.css";
 
 const money = (value: number | null) => value === null ? "—" : formatCurrency(value);
@@ -48,6 +48,7 @@ export default function ForecastPage() {
         ];
         return <>
           <p className="text-muted">התחזית מתחילה בחודש הבא · חושב {formatDate(data.generatedAt)} · מבוסס על {data.baselineMonths.length} חודשים עם הכנסות והוצאות רשומות. כיסוי הדוחות לא אומת.</p>
+          {data.partialMonths.length > 0 && <p className="text-muted" role="note">לא נכללו בממוצע חודשים שדוחות הבנק מכסים רק בחלקם: {data.partialMonths.map((m) => formatMonthKey(m.monthKey)).join(", ")}.</p>}
           {!data.sufficient && <div className="info-banner">נדרשים לפחות שלושה חודשים עם הכנסות והוצאות כדי להציג אומדן. בינתיים אפשר לראות תשלומים רשומים בהמשך המסך. <Link to="/transactions?tab=import">השלמת נתונים</Link></div>}
           <div className="kpi-row">
             <SummaryCard label="עודף משוער בחודש הבא" value={money(data.months[0].balance)} certainty={data.sufficient ? "scenario" : "unknown"} sub="הכנסות פחות הוצאות · לא יתרת בנק" />
@@ -88,7 +89,7 @@ export default function ForecastPage() {
               {scenarioActive && <p>עודף בתרחיש שלך: <strong>{money(month.scenarioBalance)}</strong></p>}
               <details><summary>תשלומים רשומים לחודש הזה ({commitments.events.length}){commitments.events.length > 0 && ` · ${formatKnownSum(commitments.total)}`}</summary>
                 <p className="text-muted">רשימה נפרדת שאינה מתווספת לאומדן: חלק מהחיובים כבר נכללים בעבר. יש לבדוק רישום כפול בין מנויים לתשלומים קבועים. סכומי תזכורות והלוואות עשויים להיות משוערים.</p>
-                {commitments.events.length ? <ul className="future-events">{commitments.events.map((event, i) => <li key={`${event.date}-${i}`}><span>{formatDate(event.date)} · {event.name}</span><strong>{event.amount === null ? "סכום לא ידוע" : formatCurrency(event.amount)}</strong></li>)}</ul> : <p>אין תשלומים רשומים לחודש הזה; אין בכך אישור שלא יהיו הוצאות.</p>}
+                {commitments.events.length ? <ul className="future-events">{commitments.events.map((event, i) => <li key={`${event.date}-${i}`}><span>{formatDate(event.date)} · {event.name}</span><strong>{event.amount === null ? "סכום לא ידוע" : formatCurrency(event.amount)}{amountBasisNote(event.basis) && <small className="text-muted"> · {amountBasisNote(event.basis)}</small>}</strong></li>)}</ul> : <p>אין תשלומים רשומים לחודש הזה; אין בכך אישור שלא יהיו הוצאות.</p>}
               </details>
             </div>
           </Card>

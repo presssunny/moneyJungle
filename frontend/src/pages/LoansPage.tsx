@@ -103,7 +103,9 @@ function InterestCard({ summary }: { summary: LoanSummary }) {
       value={formatCurrency(summary.monthlyInterest)}
       icon="💸"
       tone="warning"
-      sub={`${formatCurrency(summary.annualInterest)} בשנה`}
+      /* Computed from each loan's annual rate, not read from a schedule. */
+      certainty="scenario"
+      sub={`${formatCurrency(summary.annualInterest)} בשנה · משוער לפי הריבית השנתית`}
       footnote={unknown > 0 ? `חלקי — לא כולל ${missing}` : undefined}
     />
   );

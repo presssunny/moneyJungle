@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ trend: vi.fn(), buildUpcoming: vi.fn() }));
+const mocks = vi.hoisted(() => ({ trend: vi.fn(), buildUpcoming: vi.fn(), statementCoverage: vi.fn(async () => new Map()) }));
 vi.mock("./reports.service", () => ({ reportsService: { trend: mocks.trend } }));
 vi.mock("../dashboard/cashflow.service", () => ({ buildUpcoming: mocks.buildUpcoming }));
+vi.mock("../bank/statementCoverage.service", () => ({ statementCoverage: mocks.statementCoverage }));
 import { backtestForecast, calculateForecast, getForecast } from "./forecast.service";
 
 const anchor = new Date("2026-12-01T00:00:00Z");
@@ -67,6 +68,21 @@ describe("registered payments per month", () => {
       mocks.buildUpcoming.mockResolvedValue({ events: [{ date: "2027-02-05T00:00:00.000Z", kind: "reminder", name: "fee", amount: null, icon: "🔔" }],
         months: [{ monthKey: "2027-02", total: { knownTotal: 0, unknownCount: 1 } }] });
       expect((await getForecast(1, scenario, [])).heaviest).toEqual({ monthKey: "2027-02", total: { knownTotal: 0, unknownCount: 1 } });
+    } finally { vi.useRealTimers(); }
+  });
+});
+
+describe("a month the bank statements cover only in part", () => {
+  it("is left out of the baseline, and the forecast says why", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(new Date("2026-12-15T12:00:00Z"));
+    try {
+      mocks.trend.mockResolvedValue(history);
+      mocks.buildUpcoming.mockResolvedValue({ events: [], months: [] });
+      mocks.statementCoverage.mockResolvedValue(new Map([["2026-09", { state: "partial", from: "2026-09-26", to: "2026-09-30" }], ["2026-10", { state: "complete", from: "2026-10-01", to: "2026-10-31" }]]));
+      const result = await getForecast(1, scenario, []);
+      expect(result.baselineMonths).toEqual(["2026-10", "2026-11"]);
+      expect(result.sufficient).toBe(false);
+      expect(result.partialMonths).toEqual([{ monthKey: "2026-09", from: "2026-09-26", to: "2026-09-30" }]);
     } finally { vi.useRealTimers(); }
   });
 });

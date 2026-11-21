@@ -1,5 +1,6 @@
 import { reportsService } from "./reports.service";
 import { buildUpcoming } from "../dashboard/cashflow.service";
+import { statementCoverage } from "../bank/statementCoverage.service";
 import { round2 } from "../../utils/money.utils";
 import type { ForecastHistoryMonth, ForecastMonth, ForecastScenario } from "../../types/planning.types";
 
@@ -46,7 +47,13 @@ export async function getForecast(userId: number, scenario: ForecastScenario, ex
     reportsService.trend(userId, lastComplete.getUTCFullYear(), lastComplete.getUTCMonth() + 1, 6),
     buildUpcoming(userId, 400),
   ]);
-  const result = calculateForecast(history, anchor, scenario, excludedMonths);
+  // A month the bank statements cover only in part would pull the average down; it stays out of the baseline.
+  const coverage = await statementCoverage(userId, history.map((row) => row.monthKey));
+  const partialMonths = history.flatMap((row) => {
+    const c = coverage.get(row.monthKey);
+    return c?.state === "partial" ? [{ monthKey: row.monthKey, from: c.from, to: c.to }] : [];
+  });
+  const result = calculateForecast(history, anchor, scenario, [...excludedMonths, ...partialMonths.map((m) => m.monthKey)]);
   const commitments = result.months.map((month) => {
     const events = upcoming.events.filter((event) => event.date.startsWith(month.monthKey));
     const total = upcoming.months.find((row) => row.monthKey === month.monthKey)?.total ?? { knownTotal: 0, unknownCount: 0 };
@@ -54,6 +61,6 @@ export async function getForecast(userId: number, scenario: ForecastScenario, ex
   });
   // Known amount first; a month whose payments are all without an amount still has payments.
   const heaviest = commitments.reduce((max, row) => row.total.knownTotal > max.total.knownTotal || (row.total.knownTotal === max.total.knownTotal && row.total.unknownCount > max.total.unknownCount) ? row : max, commitments[0]);
-  return { ...result, commitments, heaviest: heaviest.total.knownTotal > 0 || heaviest.total.unknownCount > 0 ? { monthKey: heaviest.monthKey, total: heaviest.total } : null,
+  return { ...result, commitments, partialMonths, heaviest: heaviest.total.knownTotal > 0 || heaviest.total.unknownCount > 0 ? { monthKey: heaviest.monthKey, total: heaviest.total } : null,
     generatedAt: now.toISOString(), anchorMonth: anchor.toISOString().slice(0, 7) };
 }
